@@ -1,6 +1,6 @@
 # MalScape
 
-MalScape is a web-based tool for visualizing network connections using CSV data. It utilizes Cytoscape.js for network graph rendering and Pyodide for client-side CSV processing. This tool is designed to facilitate network data analysis and visualization without requiring backend infrastructure.
+MalScape is a web-based tool for visualizing network connections using CSV data. It utilizes Cytoscape.js for network graph rendering and Pyodide for client-side CSV processing. This tool is designed to facilitate network data analysis and visualization.
 
 ---
 
