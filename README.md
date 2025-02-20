@@ -119,7 +119,3 @@ MalScape is a web-based tool for visualizing network connections using CSV data.
 - All processing is performed client-side using Pyodide and Cytoscape.js.
 
 ---
-
-## License
-
-This project is licensed under the MIT License.
