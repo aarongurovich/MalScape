@@ -233,25 +233,36 @@
 
     // When the "Select Edge" button is clicked, highlight the matching edge based on the input IPs
     selectEdgeButton.addEventListener('click', () => {
-      const src = startSourceInput.value.trim();
-      const dst = startDestinationInput.value.trim();
-      if (!src || !dst) {
-        alert("Please enter both Source and Destination IP.");
-        return;
-      }
-      let found = false;
-      globalCy.edges().forEach(edge => {
-        if (edge.data('source') === src && edge.data('target') === dst) {
-          edge.addClass('selected');
-          (edge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
-          found = true;
-        }
-      });
-      if (!found) {
-        alert("No matching edge found for the given Source and Destination IP.");
-      }
-      updateRowVisibility();
+  const src = startSourceInput.value.trim();
+  const dst = startDestinationInput.value.trim();
+  if (!src || !dst) {
+    alert("Please enter both Source and Destination IP.");
+    return;
+  }
+  let foundEdge = null;
+  globalCy.edges().some(edge => {
+    if (edge.data('source') === src && edge.data('target') === dst) {
+      foundEdge = edge;
+      return true; // break out of loop after the first match
+    }
+  });
+  if (foundEdge) {
+    foundEdge.addClass('selected');
+    (foundEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
+    // Animate to fit the matching edge in the viewport with a little padding
+    globalCy.animate({
+      fit: {
+        eles: foundEdge,
+        padding: 50
+      },
+      duration: 500
     });
+    updateRowVisibility();
+  } else {
+    alert("No matching edge found for the given Source and Destination IP.");
+  }
+});
+
 
     // When the "Unselect All Edges" button is clicked, clear all selections
     unselectButton.addEventListener('click', () => {
@@ -421,91 +432,99 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     /**
      * Shows the next chunk of table rows (up to PAGE_SIZE).
      */
-    function showNextChunk() {
-      let start = displayOffset;
-      let end = start + PAGE_SIZE;
-      if (end > currentAllowed.length) {
-        end = currentAllowed.length;
-      }
-      for (let i = start; i < end; i++) {
-        let rowIndex = currentAllowed[i];
+     function showNextChunk() {
+    let start = displayOffset;
+    let end = start + PAGE_SIZE;
+    if (end > currentAllowed.length) {
+      end = currentAllowed.length;
+    }
+    for (let i = start; i < end; i++) {
+      let rowIndex = currentAllowed[i];
+      // Check that rowIndex - 1 is a valid index for allRowElems
+      if (rowIndex - 1 >= 0 && rowIndex - 1 < allRowElems.length) {
         allRowElems[rowIndex - 1].style.display = 'table-row';
       }
-      displayOffset = end;
-      loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
+    }
+    displayOffset = end;
+    loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
     }
 
     /**
      * Parses CSV text into Cytoscape elements (nodes and edges) for network visualization.
      */
-    function parseCSV(text) {
-      if (!text) return [];
-      let lines = text.trim().split('\n');
-      if (lines.length < 2) return [];
-      const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
-      let seenNodes = new Set();
-      let edgesMap = new Map();
-      let nodeElements = [];
-      for (let i = 1; i < lines.length; i++){
-        let rowNumber = i;
-        let cols = lines[i].split(',').map(c => c.replace(/(^"|"$)/g, ''));
-        const source = cols[2]?.trim();
-        const destination = cols[3]?.trim();
-        const protocol = cols[4]?.trim();
-        const classification = cols[10]?.trim();
-        const nodeWeight = parseFloat(cols[8]) || 0;
-        const edgeWeight = parseFloat(cols[9]) || 0;
-        if (source && !seenNodes.has(source)) {
-          nodeElements.push({
-            data: {
-              id: source,
-              label: source,
-              Classification: classification,
-              NodeWeight: nodeWeight
-            }
-          });
-          seenNodes.add(source);
+     function parseCSV(text) {
+  if (!text) return [];
+  let lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
+  let seenNodes = new Set();
+  let edgesMap = new Map();
+  let nodeElements = [];
+  for (let i = 1; i < lines.length; i++){
+    let rowNumber = i; // use row number as time index
+    let cols = lines[i].split(',').map(c => c.replace(/(^"|"$)/g, ''));
+    const source = cols[2]?.trim();
+    const destination = cols[3]?.trim();
+    const protocol = cols[4]?.trim();
+    const classification = cols[10]?.trim();
+    const nodeWeight = parseFloat(cols[8]) || 0;
+    const edgeWeight = parseFloat(cols[9]) || 0;
+    // Add source node (with timeIndex)
+    if (source && !seenNodes.has(source)) {
+      nodeElements.push({
+        data: {
+          id: source,
+          label: source,
+          Classification: classification,
+          NodeWeight: nodeWeight,
+          timeIndex: rowNumber  // record the first appearance
         }
-        if (destination && !seenNodes.has(destination)) {
-          nodeElements.push({
-            data: {
-              id: destination,
-              label: destination,
-              Classification: 'External',
-              NodeWeight: nodeWeight
-            }
-          });
-          seenNodes.add(destination);
-        }
-        if (!source || !destination || !protocol) continue;
-        const edgeKey = source + '|' + destination + '|' + protocol;
-        if (!edgesMap.has(edgeKey)) {
-          edgesMap.set(edgeKey, {
-            source, destination, protocol,
-            csvIndices: [],
-            totalEdgeWeight: 0
-          });
-        }
-        let entry = edgesMap.get(edgeKey);
-        entry.csvIndices.push(rowNumber);
-        entry.totalEdgeWeight += edgeWeight;
-      }
-      let edgeElements = [];
-      edgesMap.forEach(val => {
-        edgeElements.push({
-          data: {
-            id: `edge-${val.source}-${val.destination}-${val.protocol}`,
-            source: val.source,
-            target: val.destination,
-            Protocol: val.protocol,
-            EdgeWeight: val.totalEdgeWeight,
-            csvIndices: val.csvIndices,
-            label: `(${val.csvIndices.length}) ${val.protocol}`
-          }
-        });
       });
-      return [...nodeElements, ...edgeElements];
+      seenNodes.add(source);
     }
+    // Add destination node (with timeIndex)
+    if (destination && !seenNodes.has(destination)) {
+      nodeElements.push({
+        data: {
+          id: destination,
+          label: destination,
+          Classification: 'External',
+          NodeWeight: nodeWeight,
+          timeIndex: rowNumber  // record the appearance for destination nodes too
+        }
+      });
+      seenNodes.add(destination);
+    }
+    if (!source || !destination || !protocol) continue;
+    const edgeKey = source + '|' + destination + '|' + protocol;
+    if (!edgesMap.has(edgeKey)) {
+      edgesMap.set(edgeKey, {
+        source, destination, protocol,
+        csvIndices: [],
+        totalEdgeWeight: 0
+      });
+    }
+    let entry = edgesMap.get(edgeKey);
+    entry.csvIndices.push(rowNumber);
+    entry.totalEdgeWeight += edgeWeight;
+  }
+  let edgeElements = [];
+  edgesMap.forEach(val => {
+    edgeElements.push({
+      data: {
+        id: `edge-${val.source}-${val.destination}-${val.protocol}`,
+        source: val.source,
+        target: val.destination,
+        Protocol: val.protocol,
+        EdgeWeight: val.totalEdgeWeight,
+        csvIndices: val.csvIndices,
+        label: `(${val.csvIndices.length}) ${val.protocol}`
+      }
+    });
+  });
+  return [...nodeElements, ...edgeElements];
+}
+
 
     /**
      * Groups nodes into directed components using breadth-first search.
@@ -535,36 +554,85 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     /**
      * Positions each group of nodes in a circular layout.
      */
-    function positionGroupedComponents(cy) {
-      let groupMap = {};
-      cy.nodes().forEach(n => {
-        let g = n.data('groupID') || 0;
-        if (!groupMap[g]) groupMap[g] = [];
-        groupMap[g].push(n);
+    /**
+ * Positions each group of nodes in a time-based tree layout.
+ * Within each group, the root is the node with the smallest timeIndex.
+ * Nodes are layered (levels determined via a BFS over outgoing edges) and sorted by time.
+ * Groups with more nodes are placed higher on the visualization.
+ */
+function positionGroupedComponentsTree(cy) {
+  // Group nodes by their assigned groupID.
+  let groupMap = {};
+  cy.nodes().forEach(n => {
+    let g = n.data('groupID') || 0;
+    if (!groupMap[g]) groupMap[g] = [];
+    groupMap[g].push(n);
+  });
+  
+  // Sort groups by the number of nodes (largest first)
+  let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
+  
+  let groupYOffset = 0;
+  const verticalSpacingBetweenGroups = 300;
+  const levelHeight = 80;       // vertical spacing between tree levels
+  const siblingSpacing = 100;   // horizontal spacing between siblings
+  
+  sortedGroups.forEach(([groupID, nodes]) => {
+    // Pick the root as the node with the smallest timeIndex
+    let root = nodes.reduce((prev, curr) => {
+      return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
+    }, null);
+    if (!root) return;
+    
+    // Perform BFS from the root (following outgoing edges only) to assign levels.
+    let levels = {};
+    let visited = new Set();
+    let queue = [];
+    levels[root.id()] = 0;
+    visited.add(root.id());
+    queue.push(root);
+    
+    while (queue.length > 0) {
+      let current = queue.shift();
+      let currentLevel = levels[current.id()];
+      current.outgoers('edge').forEach(edge => {
+        let target = edge.target();
+        // Only consider nodes in the same group
+        if (target.data('groupID') == groupID && !visited.has(target.id())) {
+          levels[target.id()] = currentLevel + 1;
+          visited.add(target.id());
+          queue.push(target);
+        }
       });
-      let sorted = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
-      let offsetX = 0;
-      let offsetY = 0;
-      let maxRowWidth = 1200;
-      let clusterSpacingX = 300;
-      let clusterSpacingY = 300;
-      for (let i = 0; i < sorted.length; i++){
-        let groupNodes = sorted[i][1];
-        let angleStep = (2 * Math.PI) / groupNodes.length;
-        let radius = 80 + 20 * groupNodes.length;
-        for (let j = 0; j < groupNodes.length; j++){
-          let angle = j * angleStep;
-          let x = offsetX + radius * Math.cos(angle);
-          let y = offsetY + radius * Math.sin(angle);
-          groupNodes[j].position({x, y});
-        }
-        offsetX += clusterSpacingX + radius;
-        if(offsetX > maxRowWidth){
-          offsetX = 0;
-          offsetY += clusterSpacingY + radius;
-        }
-      }
     }
+    
+    // Group nodes by their level. Nodes that were not reached get level 0.
+    let levelNodes = {};
+    nodes.forEach(n => {
+      let lvl = levels[n.id()] !== undefined ? levels[n.id()] : 0;
+      if (!levelNodes[lvl]) levelNodes[lvl] = [];
+      levelNodes[lvl].push(n);
+    });
+    
+    // For each level, sort nodes by their timeIndex and position them horizontally.
+    Object.keys(levelNodes).forEach(lvlKey => {
+      let lvl = parseInt(lvlKey);
+      let nodesAtLevel = levelNodes[lvl];
+      nodesAtLevel.sort((a, b) => (a.data('timeIndex') || 0) - (b.data('timeIndex') || 0));
+      let totalWidth = (nodesAtLevel.length - 1) * siblingSpacing;
+      let startX = -totalWidth / 2;
+      nodesAtLevel.forEach((n, idx) => {
+        let x = startX + idx * siblingSpacing;
+        let y = groupYOffset + lvl * levelHeight;
+        n.position({x: x, y: y});
+      });
+    });
+    
+    // Increment the vertical offset for the next group.
+    let maxLevel = Math.max(...Object.keys(levelNodes).map(Number));
+    groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
+  });
+}
 
     /**
      * Initializes the Cytoscape network visualization with parsed nodes and edges,
@@ -672,7 +740,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
 
       globalCy = cy;
       groupDirectedComponents(cy);
-      positionGroupedComponents(cy);
+      positionGroupedComponentsTree(cy);
 
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
