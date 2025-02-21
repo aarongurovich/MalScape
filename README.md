@@ -1,72 +1,121 @@
 # MalScape
 
-MalScape is a web-based tool that visualizes network connections from a CSV file. It uses Cytoscape.js for network graphs and Pyodide to process the CSV data right in the browser. Here's how to use it:
+MalScape is a web-based tool for visualizing network connections using CSV data. It utilizes Cytoscape.js for network graph rendering and Pyodide for client-side CSV processing. This tool is designed to facilitate network data analysis and visualization.
 
 ---
 
-## Getting Started
+## Features
 
-1. **Open the Tool:**  
-   Just open the `index.html` file in any modern browser (Chrome, Firefox, Edge, Safari). You don’t need to install anything else.
+- **Interactive Network Graphs:** Visualize network connections as nodes and edges.
+- **Edge Filtering:** Filter edges based on source and destination IPs.
+- **Protocol-Based Coloring:** Edges are color-coded by protocol type.
+- **Dynamic Table Display:** Displays top 50 rows of the CSV file, with options to load more.
+- **Tooltips and Hover Information:** Detailed information on nodes and edges is displayed on hover.
+- **Legend Panel:** Color legend for protocol mapping.
 
-2. **Upload Your CSV File:**  
-   - Click on the **"Choose File"** button.
-   - Select a `.csv` file from your computer. Make sure the file has at least these columns:
-     - `Source` - Source IP address
-     - `Destination` - Destination IP address
-     - `Protocol` - The protocol used (e.g., HTTP, DNS, FTP)
-   - The tool will process the file and display the network graph along with a table of the data.
+---
+
+## Requirements
+
+- A modern web browser:
+  - Google Chrome
+  - Mozilla Firefox
+  - Microsoft Edge
+  - Safari
+- A CSV file with at least the following columns:
+  - `Source` - Source IP address
+  - `Destination` - Destination IP address
+  - `Protocol` - Network protocol (e.g., HTTP, DNS, FTP)
+
+---
+
+## Usage
+
+### 1. Opening the Tool
+- Open the `index.html` file in a compatible web browser.
+- No installations are required as all processing is performed within the browser environment.
+
+---
+
+### 2. Uploading CSV Data
+- Click on the **"Choose File"** button.
+- Select a `.csv` file from local storage.
+- The tool will process the file and:
+  - Visualize the network graph.
+  - Display the first 50 rows of the CSV file in a table format.
 
 ---
 
 ## Network Graph
 
-- The graph shows IPs as nodes and connections as edges.
-- **Nodes** are shaped based on whether they’re Internal or External and colored based on cluster group.
-- **Edges** are colored based on the protocol (e.g., HTTP, DNS, FTP).
-
-### Hovering for Info:
-- **Hover over a Node:**  
-  - Shows the IP address and whether it’s Internal or External.
-- **Hover over an Edge:**  
-  - Shows the source and destination IPs, protocol, and the number of rows that match this connection in the CSV.
-
----
-
-## Filtering and Selecting
-
-### Filter by Source and Destination IP:
-1. Type the **Source IP** and **Destination IP** in the input fields at the top.
-2. Click **"Select Edge"** to highlight the connection between those two IPs. If no edge is found, a popup will let you know.
-
-### Selecting Edges on the Graph:
-- **Click on an Edge:** It turns **red** and the related rows are displayed in the table.
-- **Click Again:** It gets unselected and the rows disappear from the table.
-
-### Unselect All Edges:
-- Click on **"Unselect All Edges"** to clear all selections and show all rows in the table.
+- **Nodes** represent IP addresses:
+  - Internal IPs are displayed as rectangles.
+  - External IPs are displayed as ellipses.
+- **Edges** represent network connections:
+  - Color-coded by protocol type.
+  - Weighted by the frequency of the connection.
+- **Tooltip Information:**
+  - Hovering over a node displays:
+    - Node ID (IP address)
+    - Classification (Internal or External)
+  - Hovering over an edge displays:
+    - Source and Destination IPs
+    - Protocol type
+    - Number of matching rows in the CSV
 
 ---
 
-## Viewing CSV Data
+## Filtering and Selecting Edges
 
-- The table shows the CSV content with the top **50 rows** displayed by default.
-- Click **"Load More"** to view the next 50 rows.
-- If you select an edge, only rows related to that edge will be shown.
+### Filtering by Source and Destination IP
+- Enter **Source IP** and **Destination IP** in the input fields.
+- The tool automatically selects the corresponding edge if found.
+- If no matching edge is found, no action is taken.
+
+### Edge Selection on Graph
+- **Click on an Edge:** 
+  - Highlights the edge in red.
+  - Displays corresponding rows in the CSV table.
+- **Click Again:** 
+  - Unselects the edge.
+  - The associated rows are hidden from the table.
+
+### Unselecting All Edges
+- Click on the **"Unselect All Edges"** button to:
+  - Clear all selections.
+  - Display all rows in the table.
+
+---
+
+## CSV Table Display
+
+- Displays the first **50 rows** of the CSV file by default.
+- Click **"Load More"** to display additional rows, 50 at a time.
+- If an edge is selected, only the corresponding rows are shown.
 
 ---
 
 ## Legend
 
-- On the right, there’s a legend showing which colors correspond to which protocols
-
-
-## Tips & Tricks
-
-- **No Graph Appearing?** Make sure your CSV has `Source`, `Destination`, and `Protocol` columns.
-- **Edge Not Found?** Double-check the Source and Destination IPs you typed in.
-- **Large CSV Files?** The tool loads 50 rows at a time to keep things fast. Use **"Load More"** as needed.
+- A legend panel is displayed on the right side of the interface.
+- It maps colors to protocol types for easy identification:
+  - DNS, FTP, HTTP, SMB, SMTP, SSH, STP, TCP, TLSv1, etc.
+- The legend updates dynamically as new protocols are detected in the CSV.
 
 ---
 
-That’s it! Just open, upload, and explore your network data with MalScape.
+## Troubleshooting
+
+- **No Graph Displayed:** Ensure that the CSV file includes the `Source`, `Destination`, and `Protocol` columns.
+- **Edge Not Found:** Verify the accuracy of the Source and Destination IPs entered.
+- **Large CSV Files:** The tool paginates the table to enhance performance. Click **"Load More"** to view additional rows.
+
+---
+
+## Notes
+
+- This tool is designed for network analysis and visualization.
+- It is optimized for medium-sized CSV files.
+- All processing is performed client-side using Pyodide and Cytoscape.js.
+
+---
