@@ -82,6 +82,13 @@
       padding: 8px 12px;
       font-size: 14px;
     }
+    /* Styling for the new "Select Edge" button */
+    #selectEdgeButton {
+      margin-top: 20px;
+      padding: 8px 12px;
+      font-size: 14px;
+      margin-left: 10px;
+    }
     /* Legend table styling */
     #legend {
       border-collapse: collapse;
@@ -153,6 +160,8 @@
       <input type="text" id="startSource" placeholder="e.g. 192.168.1.10" />
       <label>Start Destination IP:</label>
       <input type="text" id="startDestination" placeholder="e.g. 10.0.0.50" />
+      <!-- New button to trigger edge selection -->
+      <button id="selectEdgeButton">Select Edge</button>
     </div>
     
     <!-- File input for the CSV file upload -->
@@ -190,7 +199,7 @@
   </div>
 
   <script>
-    // Add a listener to warn the user if they try to leave the page accidentally
+    // Warn the user if they try to leave the page accidentally
     window.addEventListener('beforeunload', (e) => {
       e.preventDefault();
       e.returnValue = '';
@@ -200,7 +209,7 @@
     let pyodide; // Pyodide instance for running Python code in the browser
     let globalCsvText = ""; // Stores the processed CSV text
     let csvRows = []; // Array to hold each line of CSV data
-    let selectedEdges = new Set(); // Set of CSV row indices that are linked to selected edges
+    let selectedEdges = new Set(); // Set of CSV row indices linked to selected edges
     let globalCy; // Reference to the Cytoscape instance
 
     // Array to keep track of all table row elements for easier manipulation later
@@ -220,8 +229,31 @@
     const startDestinationInput = document.getElementById('startDestination');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const selectEdgeButton = document.getElementById('selectEdgeButton');
 
-    // When the "Unselect All Edges" button is clicked, clear all edge selections
+    // When the "Select Edge" button is clicked, highlight the matching edge based on the input IPs
+    selectEdgeButton.addEventListener('click', () => {
+      const src = startSourceInput.value.trim();
+      const dst = startDestinationInput.value.trim();
+      if (!src || !dst) {
+        alert("Please enter both Source and Destination IP.");
+        return;
+      }
+      let found = false;
+      globalCy.edges().forEach(edge => {
+        if (edge.data('source') === src && edge.data('target') === dst) {
+          edge.addClass('selected');
+          (edge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
+          found = true;
+        }
+      });
+      if (!found) {
+        alert("No matching edge found for the given Source and Destination IP.");
+      }
+      updateRowVisibility();
+    });
+
+    // When the "Unselect All Edges" button is clicked, clear all selections
     unselectButton.addEventListener('click', () => {
       selectedEdges.clear();
       if (globalCy) {
@@ -236,7 +268,7 @@
       showNextChunk();
     });
 
-    // Load Pyodide and the necessary Python packages (pandas, micropip, ipaddress)
+    // Load Pyodide and necessary Python packages (pandas, micropip, ipaddress)
     async function loadPyodideAndPackages() {
       pyodide = await loadPyodide();
       await pyodide.loadPackage(['pandas', 'micropip']);
@@ -248,32 +280,20 @@ await micropip.install(['ipaddress'])
     // Start loading Pyodide immediately
     loadPyodideAndPackages();
 
-    // When the user selects a CSV file, process it
+    // When a CSV file is selected, process it
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      // Show the loading overlay while processing
       loadingOverlay.style.display = "flex";
-
       try {
-        // Read the file content as text
         const text = await file.text();
-        // Get the IP filtering inputs provided by the user
         const userSource = startSourceInput.value.trim();
         const userDestination = startDestinationInput.value.trim();
-
-        // Process the CSV data using a Python script running in Pyodide
         const processedCSV = await runPythonScript(text, userSource, userDestination);
         globalCsvText = processedCSV;
         csvRows = processedCSV.trim().split('\n');
-
-        // Build the HTML table from the CSV data
         createFullTable();
-
-        // Parse the CSV and create the network visualization with Cytoscape.js
         visualizeNetwork(parseCSV(processedCSV));
-
-        // If the user provided IPs, auto-select matching edges in the visualization
         if (userSource && userDestination) {
           globalCy.edges().forEach(edge => {
             if (edge.data('source') === userSource && edge.data('target') === userDestination) {
@@ -287,14 +307,12 @@ await micropip.install(['ipaddress'])
         console.error("Error processing file:", err);
         alert("An error occurred while processing the CSV. See console for details.");
       } finally {
-        // Hide the loading overlay once everything is done
         loadingOverlay.style.display = "none";
       }
     });
 
-    // Function to run a Python script in Pyodide that processes the CSV text
+    // Function to run a Python script in Pyodide to process the CSV text
     async function runPythonScript(csvText, startSource, startDestination) {
-      // The Python script (as a string) processes the CSV using pandas and performs IP classification
       const pythonScript = `
 import csv
 import pandas as pd
@@ -302,13 +320,11 @@ from ipaddress import ip_address, ip_network
 from io import StringIO
 import re
 
-# Define internal subnets for our IP classification
 internal_subnets = [
     ip_network('172.28.0.0/16'),
     ip_network('192.168.61.0/24')
 ]
 
-# Function to classify an IP as 'Internal' or 'External'
 def classify_ip(ip):
     try:
         ip_obj = ip_address(ip)
@@ -316,67 +332,46 @@ def classify_ip(ip):
     except ValueError:
         return 'Invalid IP'
 
-# Function to process CSV data
 def process_csv(csv_text, start_source=None, start_destination=None):
     df = pd.read_csv(StringIO(csv_text), dtype=str)
     if not all(x in df.columns for x in ["Source", "Destination"]):
         raise ValueError("Missing required column: Source or Destination")
-
-    # If the user provided a start source and destination, filter the DataFrame from the first match
     if start_source and start_destination:
         matches = df.index[(df['Source'] == start_source) & (df['Destination'] == start_destination)]
         if len(matches) > 0:
             df = df.loc[matches[0]:].reset_index(drop=True)
-
-    # Count occurrences for each Source-Destination pair to set weights
     df["ProcessCount"] = df.groupby(["Source","Destination"])["Source"].transform("count")
     df["NodeWeight"] = df["ProcessCount"]
     df["EdgeWeight"] = df["ProcessCount"]
-
-    # Normalize node weights if possible; otherwise, default to 1.0
     if df["NodeWeight"].max() != df["NodeWeight"].min():
         df["NodeWeight"] = (df["NodeWeight"] - df["NodeWeight"].min()) / (df["NodeWeight"].max() - df["NodeWeight"].min())
     else:
         df["NodeWeight"] = 1.0
-
-    # Do the same normalization for edge weights
     if df["EdgeWeight"].max() != df["EdgeWeight"].min():
         df["EdgeWeight"] = (df["EdgeWeight"] - df["EdgeWeight"].min()) / (df["EdgeWeight"].max() - df["EdgeWeight"].min())
     else:
         df["EdgeWeight"] = 1.0
-
-    # Apply IP classification to the Source column
     df["Classification"] = df["Source"].apply(classify_ip)
-
-    # If there is an 'Info' column, replace commas to avoid breaking the CSV format
     if "Info" in df.columns:
         df["Info"] = df["Info"].apply(lambda x: x.replace(',', '/') if pd.notna(x) else x)
-
-    # Output the processed DataFrame back to CSV format
     out = StringIO()
     df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
     return out.getvalue()
 
 processed = process_csv(csv_text, start_source="${startSource}", start_destination="${startDestination}")
 `;
-      // Pass the CSV text into Pyodide's global variables
       pyodide.globals.set("csv_text", csvText);
-      // Run the Python script asynchronously
       await pyodide.runPythonAsync(pythonScript);
-      // Return the processed CSV text
       return pyodide.globals.get("processed");
     }
 
-    // Function to create an HTML table based on the CSV rows
+    // Function to create an HTML table from the CSV rows
     function createFullTable() {
       const container = document.getElementById('table-container');
-      container.innerHTML = ''; // Clear any previous content
-      allRowElems = []; // Reset the array holding table row elements
-
-      if (csvRows.length < 2) return; // If there's no data, exit early
+      container.innerHTML = '';
+      allRowElems = [];
+      if (csvRows.length < 2) return;
       const table = document.createElement('table');
-
-      // Build the header row from the first CSV line
       const hdrLine = csvRows[0];
       const hdrCols = hdrLine.split(',').map(c => c.replace(/(^"|"$)/g, ''));
       const hdrTr = document.createElement('tr');
@@ -386,8 +381,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         hdrTr.appendChild(th);
       });
       table.appendChild(hdrTr);
-
-      // Build each data row (skip header)
       for (let i = 1; i < csvRows.length; i++) {
         let tr = document.createElement('tr');
         let cols = csvRows[i].split(',');
@@ -397,19 +390,15 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           tr.appendChild(td);
         });
         table.appendChild(tr);
-        allRowElems.push(tr); // Save a reference for pagination and filtering
+        allRowElems.push(tr);
       }
-
       container.appendChild(table);
-
-      // Reset pagination and update which rows should be visible
       displayOffset = 0;
       updateRowVisibility();
     }
 
     /**
-     * Updates which table rows are visible based on whether edges are selected.
-     * If no edges are selected, all rows are allowed; otherwise, only rows related to selected edges.
+     * Updates the visible table rows based on selected edges.
      */
     function updateRowVisibility() {
       let showAll = (selectedEdges.size === 0);
@@ -422,18 +411,15 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         currentAllowed = Array.from(selectedEdges);
       }
       currentAllowed.sort((a, b) => a - b);
-
-      // Hide all rows first
       for (let i = 0; i < allRowElems.length; i++) {
         allRowElems[i].style.display = 'none';
       }
-      // Reset our pagination offset and display the first set of allowed rows
       displayOffset = 0;
       showNextChunk();
     }
 
     /**
-     * Shows the next chunk of table rows, up to PAGE_SIZE.
+     * Shows the next chunk of table rows (up to PAGE_SIZE).
      */
     function showNextChunk() {
       let start = displayOffset;
@@ -441,46 +427,34 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       if (end > currentAllowed.length) {
         end = currentAllowed.length;
       }
-
       for (let i = start; i < end; i++) {
         let rowIndex = currentAllowed[i];
         allRowElems[rowIndex - 1].style.display = 'table-row';
       }
-
       displayOffset = end;
-      // Toggle the "Load More" button visibility based on whether there are more rows to show
       loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
     }
 
     /**
      * Parses CSV text into Cytoscape elements (nodes and edges) for network visualization.
-     * Nodes represent IP addresses and edges represent the connection between them.
      */
     function parseCSV(text) {
       if (!text) return [];
       let lines = text.trim().split('\n');
       if (lines.length < 2) return [];
-
-      // The first line is the header
       const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
-      let seenNodes = new Set(); // Keep track of nodes already created to avoid duplicates
-      let edgesMap = new Map();  // Use a map to combine rows into unique edges
+      let seenNodes = new Set();
+      let edgesMap = new Map();
       let nodeElements = [];
-
-      // Loop through each data row
       for (let i = 1; i < lines.length; i++){
         let rowNumber = i;
         let cols = lines[i].split(',').map(c => c.replace(/(^"|"$)/g, ''));
-
-        // Extract the relevant fields from each row
         const source = cols[2]?.trim();
         const destination = cols[3]?.trim();
         const protocol = cols[4]?.trim();
         const classification = cols[10]?.trim();
         const nodeWeight = parseFloat(cols[8]) || 0;
         const edgeWeight = parseFloat(cols[9]) || 0;
-
-        // Create a node for the source if it doesn't already exist
         if (source && !seenNodes.has(source)) {
           nodeElements.push({
             data: {
@@ -492,7 +466,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           });
           seenNodes.add(source);
         }
-        // Do the same for the destination node
         if (destination && !seenNodes.has(destination)) {
           nodeElements.push({
             data: {
@@ -504,10 +477,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           });
           seenNodes.add(destination);
         }
-        // If any required field is missing, skip this row
         if (!source || !destination || !protocol) continue;
-
-        // Use a unique key for each edge based on source, destination, and protocol
         const edgeKey = source + '|' + destination + '|' + protocol;
         if (!edgesMap.has(edgeKey)) {
           edgesMap.set(edgeKey, {
@@ -516,13 +486,10 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
             totalEdgeWeight: 0
           });
         }
-        // Record which CSV rows contribute to this edge and sum their weights
         let entry = edgesMap.get(edgeKey);
         entry.csvIndices.push(rowNumber);
         entry.totalEdgeWeight += edgeWeight;
       }
-
-      // Convert the edges map into an array of Cytoscape edge elements
       let edgeElements = [];
       edgesMap.forEach(val => {
         edgeElements.push({
@@ -537,25 +504,18 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           }
         });
       });
-
-      // Return all the node and edge elements together
       return [...nodeElements, ...edgeElements];
     }
 
     /**
-     * Groups nodes into directed components using a breadth-first search.
-     * Each group is assigned a random color for visual distinction.
+     * Groups nodes into directed components using breadth-first search.
      */
     function groupDirectedComponents(cy) {
       let visited = new Set();
       let groupCount = 0;
-
-      // Helper function to generate a random color in hex format
       function randomColor(){
         return '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
       }
-
-      // Loop over all nodes and perform BFS on nodes that haven't been visited yet
       cy.nodes().forEach(node => {
         if (!visited.has(node.id())) {
           groupCount++;
@@ -573,39 +533,31 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     }
 
     /**
-     * Positions each group of nodes in a circular layout, spreading groups out on the canvas.
+     * Positions each group of nodes in a circular layout.
      */
     function positionGroupedComponents(cy) {
       let groupMap = {};
-      // Group nodes by their groupID
       cy.nodes().forEach(n => {
         let g = n.data('groupID') || 0;
         if (!groupMap[g]) groupMap[g] = [];
         groupMap[g].push(n);
       });
-
-      // Sort groups by size (largest groups first)
       let sorted = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
       let offsetX = 0;
       let offsetY = 0;
       let maxRowWidth = 1200;
       let clusterSpacingX = 300;
       let clusterSpacingY = 300;
-
-      // For each group, arrange nodes in a circle
       for (let i = 0; i < sorted.length; i++){
         let groupNodes = sorted[i][1];
         let angleStep = (2 * Math.PI) / groupNodes.length;
         let radius = 80 + 20 * groupNodes.length;
-
         for (let j = 0; j < groupNodes.length; j++){
           let angle = j * angleStep;
           let x = offsetX + radius * Math.cos(angle);
           let y = offsetY + radius * Math.sin(angle);
           groupNodes[j].position({x, y});
         }
-
-        // Update offsets for the next group so clusters don't overlap
         offsetX += clusterSpacingX + radius;
         if(offsetX > maxRowWidth){
           offsetX = 0;
@@ -615,14 +567,14 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     }
 
     /**
-     * Initializes the Cytoscape network visualization with our parsed nodes and edges,
+     * Initializes the Cytoscape network visualization with parsed nodes and edges,
      * applies styles, sets up layout, and defines event handlers.
      */
     function visualizeNetwork(elements) {
       const cy = cytoscape({
-        container: document.getElementById('cy'), // Container where the graph is rendered
-        elements, // Nodes and edges from our CSV parsing
-        layout: { name: 'preset' }, // Use preset positions (we'll update these shortly)
+        container: document.getElementById('cy'),
+        elements,
+        layout: { name: 'preset' },
         style: [
           {
             selector: 'node',
@@ -634,21 +586,21 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
               'shape': 'ellipse',
               'font-family': 'Arial, sans-serif',
               'font-weight': 'bold',
-              'text-opacity': 0, // Hide text by default
-              'width': 'mapData(NodeWeight, 0, 1, 20, 60)', // Size based on node weight
+              'text-opacity': 0,
+              'width': 'mapData(NodeWeight, 0, 1, 20, 60)',
               'height': 'mapData(NodeWeight, 0, 1, 20, 60)',
-              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)', // Gradient color based on weight
+              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
               'border-width': 2.0,
-              'content': 'data(label)' // Display the node label
+              'content': 'data(label)'
             }
           },
           {
             selector: 'node[Classification="Internal"]',
-            style: { 'shape': 'rectangle' } // Internal nodes get a rectangle shape
+            style: { 'shape': 'rectangle' }
           },
           {
             selector: 'node[color]',
-            style: { 'background-color': 'data(color)' } // Use group-assigned color if available
+            style: { 'background-color': 'data(color)' }
           },
           {
             selector: 'edge',
@@ -660,7 +612,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
               'opacity': 0.8
             }
           },
-          // Define specific colors for each protocol type on edges
           {
             selector: 'edge[Protocol="DNS"]',
             style: { 'line-color': '#6BAED6', 'target-arrow-color': '#6BAED6' }
@@ -714,18 +665,15 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
             }
           }
         ]
-        
       });
-      cy.zoom(.5);
+      
+      // Set initial zoom level to 0.5 for a more zoomed-out view
+      cy.zoom(0.5);
 
-      // Save the Cytoscape instance globally so other functions can access it
       globalCy = cy;
-      // Group nodes based on connectivity
       groupDirectedComponents(cy);
-      // Reposition the grouped nodes to make the graph look cleaner
       positionGroupedComponents(cy);
 
-      // When the user hovers over a node or edge, show the tooltip with details
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
         let px = evt.originalEvent.pageX;
@@ -733,14 +681,11 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         tooltip.style.display = 'block';
         tooltip.style.left = (px + 10) + 'px';
         tooltip.style.top = (py + 10) + 'px';
-
-        // If it's a node, show its ID, classification, and group
         if (t.isNode()) {
           tooltip.innerHTML = `<strong>Node ID:</strong> ${t.id()}<br>
                                <strong>Classification:</strong> ${t.data('Classification')}<br>
                                <strong>Group:</strong> ${t.data('groupID') || 'N/A'}`;
         } else {
-          // For edges, display the connection details and how many CSV rows it represents
           let arr = t.data('csvIndices') || [];
           tooltip.innerHTML = `<strong>Edge:</strong><br>
                                From: ${t.data('source')}<br>
@@ -749,17 +694,13 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
                                Rows: ${arr.length}`;
         }
       });
-      // Hide the tooltip when the mouse leaves a node or edge
       cy.on('mouseout', 'node,edge', () => {
         tooltip.style.display = 'none';
       });
-
-      // When an edge is clicked, toggle its selection state and update the table view accordingly
       cy.on('click', 'edge', (evt) => {
         let edge = evt.target;
         let arr = edge.data('csvIndices') || [];
         let allSelected = arr.every(idx => selectedEdges.has(idx));
-
         if (allSelected) {
           arr.forEach(idx => selectedEdges.delete(idx));
           edge.removeClass('selected');
