@@ -171,12 +171,6 @@
       <button id="selectEdgeButton">Select Edge</button>
     </div>
 
-    <!-- New filter input for the Info column -->
-    <div>
-      <label>Filter Info:</label>
-      <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
-    </div>
-    
     <!-- File input for the CSV file upload -->
     <input type="file" id="fileInput" accept=".csv" />
     <!-- Div where the Cytoscape network graph will be rendered -->
@@ -185,6 +179,12 @@
     <div id="tooltip"></div>
     <!-- Button to clear any selected edges on the network graph -->
     <button id="unselectButton">Unselect All Edges</button>
+    
+    <!-- Moved filter input for the Info column: now positioned right above the table -->
+    <div>
+      <label>Filter Info:</label>
+      <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
+    </div>
 
     <!-- Container for the CSV data table that will be dynamically populated -->
     <div id="table-container"></div>
