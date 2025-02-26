@@ -16,7 +16,7 @@
     /* Use a simple sans-serif font and flex layout to put the main content and legend side by side */
     body {
       font-family: Arial, sans-serif;
-      display: flex; /* flexbox makes layout much easier for side-by-side content */
+      display: flex;
     }
     /* Main container takes up remaining space and allows vertical scrolling if needed */
     #main-container {
@@ -89,6 +89,13 @@
       font-size: 14px;
       margin-left: 10px;
     }
+    /* Styling for the info filter input */
+    #infoFilterInput {
+      margin-top: 20px;
+      padding: 6px 8px;
+      font-size: 14px;
+      width: 250px;
+    }
     /* Legend table styling */
     #legend {
       border-collapse: collapse;
@@ -119,7 +126,7 @@
       background-color: rgba(0,0,0,0.4);
       color: #fff;
       font-size: 24px;
-      display: none; /* hidden until needed */
+      display: none;
       align-items: center;
       justify-content: center;
       z-index: 9999;
@@ -162,6 +169,12 @@
       <input type="text" id="startDestination" placeholder="e.g. 10.0.0.50" />
       <!-- New button to trigger edge selection -->
       <button id="selectEdgeButton">Select Edge</button>
+    </div>
+
+    <!-- New filter input for the Info column -->
+    <div>
+      <label>Filter Info:</label>
+      <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
     </div>
     
     <!-- File input for the CSV file upload -->
@@ -211,6 +224,7 @@
     let csvRows = []; // Array to hold each line of CSV data
     let selectedEdges = new Set(); // Set of CSV row indices linked to selected edges
     let globalCy; // Reference to the Cytoscape instance
+    let infoColumnIndex = -1; // Will store the index of the "Info" column
 
     // Array to keep track of all table row elements for easier manipulation later
     let allRowElems = [];
@@ -222,7 +236,6 @@
 
     // Get references to various HTML elements for use in our script
     const fileInput = document.getElementById('fileInput');
-    const cyContainer = document.getElementById('cy');
     const tooltip = document.getElementById('tooltip');
     const unselectButton = document.getElementById('unselectButton');
     const startSourceInput = document.getElementById('startSource');
@@ -230,39 +243,44 @@
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
     const selectEdgeButton = document.getElementById('selectEdgeButton');
+    const infoFilterInput = document.getElementById('infoFilterInput');
+
+    // When the info filter input changes, update the row visibility
+    infoFilterInput.addEventListener('input', () => {
+      updateRowVisibility();
+    });
 
     // When the "Select Edge" button is clicked, highlight the matching edge based on the input IPs
     selectEdgeButton.addEventListener('click', () => {
-  const src = startSourceInput.value.trim();
-  const dst = startDestinationInput.value.trim();
-  if (!src || !dst) {
-    alert("Please enter both Source and Destination IP.");
-    return;
-  }
-  let foundEdge = null;
-  globalCy.edges().some(edge => {
-    if (edge.data('source') === src && edge.data('target') === dst) {
-      foundEdge = edge;
-      return true; // break out of loop after the first match
-    }
-  });
-  if (foundEdge) {
-    foundEdge.addClass('selected');
-    (foundEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
-    // Animate to fit the matching edge in the viewport with a little padding
-    globalCy.animate({
-      fit: {
-        eles: foundEdge,
-        padding: 50
-      },
-      duration: 500
+      const src = startSourceInput.value.trim();
+      const dst = startDestinationInput.value.trim();
+      if (!src || !dst) {
+        alert("Please enter both Source and Destination IP.");
+        return;
+      }
+      let foundEdge = null;
+      globalCy.edges().some(edge => {
+        if (edge.data('source') === src && edge.data('target') === dst) {
+          foundEdge = edge;
+          return true;
+        }
+      });
+      if (foundEdge) {
+        foundEdge.addClass('selected');
+        (foundEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
+        // Animate to fit the matching edge in the viewport with a little padding
+        globalCy.animate({
+          fit: {
+            eles: foundEdge,
+            padding: 50
+          },
+          duration: 500
+        });
+        updateRowVisibility();
+      } else {
+        alert("No matching edge found for the given Source and Destination IP.");
+      }
     });
-    updateRowVisibility();
-  } else {
-    alert("No matching edge found for the given Source and Destination IP.");
-  }
-});
-
 
     // When the "Unselect All Edges" button is clicked, clear all selections
     unselectButton.addEventListener('click', () => {
@@ -376,7 +394,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       return pyodide.globals.get("processed");
     }
 
-    // Function to create an HTML table from the CSV rows
+    // Function to create an HTML table from the CSV rows with row click events
     function createFullTable() {
       const container = document.getElementById('table-container');
       container.innerHTML = '';
@@ -385,6 +403,9 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       const table = document.createElement('table');
       const hdrLine = csvRows[0];
       const hdrCols = hdrLine.split(',').map(c => c.replace(/(^"|"$)/g, ''));
+      // Determine the index for the "Info" column (case-insensitive)
+      infoColumnIndex = hdrCols.findIndex(col => col.toLowerCase() === "info");
+      
       const hdrTr = document.createElement('tr');
       hdrCols.forEach(col => {
         let th = document.createElement('th');
@@ -394,11 +415,44 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       table.appendChild(hdrTr);
       for (let i = 1; i < csvRows.length; i++) {
         let tr = document.createElement('tr');
+        // Store the CSV row index as a data attribute
+        tr.setAttribute('data-index', i);
         let cols = csvRows[i].split(',');
         cols.forEach(c => {
           let td = document.createElement('td');
           td.textContent = c.replace(/(^"|"$)/g, '');
           tr.appendChild(td);
+        });
+        // Add click event to navigate to the corresponding edge in the visualization
+        tr.addEventListener('click', function() {
+          const rowIndex = parseInt(this.getAttribute('data-index'));
+          if (globalCy) {
+            let targetEdge = null;
+            globalCy.edges().some(edge => {
+              if ((edge.data('csvIndices') || []).includes(rowIndex)) {
+                targetEdge = edge;
+                return true;
+              }
+              return false;
+            });
+            if (targetEdge) {
+              // Optionally clear any other selections
+              globalCy.edges().removeClass('selected');
+              selectedEdges.clear();
+              // Highlight the found edge and update the selected CSV indices.
+              targetEdge.addClass('selected');
+              (targetEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
+              // Animate the view to bring the edge into focus.
+              globalCy.animate({
+                fit: {
+                  eles: targetEdge,
+                  padding: 50
+                },
+                duration: 500
+              });
+              updateRowVisibility();
+            }
+          }
         });
         table.appendChild(tr);
         allRowElems.push(tr);
@@ -409,122 +463,140 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     }
 
     /**
-     * Updates the visible table rows based on selected edges.
+     * Updates the visible table rows based on selected edges and the info filter.
+     * Added safety checks to ensure that CSV data and table rows exist.
      */
     function updateRowVisibility() {
-      let showAll = (selectedEdges.size === 0);
-      if (showAll) {
-        currentAllowed = [];
+      if (!csvRows || csvRows.length < 2 || allRowElems.length === 0) return;
+      
+      // Determine which rows are allowed based on selectedEdges (or all if none selected)
+      let allowed = [];
+      if (selectedEdges.size === 0) {
         for (let i = 1; i < csvRows.length; i++){
-          currentAllowed.push(i); 
+          allowed.push(i); 
         }
       } else {
-        currentAllowed = Array.from(selectedEdges);
+        allowed = Array.from(selectedEdges);
       }
-      currentAllowed.sort((a, b) => a - b);
-      for (let i = 0; i < allRowElems.length; i++) {
-        allRowElems[i].style.display = 'none';
+      allowed.sort((a, b) => a - b);
+      
+      // Now apply the filter on the "Info" column (if the filter input is non-empty and the column exists)
+      const filterText = infoFilterInput.value.trim().toLowerCase();
+      if (filterText && infoColumnIndex !== -1) {
+        allowed = allowed.filter(rowIndex => {
+          let rowElem = allRowElems[rowIndex - 1];
+          if (rowElem && rowElem.cells && rowElem.cells.length > infoColumnIndex) {
+            let cellText = rowElem.cells[infoColumnIndex].textContent.toLowerCase();
+            return cellText.includes(filterText);
+          }
+          return false;
+        });
       }
+      
+      // Hide all rows and then show allowed rows with pagination
+      allRowElems.forEach(row => row.style.display = 'none');
+      currentAllowed = allowed;
       displayOffset = 0;
       showNextChunk();
     }
 
     /**
      * Shows the next chunk of table rows (up to PAGE_SIZE).
+     * Safety check added in case there are no rows to display.
      */
-     function showNextChunk() {
-    let start = displayOffset;
-    let end = start + PAGE_SIZE;
-    if (end > currentAllowed.length) {
-      end = currentAllowed.length;
-    }
-    for (let i = start; i < end; i++) {
-      let rowIndex = currentAllowed[i];
-      // Check that rowIndex - 1 is a valid index for allRowElems
-      if (rowIndex - 1 >= 0 && rowIndex - 1 < allRowElems.length) {
-        allRowElems[rowIndex - 1].style.display = 'table-row';
+    function showNextChunk() {
+      if (!currentAllowed || currentAllowed.length === 0) {
+        loadMoreBtn.style.display = 'none';
+        return;
       }
-    }
-    displayOffset = end;
-    loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
+      let start = displayOffset;
+      let end = start + PAGE_SIZE;
+      if (end > currentAllowed.length) {
+        end = currentAllowed.length;
+      }
+      for (let i = start; i < end; i++) {
+        let rowIndex = currentAllowed[i];
+        if (rowIndex - 1 >= 0 && rowIndex - 1 < allRowElems.length) {
+          allRowElems[rowIndex - 1].style.display = 'table-row';
+        }
+      }
+      displayOffset = end;
+      loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
     }
 
     /**
      * Parses CSV text into Cytoscape elements (nodes and edges) for network visualization.
      */
-     function parseCSV(text) {
-  if (!text) return [];
-  let lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
-  let seenNodes = new Set();
-  let edgesMap = new Map();
-  let nodeElements = [];
-  for (let i = 1; i < lines.length; i++){
-    let rowNumber = i; // use row number as time index
-    let cols = lines[i].split(',').map(c => c.replace(/(^"|"$)/g, ''));
-    const source = cols[2]?.trim();
-    const destination = cols[3]?.trim();
-    const protocol = cols[4]?.trim();
-    const classification = cols[10]?.trim();
-    const nodeWeight = parseFloat(cols[8]) || 0;
-    const edgeWeight = parseFloat(cols[9]) || 0;
-    // Add source node (with timeIndex)
-    if (source && !seenNodes.has(source)) {
-      nodeElements.push({
-        data: {
-          id: source,
-          label: source,
-          Classification: classification,
-          NodeWeight: nodeWeight,
-          timeIndex: rowNumber  // record the first appearance
+    function parseCSV(text) {
+      if (!text) return [];
+      let lines = text.trim().split('\n');
+      if (lines.length < 2) return [];
+      const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
+      let seenNodes = new Set();
+      let edgesMap = new Map();
+      let nodeElements = [];
+      for (let i = 1; i < lines.length; i++){
+        let rowNumber = i;
+        let cols = lines[i].split(',').map(c => c.replace(/(^"|"$)/g, ''));
+        const source = cols[2]?.trim();
+        const destination = cols[3]?.trim();
+        const protocol = cols[4]?.trim();
+        const classification = cols[10]?.trim();
+        const nodeWeight = parseFloat(cols[8]) || 0;
+        const edgeWeight = parseFloat(cols[9]) || 0;
+        if (source && !seenNodes.has(source)) {
+          nodeElements.push({
+            data: {
+              id: source,
+              label: source,
+              Classification: classification,
+              NodeWeight: nodeWeight,
+              timeIndex: rowNumber
+            }
+          });
+          seenNodes.add(source);
         }
-      });
-      seenNodes.add(source);
-    }
-    // Add destination node (with timeIndex)
-    if (destination && !seenNodes.has(destination)) {
-      nodeElements.push({
-        data: {
-          id: destination,
-          label: destination,
-          Classification: 'External',
-          NodeWeight: nodeWeight,
-          timeIndex: rowNumber  // record the appearance for destination nodes too
+        if (destination && !seenNodes.has(destination)) {
+          nodeElements.push({
+            data: {
+              id: destination,
+              label: destination,
+              Classification: 'External',
+              NodeWeight: nodeWeight,
+              timeIndex: rowNumber
+            }
+          });
+          seenNodes.add(destination);
         }
-      });
-      seenNodes.add(destination);
-    }
-    if (!source || !destination || !protocol) continue;
-    const edgeKey = source + '|' + destination + '|' + protocol;
-    if (!edgesMap.has(edgeKey)) {
-      edgesMap.set(edgeKey, {
-        source, destination, protocol,
-        csvIndices: [],
-        totalEdgeWeight: 0
-      });
-    }
-    let entry = edgesMap.get(edgeKey);
-    entry.csvIndices.push(rowNumber);
-    entry.totalEdgeWeight += edgeWeight;
-  }
-  let edgeElements = [];
-  edgesMap.forEach(val => {
-    edgeElements.push({
-      data: {
-        id: `edge-${val.source}-${val.destination}-${val.protocol}`,
-        source: val.source,
-        target: val.destination,
-        Protocol: val.protocol,
-        EdgeWeight: val.totalEdgeWeight,
-        csvIndices: val.csvIndices,
-        label: `(${val.csvIndices.length}) ${val.protocol}`
+        if (!source || !destination || !protocol) continue;
+        const edgeKey = source + '|' + destination + '|' + protocol;
+        if (!edgesMap.has(edgeKey)) {
+          edgesMap.set(edgeKey, {
+            source, destination, protocol,
+            csvIndices: [],
+            totalEdgeWeight: 0
+          });
+        }
+        let entry = edgesMap.get(edgeKey);
+        entry.csvIndices.push(rowNumber);
+        entry.totalEdgeWeight += edgeWeight;
       }
-    });
-  });
-  return [...nodeElements, ...edgeElements];
-}
-
+      let edgeElements = [];
+      edgesMap.forEach(val => {
+        edgeElements.push({
+          data: {
+            id: `edge-${val.source}-${val.destination}-${val.protocol}`,
+            source: val.source,
+            target: val.destination,
+            Protocol: val.protocol,
+            EdgeWeight: val.totalEdgeWeight,
+            csvIndices: val.csvIndices,
+            label: `(${val.csvIndices.length}) ${val.protocol}`
+          }
+        });
+      });
+      return [...nodeElements, ...edgeElements];
+    }
 
     /**
      * Groups nodes into directed components using breadth-first search.
@@ -552,87 +624,68 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     }
 
     /**
-     * Positions each group of nodes in a circular layout.
+     * Positions each group of nodes in a time-based tree layout.
+     * Within each group, the root is the node with the smallest timeIndex.
+     * Nodes are layered (levels determined via a BFS over outgoing edges) and sorted by time.
+     * Groups with more nodes are placed higher on the visualization.
      */
-    /**
- * Positions each group of nodes in a time-based tree layout.
- * Within each group, the root is the node with the smallest timeIndex.
- * Nodes are layered (levels determined via a BFS over outgoing edges) and sorted by time.
- * Groups with more nodes are placed higher on the visualization.
- */
-function positionGroupedComponentsTree(cy) {
-  // Group nodes by their assigned groupID.
-  let groupMap = {};
-  cy.nodes().forEach(n => {
-    let g = n.data('groupID') || 0;
-    if (!groupMap[g]) groupMap[g] = [];
-    groupMap[g].push(n);
-  });
-  
-  // Sort groups by the number of nodes (largest first)
-  let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
-  
-  let groupYOffset = 0;
-  const verticalSpacingBetweenGroups = 300;
-  const levelHeight = 80;       // vertical spacing between tree levels
-  const siblingSpacing = 100;   // horizontal spacing between siblings
-  
-  sortedGroups.forEach(([groupID, nodes]) => {
-    // Pick the root as the node with the smallest timeIndex
-    let root = nodes.reduce((prev, curr) => {
-      return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
-    }, null);
-    if (!root) return;
-    
-    // Perform BFS from the root (following outgoing edges only) to assign levels.
-    let levels = {};
-    let visited = new Set();
-    let queue = [];
-    levels[root.id()] = 0;
-    visited.add(root.id());
-    queue.push(root);
-    
-    while (queue.length > 0) {
-      let current = queue.shift();
-      let currentLevel = levels[current.id()];
-      current.outgoers('edge').forEach(edge => {
-        let target = edge.target();
-        // Only consider nodes in the same group
-        if (target.data('groupID') == groupID && !visited.has(target.id())) {
-          levels[target.id()] = currentLevel + 1;
-          visited.add(target.id());
-          queue.push(target);
+    function positionGroupedComponentsTree(cy) {
+      let groupMap = {};
+      cy.nodes().forEach(n => {
+        let g = n.data('groupID') || 0;
+        if (!groupMap[g]) groupMap[g] = [];
+        groupMap[g].push(n);
+      });
+      let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
+      let groupYOffset = 0;
+      const verticalSpacingBetweenGroups = 300;
+      const levelHeight = 80;
+      const siblingSpacing = 100;
+      sortedGroups.forEach(([groupID, nodes]) => {
+        let root = nodes.reduce((prev, curr) => {
+          return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
+        }, null);
+        if (!root) return;
+        let levels = {};
+        let visited = new Set();
+        let queue = [];
+        levels[root.id()] = 0;
+        visited.add(root.id());
+        queue.push(root);
+        while (queue.length > 0) {
+          let current = queue.shift();
+          let currentLevel = levels[current.id()];
+          current.outgoers('edge').forEach(edge => {
+            let target = edge.target();
+            if (target.data('groupID') == groupID && !visited.has(target.id())) {
+              levels[target.id()] = currentLevel + 1;
+              visited.add(target.id());
+              queue.push(target);
+            }
+          });
         }
+        let levelNodes = {};
+        nodes.forEach(n => {
+          let lvl = levels[n.id()] !== undefined ? levels[n.id()] : 0;
+          if (!levelNodes[lvl]) levelNodes[lvl] = [];
+          levelNodes[lvl].push(n);
+        });
+        Object.keys(levelNodes).forEach(lvlKey => {
+          let lvl = parseInt(lvlKey);
+          let nodesAtLevel = levelNodes[lvl];
+          nodesAtLevel.sort((a, b) => (a.data('timeIndex') || 0) - (b.data('timeIndex') || 0));
+          let totalWidth = (nodesAtLevel.length - 1) * siblingSpacing;
+          let startX = -totalWidth / 2;
+          nodesAtLevel.forEach((n, idx) => {
+            let x = startX + idx * siblingSpacing;
+            let y = groupYOffset + lvl * levelHeight;
+            n.position({x: x, y: y});
+          });
+        });
+        let maxLevel = Math.max(...Object.keys(levelNodes).map(Number));
+        groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
       });
     }
-    
-    // Group nodes by their level. Nodes that were not reached get level 0.
-    let levelNodes = {};
-    nodes.forEach(n => {
-      let lvl = levels[n.id()] !== undefined ? levels[n.id()] : 0;
-      if (!levelNodes[lvl]) levelNodes[lvl] = [];
-      levelNodes[lvl].push(n);
-    });
-    
-    // For each level, sort nodes by their timeIndex and position them horizontally.
-    Object.keys(levelNodes).forEach(lvlKey => {
-      let lvl = parseInt(lvlKey);
-      let nodesAtLevel = levelNodes[lvl];
-      nodesAtLevel.sort((a, b) => (a.data('timeIndex') || 0) - (b.data('timeIndex') || 0));
-      let totalWidth = (nodesAtLevel.length - 1) * siblingSpacing;
-      let startX = -totalWidth / 2;
-      nodesAtLevel.forEach((n, idx) => {
-        let x = startX + idx * siblingSpacing;
-        let y = groupYOffset + lvl * levelHeight;
-        n.position({x: x, y: y});
-      });
-    });
-    
-    // Increment the vertical offset for the next group.
-    let maxLevel = Math.max(...Object.keys(levelNodes).map(Number));
-    groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
-  });
-}
 
     /**
      * Initializes the Cytoscape network visualization with parsed nodes and edges,
@@ -768,6 +821,7 @@ function positionGroupedComponentsTree(cy) {
       cy.on('click', 'edge', (evt) => {
         let edge = evt.target;
         let arr = edge.data('csvIndices') || [];
+        if (!arr.length) return;
         let allSelected = arr.every(idx => selectedEdges.has(idx));
         if (allSelected) {
           arr.forEach(idx => selectedEdges.delete(idx));
