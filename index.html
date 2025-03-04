@@ -7,142 +7,333 @@
   <!-- The title that appears in the browser tab -->
   <title>MalScape</title>
   <style>
-    /* Reset some default browser styling for html and body so they fill the viewport */
+    /* Import a modern font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    /* Reset and base styles */
+    * {
+      box-sizing: border-box;
+    }
+    
     html, body {
       height: 100%;
       margin: 0;
       padding: 0;
+      font-family: 'Inter', sans-serif;
+      color: #333;
+      background-color: #f8f9fa;
     }
-    /* Use a simple sans-serif font and flex layout to put the main content and legend side by side */
+    
     body {
-      font-family: Arial, sans-serif;
       display: flex;
     }
-    /* Main container takes up remaining space and allows vertical scrolling if needed */
+    
+    /* Main layout containers */
     #main-container {
       flex: 1;
-      padding: 20px;
+      padding: 24px;
       height: 100vh;
       overflow-y: auto;
     }
-    /* Legend container: fixed width with a light background and vertical scroll if the content is long */
+    
     #legend-container {
-      width: 250px;
-      background-color: #f9f9f9;
-      border-left: 1px solid #ccc;
-      padding: 10px;
+      width: 280px;
+      background-color: #fff;
+      border-left: 1px solid #e9ecef;
+      padding: 24px 16px;
       height: 100vh;
       overflow-y: auto;
+      box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
     }
-    /* Container for the network visualization (using Cytoscape.js) */
+    
+    /* Header styling */
+    h2 {
+      color: #2c3e50;
+      margin-top: 0;
+      margin-bottom: 24px;
+      font-size: 28px;
+      font-weight: 600;
+      border-bottom: 2px solid #4299e1;
+      padding-bottom: 8px;
+      display: inline-block;
+    }
+    
+    h3 {
+      color: #2c3e50;
+      font-size: 18px;
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+    
+    /* Controls and inputs */
+    .control-group {
+      margin-bottom: 20px;
+      padding: 16px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    label {
+      display: inline-block;
+      margin-right: 8px;
+      font-weight: 500;
+      color: #4a5568;
+    }
+    
+    input[type="text"], input[type="file"] {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      margin-right: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+    
+    input[type="text"]:focus {
+      border-color: #4299e1;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    }
+    
+    button {
+      background-color: #4299e1;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-right: 8px;
+    }
+    
+    button:hover {
+      background-color: #3182ce;
+    }
+    
+    #unselectButton {
+      background-color: #e53e3e;
+    }
+    
+    #unselectButton:hover {
+      background-color: #c53030;
+    }
+    
+    #loadMoreBtn {
+      display: none;
+      margin-top: 16px;
+      background-color: #38a169;
+    }
+    
+    #loadMoreBtn:hover {
+      background-color: #2f855a;
+    }
+    
+    /* Network visualization */
     #cy {
       width: 100%;
       height: 600px;
-      border: 1px solid #ccc;
-      margin-top: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 24px;
+      background-color: #fff;
     }
-    /* Styling for our tooltip that shows info when hovering over nodes/edges */
+    
+    /* Tooltip */
     #tooltip {
       position: absolute;
       display: none;
-      background: #f9f9f9;
-      border: 1px solid #ccc;
-      padding: 5px;
+      background: #fff;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #2d3748;
       pointer-events: none;
       z-index: 100;
-      font-size: 12px;
-      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      max-width: 300px;
+      line-height: 1.5;
     }
-    /* Container for the table that will display CSV data */
+    
+    /* Tables */
     #table-container {
-      margin-top: 20px;
+      margin-top: 24px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
     }
-    /* Styling for the CSV table to collapse borders and fill the width */
-    #table-container table {
-      border-collapse: collapse;
+    
+    table {
       width: 100%;
-    }
-    /* Adding borders and padding to the table cells */
-    #table-container th, #table-container td {
-      border: 1px solid #ccc;
-      padding: 5px;
-    }
-    /* Light background color for header cells */
-    #table-container th {
-      background-color: #f2f2f2;
-    }
-    /* Special style for selected edges in the network visualization */
-    .edge.selected {
-      color: red !important;
-      width: 4 !important;
-    }
-    /* Styling for the "Unselect All Edges" button */
-    #unselectButton {
-      margin-top: 20px;
-      padding: 8px 12px;
-      font-size: 14px;
-    }
-    /* Styling for the new "Select Edge" button */
-    #selectEdgeButton {
-      margin-top: 20px;
-      padding: 8px 12px;
-      font-size: 14px;
-      margin-left: 10px;
-    }
-    /* Styling for the info filter input */
-    #infoFilterInput {
-      margin-top: 20px;
-      padding: 6px 8px;
-      font-size: 14px;
-      width: 250px;
-    }
-    /* Legend table styling */
-    #legend {
       border-collapse: collapse;
-      width: 100%;
+      table-layout: fixed;
     }
-    #legend th, #legend td {
-      border: 1px solid #ccc;
-      padding: 5px;
+    
+    th, td {
+      padding: 12px 15px;
       text-align: left;
+      border-bottom: 1px solid #e9ecef;
+      /* Allow text to wrap and show full content */
+      white-space: normal;
+      word-wrap: break-word;
     }
+    
+    /* Payload column special handling to show full content */
+    td.payload-column {
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-width: 500px;
+    }
+    
+    th {
+      background-color: #f1f5f9;
+      color: #4a5568;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+    }
+    
+    tr:hover {
+      background-color: #f8f9fa;
+      cursor: pointer;
+    }
+    
+    /* Legend */
+    #legend {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
     #legend th {
-      background-color: #f2f2f2;
+      background-color: #f1f5f9;
+      padding: 10px;
+      text-align: left;
+      font-size: 12px;
     }
-    /* Small colored box to indicate protocol colors in the legend */
+    
+    #legend td {
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    
     .color-box {
-      width: 25px;
-      height: 15px;
+      width: 16px;
+      height: 16px;
       display: inline-block;
       margin-right: 5px;
+      border-radius: 3px;
+      vertical-align: middle;
     }
-    /* Full-page loading overlay to indicate processing is happening */
+    
+    /* Loading overlay */
     #loadingOverlay {
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      background-color: rgba(0,0,0,0.4);
+      background-color: rgba(0, 0, 0, 0.7);
       color: #fff;
-      font-size: 24px;
+      font-size: 18px;
       display: none;
       align-items: center;
       justify-content: center;
       z-index: 9999;
     }
-    /* Styling for the loading message */
+    
     #loadingOverlay span {
-      background: #333;
+      background: #2d3748;
       padding: 20px 30px;
       border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
     }
-    /* "Load More" button for paginating table rows; hidden by default */
-    #loadMoreBtn {
-      display: none;
-      margin-top: 10px;
+    
+    #loadingOverlay span::before {
+      content: '';
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid transparent;
+      border-top-color: #fff;
+      border-radius: 50%;
+      margin-right: 12px;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 1200px) {
+      body {
+        flex-direction: column;
+      }
+      
+      #legend-container {
+        width: 100%;
+        height: auto;
+        max-height: 300px;
+        border-left: none;
+        border-top: 1px solid #e9ecef;
+        box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.05);
+      }
+      
+      #main-container {
+        height: auto;
+        padding: 16px;
+      }
+    }
+    
+    /* Filter input box */
+    #infoFilterInput {
+      width: 100%;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
       font-size: 14px;
-      padding: 8px 12px;
+    }
+    
+    #infoFilterInput:focus {
+      border-color: #4299e1;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    }
+    
+    /* Full payload view controls */
+    .payload-toggle {
+      cursor: pointer;
+      color: #4299e1;
+      text-decoration: underline;
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+    }
+    
+    .payload-toggle:hover {
+      color: #3182ce;
+    }
+    
+    .payload-truncated {
+      max-height: 100px;
+      overflow: hidden;
+    }
+    
+    .payload-full {
+      max-height: none;
     }
   </style>
 
@@ -154,7 +345,7 @@
 <body>
   <!-- This overlay appears when we are processing the CSV file or running heavy tasks -->
   <div id="loadingOverlay">
-    <span>Loading... please wait.</span>
+    <span>Processing data, please wait...</span>
   </div>
 
   <!-- Main container holds the title, IP inputs, file input, network visualization, table, and buttons -->
@@ -162,39 +353,48 @@
     <h2>MalScape</h2>
 
     <!-- Input fields for the user to specify a start source and destination IP for filtering -->
-    <div>
-      <label>Start Source IP:</label>
-      <input type="text" id="startSource" placeholder="e.g. 192.168.1.10" />
-      <label>Start Destination IP:</label>
-      <input type="text" id="startDestination" placeholder="e.g. 10.0.0.50" />
-      <!-- New button to trigger edge selection -->
-      <button id="selectEdgeButton">Select Edge</button>
+    <div class="control-group">
+      <div>
+        <label for="startSource">Start Source IP:</label>
+        <input type="text" id="startSource" placeholder="e.g. 192.168.1.10" />
+        
+        <label for="startDestination">Start Destination IP:</label>
+        <input type="text" id="startDestination" placeholder="e.g. 10.0.0.50" />
+        
+        <button id="selectEdgeButton">Select Edge</button>
+      </div>
+      
+      <div style="margin-top: 16px;">
+        <label for="fileInput">Upload CSV Data:</label>
+        <input type="file" id="fileInput" accept=".csv" />
+      </div>
     </div>
 
-    <!-- File input for the CSV file upload -->
-    <input type="file" id="fileInput" accept=".csv" />
     <!-- Div where the Cytoscape network graph will be rendered -->
     <div id="cy"></div>
+    
     <!-- Tooltip that appears when hovering over nodes/edges -->
     <div id="tooltip"></div>
-    <!-- Button to clear any selected edges on the network graph -->
-    <button id="unselectButton">Unselect All Edges</button>
     
-    <!-- Moved filter input for the Info column: now positioned right above the table -->
-    <div>
-      <label>Filter Info:</label>
-      <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
+    <div class="control-group">
+      <button id="unselectButton">Unselect All Edges</button>
+      
+      <div style="margin-top: 16px;">
+        <label for="infoFilterInput">Filter Info:</label>
+        <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
+      </div>
     </div>
 
     <!-- Container for the CSV data table that will be dynamically populated -->
     <div id="table-container"></div>
+    
     <!-- Button to load more rows of the table if there are too many to show at once -->
-    <button id="loadMoreBtn">Load More</button>
+    <button id="loadMoreBtn">Load More Rows</button>
   </div>
 
   <!-- Legend container on the side to show protocol color mappings -->
   <div id="legend-container">
-    <h3>Edge Color Legend</h3>
+    <h3>Protocol Legend</h3>
     <table id="legend">
       <tr><th>Protocol</th><th>Color</th><th>Description</th></tr>
       <tr><td>DNS</td><td><span class="color-box" style="background-color:#6BAED6"></span></td><td>DNS Traffic</td></tr>
@@ -224,7 +424,7 @@
     let csvRows = []; // Array to hold each line of CSV data
     let selectedEdges = new Set(); // Set of CSV row indices linked to selected edges
     let globalCy; // Reference to the Cytoscape instance
-    let infoColumnIndex = -1; // Will store the index of the "Info" column
+    let payloadColumnIndex = -1; // Will store the index of the "Payload" column (previously "Info")
 
     // Array to keep track of all table row elements for easier manipulation later
     let allRowElems = [];
@@ -243,10 +443,10 @@
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
     const selectEdgeButton = document.getElementById('selectEdgeButton');
-    const infoFilterInput = document.getElementById('infoFilterInput');
+    const payloadFilterInput = document.getElementById('infoFilterInput'); // Keep the same ID for backward compatibility
 
-    // When the info filter input changes, update the row visibility
-    infoFilterInput.addEventListener('input', () => {
+    // When the payload filter input changes, update the row visibility
+    payloadFilterInput.addEventListener('input', () => {
       updateRowVisibility();
     });
 
@@ -369,20 +569,37 @@ def process_csv(csv_text, start_source=None, start_destination=None):
         matches = df.index[(df['Source'] == start_source) & (df['Destination'] == start_destination)]
         if len(matches) > 0:
             df = df.loc[matches[0]:].reset_index(drop=True)
-    df["ProcessCount"] = df.groupby(["Source","Destination"])["Source"].transform("count")
-    df["NodeWeight"] = df["ProcessCount"]
-    df["EdgeWeight"] = df["ProcessCount"]
-    if df["NodeWeight"].max() != df["NodeWeight"].min():
-        df["NodeWeight"] = (df["NodeWeight"] - df["NodeWeight"].min()) / (df["NodeWeight"].max() - df["NodeWeight"].min())
-    else:
-        df["NodeWeight"] = 1.0
-    if df["EdgeWeight"].max() != df["EdgeWeight"].min():
-        df["EdgeWeight"] = (df["EdgeWeight"] - df["EdgeWeight"].min()) / (df["EdgeWeight"].max() - df["EdgeWeight"].min())
-    else:
-        df["EdgeWeight"] = 1.0
-    df["Classification"] = df["Source"].apply(classify_ip)
+    
+    # Rename "Info" column to "Payload" if it exists
     if "Info" in df.columns:
-        df["Info"] = df["Info"].apply(lambda x: x.replace(',', '/') if pd.notna(x) else x)
+        df.rename(columns={"Info": "Payload"}, inplace=True)
+    
+    # Calculate connection counts but don't add as a column
+    connection_counts = df.groupby(["Source","Destination"])["Source"].transform("count")
+
+    # Calculate node and edge weights for visualization but don't add to the dataframe
+    node_weights = connection_counts.copy()
+    edge_weights = connection_counts.copy()
+
+    if node_weights.max() != node_weights.min():
+        node_weights = (node_weights - node_weights.min()) / (node_weights.max() - node_weights.min())
+    else:
+        node_weights = pd.Series(1.0, index=node_weights.index)
+
+    if edge_weights.max() != edge_weights.min():
+        edge_weights = (edge_weights - edge_weights.min()) / (edge_weights.max() - edge_weights.min())
+    else:
+        edge_weights = pd.Series(1.0, index=edge_weights.index)
+
+    # Store weights in temporary variables without adding to the dataframe
+    temp_node_weights = node_weights
+    temp_edge_weights = edge_weights
+
+    df["Classification"] = df["Source"].apply(classify_ip)
+    
+    if "Payload" in df.columns:
+        df["Payload"] = df["Payload"].apply(lambda x: x.replace(',', '/') if pd.notna(x) else x)
+    
     out = StringIO()
     df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
     return out.getvalue()
@@ -403,8 +620,8 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       const table = document.createElement('table');
       const hdrLine = csvRows[0];
       const hdrCols = hdrLine.split(',').map(c => c.replace(/(^"|"$)/g, ''));
-      // Determine the index for the "Info" column (case-insensitive)
-      infoColumnIndex = hdrCols.findIndex(col => col.toLowerCase() === "info");
+      // Determine the index for the "Payload" column (case-insensitive)
+      payloadColumnIndex = hdrCols.findIndex(col => col.toLowerCase() === "payload");
       
       const hdrTr = document.createElement('tr');
       hdrCols.forEach(col => {
@@ -463,7 +680,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
     }
 
     /**
-     * Updates the visible table rows based on selected edges and the info filter.
+     * Updates the visible table rows based on selected edges and the payload filter.
      * Added safety checks to ensure that CSV data and table rows exist.
      */
     function updateRowVisibility() {
@@ -480,13 +697,13 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       }
       allowed.sort((a, b) => a - b);
       
-      // Now apply the filter on the "Info" column (if the filter input is non-empty and the column exists)
-      const filterText = infoFilterInput.value.trim().toLowerCase();
-      if (filterText && infoColumnIndex !== -1) {
+      // Now apply the filter on the "Payload" column (if the filter input is non-empty and the column exists)
+      const filterText = payloadFilterInput.value.trim().toLowerCase();
+      if (filterText && payloadColumnIndex !== -1) {
         allowed = allowed.filter(rowIndex => {
           let rowElem = allRowElems[rowIndex - 1];
-          if (rowElem && rowElem.cells && rowElem.cells.length > infoColumnIndex) {
-            let cellText = rowElem.cells[infoColumnIndex].textContent.toLowerCase();
+          if (rowElem && rowElem.cells && rowElem.cells.length > payloadColumnIndex) {
+            let cellText = rowElem.cells[payloadColumnIndex].textContent.toLowerCase();
             return cellText.includes(filterText);
           }
           return false;
@@ -538,8 +755,11 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       for (let i = 1; i < lines.length; i++){
         let rowNumber = i;
         let cols = lines[i].split(',').map(c => c.replace(/(^"|"$)/g, ''));
-        const source = cols[2]?.trim();
-        const destination = cols[3]?.trim();
+        const sourceIdx = header.indexOf('Source');
+        const destIdx = header.indexOf('Destination');
+        const protocolIdx = header.indexOf('Protocol');
+        const source = cols[sourceIdx]?.trim();
+        const destination = cols[destIdx]?.trim();
         const protocol = cols[4]?.trim();
         const classification = cols[10]?.trim();
         const nodeWeight = parseFloat(cols[8]) || 0;
