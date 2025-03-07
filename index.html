@@ -19,7 +19,7 @@
     }
     body { display: flex; }
     
-    /* Containers for main layout */
+    /* Main layout containers */
     #main-container {
       flex: 1;
       padding: 24px;
@@ -56,7 +56,7 @@
       font-weight: 600;
     }
     
-    /* Styling for controls and inputs */
+    /* Controls and inputs */
     .control-group {
       margin-bottom: 20px;
       padding: 16px;
@@ -108,7 +108,7 @@
     }
     #loadMoreBtn:hover { background-color: #2f855a; }
     
-    /* Style for the network visualization area */
+    /* Network visualization area */
     #cy {
       width: 100%;
       height: 600px;
@@ -168,7 +168,7 @@
     .payload-truncated { max-height: 100px; overflow: hidden; }
     .payload-full { max-height: none; }
     
-    /* Overlay shown while loading data */
+    /* Loading overlay */
     #loadingOverlay {
       position: fixed;
       top: 0;
@@ -204,7 +204,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     
-    /* Legend color box styling */
+    /* Legend styling */
     .color-box {
       display: inline-block;
       width: 12px;
@@ -221,7 +221,7 @@
       padding: 4px 6px;
     }
     
-    /* Adjust layout for smaller screens */
+    /* Responsive adjustments */
     @media (max-width: 1200px) {
       body { flex-direction: column; }
       #legend-container {
@@ -236,22 +236,19 @@
     }
   </style>
 
-  <!-- Load Cytoscape for network graphs -->
+  <!-- Cytoscape and Pyodide libraries -->
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
-  <!-- Load Pyodide to run Python code in the browser -->
   <script src="https://cdn.jsdelivr.net/pyodide/v0.21.3/full/pyodide.js"></script>
 </head>
 <body>
-  <!-- Overlay to show loading state -->
+  <!-- Display while loading -->
   <div id="loadingOverlay">
     <span>Processing data, please wait...</span>
   </div>
 
-  <!-- Main content area -->
   <div id="main-container">
     <h2>MalScape</h2>
 
-    <!-- Input section for IPs and CSV upload -->
     <div class="control-group">
       <div>
         <label for="startSource">Start Source IP:</label>
@@ -265,7 +262,6 @@
       </div>
     </div>
 
-    <!-- Timeline control with speed options -->
     <div class="control-group">
       <label for="timeSlider">Timeline:</label>
       <input type="range" id="timeSlider" min="1" max="100" value="100">
@@ -282,7 +278,6 @@
       </select>
     </div>
 
-    <!-- Visualization filter controls -->
     <div class="control-group" id="visFilterGroup">
       <label for="visFilterColumn">Filter Column:</label>
       <select id="visFilterColumn">
@@ -294,13 +289,9 @@
         <option value="Length">Length</option>
         <option value="Payload">Payload</option>
       </select>
-      <!-- Searchable input for filtering keywords -->
       <label for="keywordInput">Keyword:</label>
       <input type="text" id="keywordInput" list="keywordOptions" placeholder="Select or search keyword" />
-      <datalist id="keywordOptions">
-        <!-- Options will be added dynamically -->
-      </datalist>
-      <!-- Lets user decide whether to show or hide based off filter -->
+      <datalist id="keywordOptions"></datalist>
       <label for="filterAction">Filter Action:</label>
       <select id="filterAction">
         <option value="show">Show Matching Edges</option>
@@ -313,10 +304,8 @@
       <button id="reclusterButton">Recluster Selected Edges</button>
     </div>
 
-    <!-- Area for Cytoscape network graph -->
     <div id="cy"></div>
     
-    <!-- Tooltip for nodes and edges -->
     <div id="tooltip"></div>
     
     <div class="control-group">
@@ -326,12 +315,10 @@
       </div>
     </div>
 
-    <!-- Table to display CSV data -->
     <div id="table-container"></div>
     <button id="loadMoreBtn">Load More Rows</button>
   </div>
 
-  <!-- Sidebar for protocol legend -->
   <div id="legend-container">
     <h3>Protocol Legend</h3>
     <table id="legend">
@@ -395,13 +382,13 @@
   </div>
 
   <script>
-    // Warn the user before they leave the page
+    // Prevent accidental navigation away
     window.addEventListener('beforeunload', (e) => {
       e.preventDefault();
       e.returnValue = '';
     });
 
-    // Global variables used throughout the app
+    // Global variables
     let pyodide;
     let globalCsvText = "";
     let csvRows = [];
@@ -409,8 +396,6 @@
     let selectedEdges = new Set();
     let globalCy;
     let payloadColumnIndex = -1;
-    
-    // For filtering the visualization based on CSV data
     let currentVisFilter = null;
     
     let allRowElems = [];
@@ -418,12 +403,12 @@
     const PAGE_SIZE = 50;
     let currentAllowed = [];
     
-    // Grab references to important DOM elements
+    // Get our DOM elements
     const fileInput = document.getElementById('fileInput');
     const tooltip = document.getElementById('tooltip');
     const unselectButton = document.getElementById('unselectButton');
-    const unclusterButton = document.getElementById('unclusterButton'); 
-    const reclusterButton = document.getElementById('reclusterButton'); 
+    const unclusterButton = document.getElementById('unclusterButton');
+    const reclusterButton = document.getElementById('reclusterButton');
     const startSourceInput = document.getElementById('startSource');
     const startDestinationInput = document.getElementById('startDestination');
     const loadingOverlay = document.getElementById('loadingOverlay');
@@ -434,7 +419,6 @@
     const playButton = document.getElementById('playButton');
     const speedSelector = document.getElementById('speedSelector');
     
-    // Controls for visualization filtering
     const visFilterColumn = document.getElementById('visFilterColumn');
     const keywordInput = document.getElementById('keywordInput');
     const keywordOptions = document.getElementById('keywordOptions');
@@ -444,12 +428,12 @@
     let playInterval;
     let isPlaying = false;
     
-    // Update keyword suggestions when the selected filter column changes
+    // Refresh keyword list when filter changes
     visFilterColumn.addEventListener('change', () => {
       updateKeywordSuggestions();
     });
     
-    // Toggle play/pause for the timeline with adjustable speed
+    // Start or stop timeline play
     playButton.addEventListener('click', () => {
       if (!isPlaying) {
         playButton.textContent = '⏸';
@@ -475,12 +459,10 @@
       }
     });
     
-    // Update table rows based on payload filter input
     payloadFilterInput.addEventListener('input', () => {
       updateRowVisibility();
     });
     
-    // Apply the visualization filter using the keyword from the input
     applyVisFilterBtn.addEventListener('click', () => {
       const col = visFilterColumn.value;
       const keyword = keywordInput.value.trim();
@@ -492,21 +474,17 @@
       applyVisualizationFilter();
     });
     
-    // Remove the visualization filter and reset view
     clearVisFilterBtn.addEventListener('click', () => {
       currentVisFilter = null;
-      // Show all selected edges
       globalCy.edges().forEach(edge => {
         if (edge.hasClass('selected')) {
           edge.show();
         }
       });
       globalCy.nodes().forEach(node => node.show());
-      // Clear the keyword input field
       keywordInput.value = "";
     });
     
-    // Unselect all currently selected edges
     unselectButton.addEventListener('click', () => {
       selectedEdges.clear();
       if (globalCy) {
@@ -516,62 +494,48 @@
       updateRowVisibility();
     });
     
-    // Uncluster Selected Edges functionality *****
+    // Uncluster selected edges into individual ones
     unclusterButton.addEventListener('click', () => {
       if (!globalCy) return;
-      // Find all selected edges that are clusters (have more than one CSV row)
       let edgesToUncluster = globalCy.edges('.selected').filter(edge => {
         let indices = edge.data('csvIndices') || [];
         return indices.length > 1;
       });
       edgesToUncluster.forEach(edge => {
         let indices = edge.data('csvIndices') || [];
-        // For each CSV row index in the clustered edge, create an individual edge
         indices.forEach(idx => {
           let newEdge = createEdgeFromCSVRow(csvRows[idx], idx);
-          // Add the new edge to the graph and mark it as selected
           globalCy.add(newEdge).addClass('selected');
         });
-        // Remove the aggregated (clustered) edge from the graph
         edge.remove();
-        // Update the selectedEdges set
         indices.forEach(idx => {
-          selectedEdges.delete(idx); // remove the cluster indices
-          selectedEdges.add(idx);    // add them back as individual entries
+          selectedEdges.delete(idx);
+          selectedEdges.add(idx);
         });
       });
       updateKeywordSuggestions();
       updateRowVisibility();
     });
 
-    
-    //Recluster Selected Edges functionality
+    // Recluster selected edges into aggregated ones
     reclusterButton.addEventListener('click', () => {
       if (!globalCy) return;
-      // Gather all currently selected edges
       let selected = globalCy.edges('.selected');
-      // Group edges by a key (source, target, protocol)
       let groups = {};
       selected.forEach(edge => {
         let data = edge.data();
-        // For individual edges, csvIndices should be an array with one element.
-        // Use a key to group by common source, target and protocol.
         let key = data.source + '|' + data.target + '|' + data.Protocol;
         if (!groups[key]) groups[key] = [];
         groups[key].push(edge);
       });
-      // For each group with more than one edge, aggregate them.
       Object.keys(groups).forEach(key => {
         let edgesGroup = groups[key];
-        if (edgesGroup.length < 2) return; // only recluster groups with multiple individual edges
-        // Aggregate csvIndices from all edges in the group
+        if (edgesGroup.length < 2) return;
         let aggregatedIndices = [];
         edgesGroup.forEach(edge => {
           aggregatedIndices = aggregatedIndices.concat(edge.data('csvIndices'));
         });
-        // Remove all individual edges in this group
         edgesGroup.forEach(edge => edge.remove());
-        // Create a new aggregated edge
         let parts = key.split('|');
         let newEdge = {
           data: {
@@ -579,30 +543,24 @@
             source: parts[0],
             target: parts[1],
             Protocol: parts[2],
-            // For display purposes, you may recompute EdgeWeight or processCount as needed.
             EdgeWeight: aggregatedIndices.length,
             processCount: aggregatedIndices.length,
             csvIndices: aggregatedIndices,
             label: `(${aggregatedIndices.length}) ${parts[2]}`
           }
         };
-        // Add the new aggregated edge and mark it as selected
         globalCy.add(newEdge).addClass('selected');
-        // Update selectedEdges: remove individual entries and add aggregated indices
         aggregatedIndices.forEach(idx => selectedEdges.add(idx));
       });
       updateKeywordSuggestions();
       updateRowVisibility();
     });
-    // *********************************************************
     
-    // Load additional rows in the table (pagination)
     loadMoreBtn.addEventListener('click', () => {
       displayOffset += PAGE_SIZE;
       showNextChunk();
     });
     
-    // Set up the timeline slider based on network node times
     function setupTimeSlider() {
       let maxTime = 0;
       globalCy.nodes().forEach(node => {
@@ -618,7 +576,6 @@
       updateTimeFilter();
     }
     
-    // Update the network graph based on the timeline slider value
     function updateTimeFilter() {
       let timeValue = parseInt(timeSlider.value);
       timeDisplay.textContent = timeValue;
@@ -639,9 +596,7 @@
       });
     }
     
-    // Update the datalist options for keyword suggestions based on the selected CSV column
     function updateKeywordSuggestions() {
-      // Clear out previous suggestions
       keywordOptions.innerHTML = "";
       let uniqueKeywords = new Set();
       const col = visFilterColumn.value;
@@ -657,7 +612,6 @@
           });
         }
       });
-      // Add unique keywords to the datalist
       uniqueKeywords.forEach(keyword => {
         if (keyword) {
           let option = document.createElement('option');
@@ -667,7 +621,6 @@
       });
     }
     
-    // Filter the visualization based on the keyword (supports numeric comparisons) and the chosen filter action
     function applyVisualizationFilter() {
       if (!currentVisFilter) return;
       let colIndex = csvHeaders.indexOf(currentVisFilter.column);
@@ -675,11 +628,9 @@
         alert("Selected column not found in CSV headers.");
         return;
       }
-      // Get the filter action (either "show" or "hide")
       const filterAction = document.getElementById('filterAction').value;
       const filterStr = currentVisFilter.keyword.trim();
       
-      // Check if the filter string is a numeric comparison
       const numericMatch = filterStr.match(/^(>=|<=|>|<)\s*(\d+(\.\d+)?)$/);
       let numericOperator = null, numericValue = null;
       if (numericMatch) {
@@ -687,7 +638,6 @@
         numericValue = parseFloat(numericMatch[2]);
       }
       
-      // Loop over selected edges and show/hide based on filter match and action
       globalCy.edges().forEach(edge => {
         if (edge.hasClass('selected')) {
           let isMatch = false;
@@ -723,23 +673,14 @@
             if (isMatch) break;
           }
           if (filterAction === "show") {
-            if (isMatch) {
-              edge.show();
-            } else {
-              edge.hide();
-            }
+            isMatch ? edge.show() : edge.hide();
           } else if (filterAction === "hide") {
-            if (isMatch) {
-              edge.hide();
-            } else {
-              edge.show();
-            }
+            isMatch ? edge.hide() : edge.show();
           }
         }
       });
     }
     
-    // Load Pyodide and necessary Python packages for CSV processing
     async function loadPyodideAndPackages() {
       pyodide = await loadPyodide();
       await pyodide.loadPackage(['pandas', 'micropip']);
@@ -750,7 +691,6 @@ await micropip.install(['ipaddress'])
     }
     loadPyodideAndPackages();
     
-    // Process the CSV file when the user uploads it
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -784,7 +724,6 @@ await micropip.install(['ipaddress'])
       }
     });
     
-    // Run a Python script via Pyodide to process CSV text
     async function runPythonScript(csvText, startSource, startDestination) {
       const pythonScript = `
 import csv
@@ -841,7 +780,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       return pyodide.globals.get("processed");
     }
     
-    // Create an HTML table from the CSV rows
     function createFullTable() {
       const container = document.getElementById('table-container');
       container.innerHTML = '';
@@ -900,8 +838,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       updateRowVisibility();
     }
     
-    // Update table rows visibility based on filter and selection.
-    // Now the table always shows rows from CSV corresponding to selectedEdges.
     function updateRowVisibility() {
       if (!csvRows || csvRows.length < 2 || allRowElems.length === 0) return;
       let allowed = [];
@@ -930,7 +866,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       showNextChunk();
     }
     
-    // Show the next set of table rows (pagination)
     function showNextChunk() {
       if (!currentAllowed || currentAllowed.length === 0) {
         loadMoreBtn.style.display = 'none';
@@ -951,7 +886,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
     }
     
-    // Convert CSV text into elements for Cytoscape
     function parseCSV(text) {
       if (!text) return [];
       let lines = text.trim().split('\n');
@@ -1030,7 +964,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       return [...nodeElements, ...edgeElements];
     }
     
-    // Function to create a new individual edge element from a CSV row.
     function createEdgeFromCSVRow(row, rowIndex) {
       let cols = row.split(',').map(s => s.replace(/(^"|"$)/g, ''));
       let source = cols[csvHeaders.indexOf('Source')];
@@ -1050,7 +983,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       };
     }
     
-    // Group nodes using a BFS approach for directed components
     function groupDirectedComponents(cy) {
       let visited = new Set();
       let groupCount = 0;
@@ -1073,7 +1005,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       });
     }
     
-    // Position node groups in a tree layout based on time
     function positionGroupedComponentsTree(cy) {
       let groupMap = {};
       cy.nodes().forEach(n => {
@@ -1132,7 +1063,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       });
     }
     
-    // Initialize the Cytoscape network visualization
     function visualizeNetwork(elements) {
       const cy = cytoscape({
         container: document.getElementById('cy'),
@@ -1235,7 +1165,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       groupDirectedComponents(cy);
       positionGroupedComponentsTree(cy);
       
-      // Show tooltip with node or edge info on hover
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
         let px = evt.originalEvent.pageX;
@@ -1257,22 +1186,18 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         }
       });
       
-      // Hide tooltip when not hovering
       cy.on('mouseout', 'node,edge', () => {
         tooltip.style.display = 'none';
       });
       
-      // Handle edge clicks for selection, with shift-click for group selection
       cy.on('click', 'edge', (evt) => {
         let edge = evt.target;
         if (evt.originalEvent.shiftKey) {
           let groupID = edge.source().data('groupID');
           if (groupID !== undefined) {
             cy.edges().forEach(e => {
-              if (
-                e.source().data('groupID') === groupID &&
-                e.target().data('groupID') === groupID
-              ) {
+              if (e.source().data('groupID') === groupID &&
+                  e.target().data('groupID') === groupID) {
                 let indices = e.data('csvIndices') || [];
                 indices.forEach(idx => selectedEdges.add(idx));
                 e.addClass('selected');
