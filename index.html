@@ -6,8 +6,6 @@
   <title>MalScape</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
-    /* Basic resets and base styling */
     * { box-sizing: border-box; }
     html, body {
       height: 100%;
@@ -18,8 +16,6 @@
       background-color: #f8f9fa;
     }
     body { display: flex; }
-    
-    /* Main layout containers */
     #main-container {
       flex: 1;
       padding: 24px;
@@ -35,8 +31,6 @@
       overflow-y: auto;
       box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
     }
-    
-    /* Header styles */
     h2 {
       color: #2c3e50;
       margin-top: 0;
@@ -47,7 +41,6 @@
       padding-bottom: 8px;
       display: inline-block;
     }
-    
     h3 {
       color: #2c3e50;
       font-size: 16px;
@@ -55,8 +48,6 @@
       margin-bottom: 12px;
       font-weight: 600;
     }
-    
-    /* Controls and inputs */
     .control-group {
       margin-bottom: 20px;
       padding: 16px;
@@ -107,8 +98,6 @@
       background-color: #38a169;
     }
     #loadMoreBtn:hover { background-color: #2f855a; }
-    
-    /* Network visualization area */
     #cy {
       width: 100%;
       height: 600px;
@@ -117,8 +106,6 @@
       margin-bottom: 24px;
       background-color: #fff;
     }
-    
-    /* Tooltip styling */
     #tooltip {
       position: absolute;
       display: none;
@@ -133,8 +120,6 @@
       max-width: 300px;
       line-height: 1.5;
     }
-    
-    /* Table styling */
     #table-container {
       margin-top: 24px;
       background-color: #fff;
@@ -154,8 +139,6 @@
       white-space: normal;
       word-wrap: break-word;
     }
-    
-    /* Toggle for full payload view */
     .payload-toggle {
       cursor: pointer;
       color: #4299e1;
@@ -167,8 +150,6 @@
     .payload-toggle:hover { color: #3182ce; }
     .payload-truncated { max-height: 100px; overflow: hidden; }
     .payload-full { max-height: none; }
-    
-    /* Loading overlay */
     #loadingOverlay {
       position: fixed;
       top: 0;
@@ -203,8 +184,6 @@
       animation: spin 1s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    
-    /* Legend styling */
     .color-box {
       display: inline-block;
       width: 12px;
@@ -220,8 +199,6 @@
     #legend th, #legend td {
       padding: 4px 6px;
     }
-    
-    /* Responsive adjustments */
     @media (max-width: 1200px) {
       body { flex-direction: column; }
       #legend-container {
@@ -235,20 +212,15 @@
       #main-container { height: auto; padding: 16px; }
     }
   </style>
-
-  <!-- Cytoscape and Pyodide libraries -->
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.21.3/full/pyodide.js"></script>
 </head>
 <body>
-  <!-- Display while loading -->
   <div id="loadingOverlay">
     <span>Processing data, please wait...</span>
   </div>
-
   <div id="main-container">
     <h2>MalScape</h2>
-
     <div class="control-group">
       <div>
         <label for="startSource">Start Source IP:</label>
@@ -260,8 +232,6 @@
         <label for="fileInput">Upload CSV Data:</label>
         <input type="file" id="fileInput" accept=".csv" />
       </div>
-    </div>
-
     <div class="control-group">
       <label for="timeSlider">Timeline:</label>
       <input type="range" id="timeSlider" min="1" max="100" value="100">
@@ -273,11 +243,13 @@
         <option value="4">4x</option>
         <option value="16">16x</option>
         <option value="32">32x</option>
-        <option value="32">64x</option>
-        <option value="32">124x</option>
+        <option value="64">64x</option>
+        <option value="124">124x</option>
+        <option value="256">256x</option>
+        <option value="512">512x</option>
+        <option value="1024">1024x</option>
       </select>
     </div>
-
     <div class="control-group" id="visFilterGroup">
       <label for="visFilterColumn">Filter Column:</label>
       <select id="visFilterColumn">
@@ -302,23 +274,23 @@
       <button id="unselectButton">Unselect All Edges</button>
       <button id="unclusterButton">Uncluster Selected Edges</button>
       <button id="reclusterButton">Recluster Selected Edges</button>
+      <div id="filterListContainer" style="margin-top: 12px;">
+        <h4 style="margin: 0 0 8px 0; font-size: 16px;">Current Filters:</h4>
+        <ul id="currentFilters" style="list-style: none; padding: 0; margin: 0;"></ul>
+      </div>      
     </div>
-
+    </div>
     <div id="cy"></div>
-    
     <div id="tooltip"></div>
-    
     <div class="control-group">
       <div style="margin-top: 16px;">
         <label for="infoFilterInput">Search Payload:</label>
         <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
       </div>
     </div>
-
     <div id="table-container"></div>
     <button id="loadMoreBtn">Load More Rows</button>
   </div>
-
   <div id="legend-container">
     <h3>Protocol Legend</h3>
     <table id="legend">
@@ -380,15 +352,11 @@
       </tr>
     </table>
   </div>
-
   <script>
-    // Prevent accidental navigation away
     window.addEventListener('beforeunload', (e) => {
       e.preventDefault();
       e.returnValue = '';
     });
-
-    // Global variables
     let pyodide;
     let globalCsvText = "";
     let csvRows = [];
@@ -396,14 +364,11 @@
     let selectedEdges = new Set();
     let globalCy;
     let payloadColumnIndex = -1;
-    let currentVisFilter = null;
-    
+    let currentVisFilters = [];
     let allRowElems = [];
     let displayOffset = 0;
     const PAGE_SIZE = 50;
     let currentAllowed = [];
-    
-    // Get our DOM elements
     const fileInput = document.getElementById('fileInput');
     const tooltip = document.getElementById('tooltip');
     const unselectButton = document.getElementById('unselectButton');
@@ -418,22 +383,16 @@
     const timeDisplay = document.getElementById('timeDisplay');
     const playButton = document.getElementById('playButton');
     const speedSelector = document.getElementById('speedSelector');
-    
     const visFilterColumn = document.getElementById('visFilterColumn');
     const keywordInput = document.getElementById('keywordInput');
     const keywordOptions = document.getElementById('keywordOptions');
     const applyVisFilterBtn = document.getElementById('applyVisFilterBtn');
     const clearVisFilterBtn = document.getElementById('clearVisFilterBtn');
-    
     let playInterval;
     let isPlaying = false;
-    
-    // Refresh keyword list when filter changes
     visFilterColumn.addEventListener('change', () => {
       updateKeywordSuggestions();
     });
-    
-    // Start or stop timeline play
     playButton.addEventListener('click', () => {
       if (!isPlaying) {
         playButton.textContent = '⏸';
@@ -442,7 +401,7 @@
           let currentValue = parseInt(timeSlider.value);
           let maxValue = parseInt(timeSlider.max);
           let speed = parseFloat(speedSelector.value) || 1;
-          let increment = 50 * speed;
+          let increment = 1 * speed;
           if (currentValue < maxValue) {
             timeSlider.value = Math.min(currentValue + increment, maxValue);
             updateTimeFilter();
@@ -458,11 +417,9 @@
         isPlaying = false;
       }
     });
-    
     payloadFilterInput.addEventListener('input', () => {
       updateRowVisibility();
     });
-    
     applyVisFilterBtn.addEventListener('click', () => {
       const col = visFilterColumn.value;
       const keyword = keywordInput.value.trim();
@@ -470,12 +427,14 @@
         alert("Please select or type a keyword.");
         return;
       }
-      currentVisFilter = { column: col, keyword: keyword };
+      const action = document.getElementById('filterAction').value;
+      currentVisFilters.push({ column: col, keyword: keyword, action: action });
+      updateFilterListDisplay();  
       applyVisualizationFilter();
     });
-    
     clearVisFilterBtn.addEventListener('click', () => {
-      currentVisFilter = null;
+      currentVisFilters = [];
+      updateFilterListDisplay(); 
       globalCy.edges().forEach(edge => {
         if (edge.hasClass('selected')) {
           edge.show();
@@ -484,7 +443,6 @@
       globalCy.nodes().forEach(node => node.show());
       keywordInput.value = "";
     });
-    
     unselectButton.addEventListener('click', () => {
       selectedEdges.clear();
       if (globalCy) {
@@ -493,8 +451,6 @@
       updateKeywordSuggestions();
       updateRowVisibility();
     });
-    
-    // Uncluster selected edges into individual ones
     unclusterButton.addEventListener('click', () => {
       if (!globalCy) return;
       let edgesToUncluster = globalCy.edges('.selected').filter(edge => {
@@ -516,8 +472,6 @@
       updateKeywordSuggestions();
       updateRowVisibility();
     });
-
-    // Recluster selected edges into aggregated ones
     reclusterButton.addEventListener('click', () => {
       if (!globalCy) return;
       let selected = globalCy.edges('.selected');
@@ -555,12 +509,10 @@
       updateKeywordSuggestions();
       updateRowVisibility();
     });
-    
     loadMoreBtn.addEventListener('click', () => {
       displayOffset += PAGE_SIZE;
       showNextChunk();
     });
-    
     function setupTimeSlider() {
       let maxTime = 0;
       globalCy.nodes().forEach(node => {
@@ -575,7 +527,6 @@
       timeSlider.addEventListener('input', updateTimeFilter);
       updateTimeFilter();
     }
-    
     function updateTimeFilter() {
       let timeValue = parseInt(timeSlider.value);
       timeDisplay.textContent = timeValue;
@@ -595,7 +546,27 @@
         }
       });
     }
-    
+    function updateFilterListDisplay() {
+      const currentFiltersList = document.getElementById('currentFilters');
+      currentFiltersList.innerHTML = "";
+      currentVisFilters.forEach((filter, index) => {
+        const li = document.createElement('li');
+        li.style.marginBottom = '4px';
+        li.style.fontSize = '14px';
+        li.textContent = `${filter.action.toUpperCase()} edges where [${filter.column}] contains "${filter.keyword}" `;
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'Remove';
+        removeBtn.style.marginLeft = '8px';
+        removeBtn.style.fontSize = '12px';
+        removeBtn.addEventListener('click', () => {
+          currentVisFilters.splice(index, 1);
+          updateFilterListDisplay();
+          applyVisualizationFilter();
+        });
+        li.appendChild(removeBtn);
+        currentFiltersList.appendChild(li);
+      });
+    }
     function updateKeywordSuggestions() {
       keywordOptions.innerHTML = "";
       let uniqueKeywords = new Set();
@@ -620,67 +591,75 @@
         }
       });
     }
-    
     function applyVisualizationFilter() {
-      if (!currentVisFilter) return;
-      let colIndex = csvHeaders.indexOf(currentVisFilter.column);
-      if (colIndex === -1) {
-        alert("Selected column not found in CSV headers.");
+      if (currentVisFilters.length === 0) {
+        globalCy.edges().forEach(edge => {
+          if (edge.hasClass('selected')) {
+            edge.show();
+          }
+        });
         return;
       }
-      const filterAction = document.getElementById('filterAction').value;
-      const filterStr = currentVisFilter.keyword.trim();
-      
-      const numericMatch = filterStr.match(/^(>=|<=|>|<)\s*(\d+(\.\d+)?)$/);
-      let numericOperator = null, numericValue = null;
-      if (numericMatch) {
-        numericOperator = numericMatch[1];
-        numericValue = parseFloat(numericMatch[2]);
-      }
-      
       globalCy.edges().forEach(edge => {
         if (edge.hasClass('selected')) {
-          let isMatch = false;
+          let shouldShow = true;
           let indices = edge.data('csvIndices') || [];
-          for (let idx of indices) {
-            if (idx < 1 || idx >= csvRows.length) continue;
-            let row = csvRows[idx].split(',').map(s => s.replace(/(^"|"$)/g, ''));
-            let cellValueRaw = row[colIndex].trim();
-            
-            if (numericOperator !== null) {
-              let cellValue = parseFloat(cellValueRaw);
-              if (!isNaN(cellValue)) {
-                switch (numericOperator) {
-                  case '>':
-                    if (cellValue > numericValue) isMatch = true;
-                    break;
-                  case '<':
-                    if (cellValue < numericValue) isMatch = true;
-                    break;
-                  case '>=':
-                    if (cellValue >= numericValue) isMatch = true;
-                    break;
-                  case '<=':
-                    if (cellValue <= numericValue) isMatch = true;
-                    break;
+          for (const filter of currentVisFilters) {
+            const colIndex = csvHeaders.indexOf(filter.column);
+            if (colIndex === -1) continue;
+            let filterStr = filter.keyword.trim();
+            const numericMatch = filterStr.match(/^(>=|<=|>|<)\s*(\d+(\.\d+)?)$/);
+            let numericOperator = null, numericValue = null;
+            if (numericMatch) {
+              numericOperator = numericMatch[1];
+              numericValue = parseFloat(numericMatch[2]);
+            }
+            let isMatch = false;
+            for (let idx of indices) {
+              if (idx < 1 || idx >= csvRows.length) continue;
+              let row = csvRows[idx].split(',').map(s => s.replace(/(^"|"$)/g, ''));
+              let cellValueRaw = row[colIndex].trim();
+              if (numericOperator !== null) {
+                let cellValue = parseFloat(cellValueRaw);
+                if (!isNaN(cellValue)) {
+                  switch (numericOperator) {
+                    case '>':
+                      if (cellValue > numericValue) isMatch = true;
+                      break;
+                    case '<':
+                      if (cellValue < numericValue) isMatch = true;
+                      break;
+                    case '>=':
+                      if (cellValue >= numericValue) isMatch = true;
+                      break;
+                    case '<=':
+                      if (cellValue <= numericValue) isMatch = true;
+                      break;
+                  }
+                }
+              } else {
+                if (cellValueRaw.toLowerCase().includes(filterStr.toLowerCase())) {
+                  isMatch = true;
                 }
               }
-            } else {
-              if (cellValueRaw.toLowerCase().indexOf(filterStr.toLowerCase()) !== -1) {
-                isMatch = true;
-              }
+              if (isMatch) break;
             }
-            if (isMatch) break;
+            if (filter.action === "show" && !isMatch) {
+              shouldShow = false;
+              break;
+            } else if (filter.action === "hide" && isMatch) {
+              shouldShow = false;
+              break;
+            }
           }
-          if (filterAction === "show") {
-            isMatch ? edge.show() : edge.hide();
-          } else if (filterAction === "hide") {
-            isMatch ? edge.hide() : edge.show();
+          if (shouldShow) {
+            edge.show();
+          } else {
+            edge.hide();
           }
         }
       });
     }
-    
     async function loadPyodideAndPackages() {
       pyodide = await loadPyodide();
       await pyodide.loadPackage(['pandas', 'micropip']);
@@ -690,7 +669,6 @@ await micropip.install(['ipaddress'])
       `);
     }
     loadPyodideAndPackages();
-    
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -723,7 +701,6 @@ await micropip.install(['ipaddress'])
         loadingOverlay.style.display = "none";
       }
     });
-    
     async function runPythonScript(csvText, startSource, startDestination) {
       const pythonScript = `
 import csv
@@ -731,19 +708,16 @@ import pandas as pd
 from ipaddress import ip_address, ip_network
 from io import StringIO
 import re
-
 internal_subnets = [
     ip_network('172.28.0.0/16'),
     ip_network('192.168.61.0/24')
 ]
-
 def classify_ip(ip):
     try:
         ip_obj = ip_address(ip)
         return 'Internal' if any(ip_obj in subnet for subnet in internal_subnets) else 'External'
     except ValueError:
         return 'Invalid IP'
-
 def process_csv(csv_text, start_source=None, start_destination=None):
     df = pd.read_csv(StringIO(csv_text), dtype=str)
     if not all(x in df.columns for x in ["Source", "Destination"]):
@@ -772,35 +746,43 @@ def process_csv(csv_text, start_source=None, start_destination=None):
     out = StringIO()
     df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
     return out.getvalue()
-
 processed = process_csv(csv_text, start_source="${startSource}", start_destination="${startDestination}")
 `;
       pyodide.globals.set("csv_text", csvText);
       await pyodide.runPythonAsync(pythonScript);
       return pyodide.globals.get("processed");
     }
-    
+    // Updated table creation that removes classification columns
     function createFullTable() {
       const container = document.getElementById('table-container');
       container.innerHTML = '';
       allRowElems = [];
       if (csvRows.length < 2) return;
       const table = document.createElement('table');
-      const hdrLine = csvRows[0];
-      const hdrCols = hdrLine.split(',').map(c => c.replace(/(^"|"$)/g, ''));
-      payloadColumnIndex = hdrCols.findIndex(col => col.toLowerCase() === "payload");
+      // Get the original headers and filter out classification columns
+      const originalHeaders = csvRows[0].split(',').map(c => c.replace(/(^"|"$)/g, ''));
+      const excluded = new Set(["SourceClassification", "DestinationClassification"]);
+      const filteredHeaders = originalHeaders.filter(col => !excluded.has(col));
+      payloadColumnIndex = filteredHeaders.findIndex(col => col.toLowerCase() === "payload");
       const hdrTr = document.createElement('tr');
-      hdrCols.forEach(col => {
+      filteredHeaders.forEach(col => {
         let th = document.createElement('th');
         th.textContent = col;
         hdrTr.appendChild(th);
       });
       table.appendChild(hdrTr);
+      // Process each data row, filtering out classification columns
       for (let i = 1; i < csvRows.length; i++) {
         let tr = document.createElement('tr');
         tr.setAttribute('data-index', i);
         let cols = csvRows[i].split(',');
-        cols.forEach(c => {
+        let filteredCols = [];
+        for (let j = 0; j < cols.length; j++){
+          if (!excluded.has(originalHeaders[j])) {
+            filteredCols.push(cols[j]);
+          }
+        }
+        filteredCols.forEach(c => {
           let td = document.createElement('td');
           td.textContent = c.replace(/(^"|"$)/g, '');
           tr.appendChild(td);
@@ -837,7 +819,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       displayOffset = 0;
       updateRowVisibility();
     }
-    
     function updateRowVisibility() {
       if (!csvRows || csvRows.length < 2 || allRowElems.length === 0) return;
       let allowed = [];
@@ -865,7 +846,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       displayOffset = 0;
       showNextChunk();
     }
-    
     function showNextChunk() {
       if (!currentAllowed || currentAllowed.length === 0) {
         loadMoreBtn.style.display = 'none';
@@ -885,7 +865,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       displayOffset = end;
       loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
     }
-    
     function parseCSV(text) {
       if (!text) return [];
       let lines = text.trim().split('\n');
@@ -963,7 +942,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       });
       return [...nodeElements, ...edgeElements];
     }
-    
     function createEdgeFromCSVRow(row, rowIndex) {
       let cols = row.split(',').map(s => s.replace(/(^"|"$)/g, ''));
       let source = cols[csvHeaders.indexOf('Source')];
@@ -982,7 +960,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         }
       };
     }
-    
     function groupDirectedComponents(cy) {
       let visited = new Set();
       let groupCount = 0;
@@ -1004,7 +981,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         }
       });
     }
-    
     function positionGroupedComponentsTree(cy) {
       let groupMap = {};
       cy.nodes().forEach(n => {
@@ -1062,7 +1038,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
       });
     }
-    
     function visualizeNetwork(elements) {
       const cy = cytoscape({
         container: document.getElementById('cy'),
@@ -1101,7 +1076,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
               'control-point-step-size': 30,
-              'width': 'mapData(processCount, 1, 10, 2, 10)',
+              'width': 'data(normalizedWeight)',
               'opacity': 0.8
             }
           },
@@ -1159,12 +1134,38 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           }
         ]
       });
-      
       cy.zoom(0.5);
       globalCy = cy;
       groupDirectedComponents(cy);
       positionGroupedComponentsTree(cy);
-      
+      let groupEdges = {};
+      globalCy.edges().forEach(edge => {
+        let sourceGroup = edge.source().data('groupID');
+        let targetGroup = edge.target().data('groupID');
+        if(sourceGroup && sourceGroup === targetGroup) {
+          if(!groupEdges[sourceGroup]) groupEdges[sourceGroup] = [];
+          groupEdges[sourceGroup].push(edge);
+        }
+      });
+      Object.keys(groupEdges).forEach(groupID => {
+        let edges = groupEdges[groupID];
+        let counts = edges.map(e => e.data('processCount'));
+        let minCount = Math.min(...counts);
+        let maxCount = Math.max(...counts);
+        edges.forEach(e => {
+          let count = e.data('processCount');
+          let norm = 2;
+          if(maxCount !== minCount) {
+            norm = 2 + ((count - minCount) / (maxCount - minCount)) * (10 - 2);
+          }
+          e.data('normalizedWeight', norm);
+        });
+      });
+      globalCy.edges().forEach(edge => {
+        if(edge.data('normalizedWeight') === undefined) {
+          edge.data('normalizedWeight', 2);
+        }
+      });
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
         let px = evt.originalEvent.pageX;
@@ -1185,11 +1186,9 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
                                Rows: ${arr.length}`;
         }
       });
-      
       cy.on('mouseout', 'node,edge', () => {
         tooltip.style.display = 'none';
       });
-      
       cy.on('click', 'edge', (evt) => {
         let edge = evt.target;
         if (evt.originalEvent.shiftKey) {
