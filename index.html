@@ -27,10 +27,10 @@
       overflow-y: auto;
     }
     #legend-container {
-      width: 220px; /* reduced width */
+      width: 220px;
       background-color: #fff;
       border-left: 1px solid #e9ecef;
-      padding: 16px 12px; /* reduced padding */
+      padding: 16px 12px;
       height: 100vh;
       overflow-y: auto;
       box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
@@ -50,7 +50,7 @@
     
     h3 {
       color: #2c3e50;
-      font-size: 16px; /* smaller legend header */
+      font-size: 16px;
       margin-top: 0;
       margin-bottom: 12px;
       font-weight: 600;
@@ -207,18 +207,18 @@
     /* Legend color box styling */
     .color-box {
       display: inline-block;
-      width: 12px;  /* smaller size */
-      height: 12px; /* smaller size */
+      width: 12px;
+      height: 12px;
       vertical-align: middle;
       margin-right: 4px;
       border: 1px solid #ccc;
     }
     #legend {
-      font-size: 12px; /* reduce font size for the legend */
+      font-size: 12px;
       line-height: 1.4;
     }
     #legend th, #legend td {
-      padding: 4px 6px; /* smaller padding */
+      padding: 4px 6px;
     }
     
     /* Adjust layout for smaller screens */
@@ -258,7 +258,6 @@
         <input type="text" id="startSource" placeholder="e.g. 192.168.1.10" />
         <label for="startDestination">Start Destination IP:</label>
         <input type="text" id="startDestination" placeholder="e.g. 10.0.0.50" />
-        <button id="selectEdgeButton">Select Edge</button>
       </div>
       <div style="margin-top: 16px;">
         <label for="fileInput">Upload CSV Data:</label>
@@ -301,9 +300,17 @@
       <datalist id="keywordOptions">
         <!-- Options will be added dynamically -->
       </datalist>
+      <!-- Lets user decide whether to show or hide based off filter -->
+      <label for="filterAction">Filter Action:</label>
+      <select id="filterAction">
+        <option value="show">Show Matching Edges</option>
+        <option value="hide">Hide Matching Edges</option>
+      </select>
       <button id="applyVisFilterBtn">Apply Visualization Filter</button>
       <button id="clearVisFilterBtn">Clear Filter</button>
       <button id="unselectButton">Unselect All Edges</button>
+      <button id="unclusterButton">Uncluster Selected Edges</button>
+      <button id="reclusterButton">Recluster Selected Edges</button>
     </div>
 
     <!-- Area for Cytoscape network graph -->
@@ -415,11 +422,12 @@
     const fileInput = document.getElementById('fileInput');
     const tooltip = document.getElementById('tooltip');
     const unselectButton = document.getElementById('unselectButton');
+    const unclusterButton = document.getElementById('unclusterButton'); 
+    const reclusterButton = document.getElementById('reclusterButton'); 
     const startSourceInput = document.getElementById('startSource');
     const startDestinationInput = document.getElementById('startDestination');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
-    const selectEdgeButton = document.getElementById('selectEdgeButton');
     const payloadFilterInput = document.getElementById('infoFilterInput');
     const timeSlider = document.getElementById('timeSlider');
     const timeDisplay = document.getElementById('timeDisplay');
@@ -475,7 +483,7 @@
     // Apply the visualization filter using the keyword from the input
     applyVisFilterBtn.addEventListener('click', () => {
       const col = visFilterColumn.value;
-      const keyword = keywordInput.value.trim().toLowerCase();
+      const keyword = keywordInput.value.trim();
       if (!keyword) {
         alert("Please select or type a keyword.");
         return;
@@ -498,35 +506,6 @@
       keywordInput.value = "";
     });
     
-    // Button to select a specific edge by matching source and destination IPs
-    selectEdgeButton.addEventListener('click', () => {
-      const src = startSourceInput.value.trim();
-      const dst = startDestinationInput.value.trim();
-      if (!src || !dst) {
-        alert("Please enter both Source and Destination IP.");
-        return;
-      }
-      let foundEdge = null;
-      globalCy.edges().some(edge => {
-        if (edge.data('source') === src && edge.data('target') === dst) {
-          foundEdge = edge;
-          return true;
-        }
-      });
-      if (foundEdge) {
-        foundEdge.addClass('selected');
-        (foundEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
-        globalCy.animate({
-          fit: { eles: foundEdge, padding: 50 },
-          duration: 500
-        });
-        updateKeywordSuggestions();
-        updateRowVisibility();
-      } else {
-        alert("No matching edge found for the given Source and Destination IP.");
-      }
-    });
-    
     // Unselect all currently selected edges
     unselectButton.addEventListener('click', () => {
       selectedEdges.clear();
@@ -536,6 +515,86 @@
       updateKeywordSuggestions();
       updateRowVisibility();
     });
+    
+    // Uncluster Selected Edges functionality *****
+    unclusterButton.addEventListener('click', () => {
+      if (!globalCy) return;
+      // Find all selected edges that are clusters (have more than one CSV row)
+      let edgesToUncluster = globalCy.edges('.selected').filter(edge => {
+        let indices = edge.data('csvIndices') || [];
+        return indices.length > 1;
+      });
+      edgesToUncluster.forEach(edge => {
+        let indices = edge.data('csvIndices') || [];
+        // For each CSV row index in the clustered edge, create an individual edge
+        indices.forEach(idx => {
+          let newEdge = createEdgeFromCSVRow(csvRows[idx], idx);
+          // Add the new edge to the graph and mark it as selected
+          globalCy.add(newEdge).addClass('selected');
+        });
+        // Remove the aggregated (clustered) edge from the graph
+        edge.remove();
+        // Update the selectedEdges set
+        indices.forEach(idx => {
+          selectedEdges.delete(idx); // remove the cluster indices
+          selectedEdges.add(idx);    // add them back as individual entries
+        });
+      });
+      updateKeywordSuggestions();
+      updateRowVisibility();
+    });
+
+    
+    //Recluster Selected Edges functionality
+    reclusterButton.addEventListener('click', () => {
+      if (!globalCy) return;
+      // Gather all currently selected edges
+      let selected = globalCy.edges('.selected');
+      // Group edges by a key (source, target, protocol)
+      let groups = {};
+      selected.forEach(edge => {
+        let data = edge.data();
+        // For individual edges, csvIndices should be an array with one element.
+        // Use a key to group by common source, target and protocol.
+        let key = data.source + '|' + data.target + '|' + data.Protocol;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(edge);
+      });
+      // For each group with more than one edge, aggregate them.
+      Object.keys(groups).forEach(key => {
+        let edgesGroup = groups[key];
+        if (edgesGroup.length < 2) return; // only recluster groups with multiple individual edges
+        // Aggregate csvIndices from all edges in the group
+        let aggregatedIndices = [];
+        edgesGroup.forEach(edge => {
+          aggregatedIndices = aggregatedIndices.concat(edge.data('csvIndices'));
+        });
+        // Remove all individual edges in this group
+        edgesGroup.forEach(edge => edge.remove());
+        // Create a new aggregated edge
+        let parts = key.split('|');
+        let newEdge = {
+          data: {
+            id: `edge-${parts[0]}-${parts[1]}-${parts[2]}`,
+            source: parts[0],
+            target: parts[1],
+            Protocol: parts[2],
+            // For display purposes, you may recompute EdgeWeight or processCount as needed.
+            EdgeWeight: aggregatedIndices.length,
+            processCount: aggregatedIndices.length,
+            csvIndices: aggregatedIndices,
+            label: `(${aggregatedIndices.length}) ${parts[2]}`
+          }
+        };
+        // Add the new aggregated edge and mark it as selected
+        globalCy.add(newEdge).addClass('selected');
+        // Update selectedEdges: remove individual entries and add aggregated indices
+        aggregatedIndices.forEach(idx => selectedEdges.add(idx));
+      });
+      updateKeywordSuggestions();
+      updateRowVisibility();
+    });
+    // *********************************************************
     
     // Load additional rows in the table (pagination)
     loadMoreBtn.addEventListener('click', () => {
@@ -554,7 +613,7 @@
       timeSlider.min = 1;
       timeSlider.max = maxTime;
       timeSlider.value = maxTime;
-      timeDisplay.textContent = "Time cutoff: " + maxTime;
+      timeDisplay.textContent = maxTime;
       timeSlider.addEventListener('input', updateTimeFilter);
       updateTimeFilter();
     }
@@ -562,7 +621,7 @@
     // Update the network graph based on the timeline slider value
     function updateTimeFilter() {
       let timeValue = parseInt(timeSlider.value);
-      timeDisplay.textContent = "Time cutoff: " + timeValue;
+      timeDisplay.textContent = timeValue;
       if (!globalCy) return;
       globalCy.nodes().forEach(node => {
         if (node.data('timeIndex') <= timeValue) {
@@ -608,7 +667,7 @@
       });
     }
     
-    // Filter the visualization to only show selected edges matching the keyword
+    // Filter the visualization based on the keyword (supports numeric comparisons) and the chosen filter action
     function applyVisualizationFilter() {
       if (!currentVisFilter) return;
       let colIndex = csvHeaders.indexOf(currentVisFilter.column);
@@ -616,24 +675,65 @@
         alert("Selected column not found in CSV headers.");
         return;
       }
-      // Loop over selected edges and hide/show based on filter match
+      // Get the filter action (either "show" or "hide")
+      const filterAction = document.getElementById('filterAction').value;
+      const filterStr = currentVisFilter.keyword.trim();
+      
+      // Check if the filter string is a numeric comparison
+      const numericMatch = filterStr.match(/^(>=|<=|>|<)\s*(\d+(\.\d+)?)$/);
+      let numericOperator = null, numericValue = null;
+      if (numericMatch) {
+        numericOperator = numericMatch[1];
+        numericValue = parseFloat(numericMatch[2]);
+      }
+      
+      // Loop over selected edges and show/hide based on filter match and action
       globalCy.edges().forEach(edge => {
         if (edge.hasClass('selected')) {
-          let showEdge = false;
+          let isMatch = false;
           let indices = edge.data('csvIndices') || [];
           for (let idx of indices) {
             if (idx < 1 || idx >= csvRows.length) continue;
             let row = csvRows[idx].split(',').map(s => s.replace(/(^"|"$)/g, ''));
-            let cellValue = row[colIndex].toLowerCase();
-            if (cellValue.indexOf(currentVisFilter.keyword) !== -1) {
-              showEdge = true;
-              break;
+            let cellValueRaw = row[colIndex].trim();
+            
+            if (numericOperator !== null) {
+              let cellValue = parseFloat(cellValueRaw);
+              if (!isNaN(cellValue)) {
+                switch (numericOperator) {
+                  case '>':
+                    if (cellValue > numericValue) isMatch = true;
+                    break;
+                  case '<':
+                    if (cellValue < numericValue) isMatch = true;
+                    break;
+                  case '>=':
+                    if (cellValue >= numericValue) isMatch = true;
+                    break;
+                  case '<=':
+                    if (cellValue <= numericValue) isMatch = true;
+                    break;
+                }
+              }
+            } else {
+              if (cellValueRaw.toLowerCase().indexOf(filterStr.toLowerCase()) !== -1) {
+                isMatch = true;
+              }
             }
+            if (isMatch) break;
           }
-          if (showEdge) {
-            edge.show();
-          } else {
-            edge.hide();
+          if (filterAction === "show") {
+            if (isMatch) {
+              edge.show();
+            } else {
+              edge.hide();
+            }
+          } else if (filterAction === "hide") {
+            if (isMatch) {
+              edge.hide();
+            } else {
+              edge.show();
+            }
           }
         }
       });
@@ -800,7 +900,8 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       updateRowVisibility();
     }
     
-    // Update table rows visibility based on filter and selection
+    // Update table rows visibility based on filter and selection.
+    // Now the table always shows rows from CSV corresponding to selectedEdges.
     function updateRowVisibility() {
       if (!csvRows || csvRows.length < 2 || allRowElems.length === 0) return;
       let allowed = [];
@@ -927,6 +1028,26 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         });
       });
       return [...nodeElements, ...edgeElements];
+    }
+    
+    // Function to create a new individual edge element from a CSV row.
+    function createEdgeFromCSVRow(row, rowIndex) {
+      let cols = row.split(',').map(s => s.replace(/(^"|"$)/g, ''));
+      let source = cols[csvHeaders.indexOf('Source')];
+      let destination = cols[csvHeaders.indexOf('Destination')];
+      let protocol = cols[csvHeaders.indexOf('Protocol')];
+      return {
+        data: {
+          id: `edge-${source}-${destination}-${protocol}-${rowIndex}`,
+          source: source,
+          target: destination,
+          Protocol: protocol,
+          EdgeWeight: 1,
+          processCount: 1,
+          csvIndices: [rowIndex],
+          label: `${protocol}`
+        }
+      };
     }
     
     // Group nodes using a BFS approach for directed components
