@@ -29,10 +29,10 @@
       overflow-y: auto;
     }
     #legend-container {
-      width: 280px;
+      width: 220px; /* reduced width */
       background-color: #fff;
       border-left: 1px solid #e9ecef;
-      padding: 24px 16px;
+      padding: 16px 12px; /* reduced padding */
       height: 100vh;
       overflow-y: auto;
       box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
@@ -52,9 +52,9 @@
     
     h3 {
       color: #2c3e50;
-      font-size: 18px;
+      font-size: 16px; /* smaller legend header */
       margin-top: 0;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       font-weight: 600;
     }
     
@@ -206,6 +206,23 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     
+    /* Legend color box styling */
+    .color-box {
+      display: inline-block;
+      width: 12px;  /* smaller size */
+      height: 12px; /* smaller size */
+      vertical-align: middle;
+      margin-right: 4px;
+      border: 1px solid #ccc;
+    }
+    #legend {
+      font-size: 12px; /* reduce font size for the legend */
+      line-height: 1.4;
+    }
+    #legend th, #legend td {
+      padding: 4px 6px; /* smaller padding */
+    }
+    
     /* Adjust layout for smaller screens */
     @media (max-width: 1200px) {
       body { flex-direction: column; }
@@ -288,6 +305,7 @@
       </datalist>
       <button id="applyVisFilterBtn">Apply Visualization Filter</button>
       <button id="clearVisFilterBtn">Clear Filter</button>
+      <button id="unselectButton">Unselect All Edges</button>
     </div>
 
     <!-- Area for Cytoscape network graph -->
@@ -297,9 +315,8 @@
     <div id="tooltip"></div>
     
     <div class="control-group">
-      <button id="unselectButton">Unselect All Edges</button>
       <div style="margin-top: 16px;">
-        <label for="infoFilterInput">Filter Payload (Table):</label>
+        <label for="infoFilterInput">Search Payload:</label>
         <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
       </div>
     </div>
@@ -314,17 +331,61 @@
     <h3>Protocol Legend</h3>
     <table id="legend">
       <tr><th>Protocol</th><th>Color</th><th>Description</th></tr>
-      <tr><td>DNS</td><td><span class="color-box" style="background-color:#6BAED6"></span></td><td>DNS Traffic</td></tr>
-      <tr><td>FTP</td><td><span class="color-box" style="background-color:#3182BD"></span></td><td>FTP Traffic</td></tr>
-      <tr><td>FTP-DATA</td><td><span class="color-box" style="background-color:#08519C"></span></td><td>FTP Data Channel</td></tr>
-      <tr><td>HTTP</td><td><span class="color-box" style="background-color:#FF7F0E"></span></td><td>HTTP Traffic</td></tr>
-      <tr><td>SMB</td><td><span class="color-box" style="background-color:#2CA02C"></span></td><td>SMB File Sharing</td></tr>
-      <tr><td>SMTP</td><td><span class="color-box" style="background-color:#000000"></span></td><td>Email Traffic (SMTP)</td></tr>
-      <tr><td>SMTP/IMF</td><td><span class="color-box" style="background-color:#FF9896"></span></td><td>Email Traffic (IMF)</td></tr>
-      <tr><td>SSH</td><td><span class="color-box" style="background-color:#9467BD"></span></td><td>SSH Traffic</td></tr>
-      <tr><td>STP</td><td><span class="color-box" style="background-color:#8C564B"></span></td><td>Spanning Tree Protocol</td></tr>
-      <tr><td>TCP</td><td><span class="color-box" style="background-color:#17BECF"></span></td><td>TCP Traffic (default)</td></tr>
-      <tr><td>TLSv1</td><td><span class="color-box" style="background-color:#BCBD22"></span></td><td>TLS v1 Encrypted Traffic</td></tr>
+      <tr>
+        <td>DNS</td>
+        <td><span class="color-box" style="background-color:#6BAED6"></span></td>
+        <td>DNS Traffic</td>
+      </tr>
+      <tr>
+        <td>FTP</td>
+        <td><span class="color-box" style="background-color:#3182BD"></span></td>
+        <td>FTP Traffic</td>
+      </tr>
+      <tr>
+        <td>FTP-DATA</td>
+        <td><span class="color-box" style="background-color:#08519C"></span></td>
+        <td>FTP Data Channel</td>
+      </tr>
+      <tr>
+        <td>HTTP</td>
+        <td><span class="color-box" style="background-color:#FF7F0E"></span></td>
+        <td>HTTP Traffic</td>
+      </tr>
+      <tr>
+        <td>SMB</td>
+        <td><span class="color-box" style="background-color:#2CA02C"></span></td>
+        <td>SMB File Sharing</td>
+      </tr>
+      <tr>
+        <td>SMTP</td>
+        <td><span class="color-box" style="background-color:#000000"></span></td>
+        <td>Email Traffic (SMTP)</td>
+      </tr>
+      <tr>
+        <td>SMTP/IMF</td>
+        <td><span class="color-box" style="background-color:#FF9896"></span></td>
+        <td>Email Traffic (IMF)</td>
+      </tr>
+      <tr>
+        <td>SSH</td>
+        <td><span class="color-box" style="background-color:#9467BD"></span></td>
+        <td>SSH Traffic</td>
+      </tr>
+      <tr>
+        <td>STP</td>
+        <td><span class="color-box" style="background-color:#8C564B"></span></td>
+        <td>Spanning Tree Protocol</td>
+      </tr>
+      <tr>
+        <td>TCP</td>
+        <td><span class="color-box" style="background-color:#17BECF"></span></td>
+        <td>TCP Traffic (default)</td>
+      </tr>
+      <tr>
+        <td>TLSv1</td>
+        <td><span class="color-box" style="background-color:#BCBD22"></span></td>
+        <td>TLS v1 Encrypted Traffic</td>
+      </tr>
     </table>
   </div>
 
