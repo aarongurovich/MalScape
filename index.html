@@ -1,20 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Setting the character encoding and viewport for responsive design -->
+  <!-- Set up character encoding and responsive viewport -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <!-- The title that appears in the browser tab -->
   <title>MalScape</title>
   <style>
-    /* Import a modern font */
+    /* Import a cool font from Google Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
-    /* Reset and base styles */
-    * {
-      box-sizing: border-box;
-    }
-    
+    /* Basic resets and base styling */
+    * { box-sizing: border-box; }
     html, body {
       height: 100%;
       margin: 0;
@@ -23,19 +19,15 @@
       color: #333;
       background-color: #f8f9fa;
     }
+    body { display: flex; }
     
-    body {
-      display: flex;
-    }
-    
-    /* Main layout containers */
+    /* Containers for main layout */
     #main-container {
       flex: 1;
       padding: 24px;
       height: 100vh;
       overflow-y: auto;
     }
-    
     #legend-container {
       width: 280px;
       background-color: #fff;
@@ -46,7 +38,7 @@
       box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
     }
     
-    /* Header styling */
+    /* Header styles */
     h2 {
       color: #2c3e50;
       margin-top: 0;
@@ -66,7 +58,7 @@
       font-weight: 600;
     }
     
-    /* Controls and inputs */
+    /* Styling for controls and inputs */
     .control-group {
       margin-bottom: 20px;
       padding: 16px;
@@ -74,15 +66,13 @@
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
-    
     label {
       display: inline-block;
       margin-right: 8px;
       font-weight: 500;
       color: #4a5568;
     }
-    
-    input[type="text"], input[type="file"] {
+    input[type="text"], input[type="file"], input[type="range"], select {
       padding: 8px 12px;
       border: 1px solid #cbd5e0;
       border-radius: 4px;
@@ -92,13 +82,11 @@
       margin-bottom: 8px;
       transition: border-color 0.2s;
     }
-    
-    input[type="text"]:focus {
+    input[type="text"]:focus, input[type="range"]:focus, select:focus {
       border-color: #4299e1;
       outline: none;
       box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
     }
-    
     button {
       background-color: #4299e1;
       color: white;
@@ -112,30 +100,17 @@
       transition: background-color 0.2s;
       margin-right: 8px;
     }
-    
-    button:hover {
-      background-color: #3182ce;
-    }
-    
-    #unselectButton {
-      background-color: #e53e3e;
-    }
-    
-    #unselectButton:hover {
-      background-color: #c53030;
-    }
-    
+    button:hover { background-color: #3182ce; }
+    #unselectButton { background-color: #e53e3e; }
+    #unselectButton:hover { background-color: #c53030; }
     #loadMoreBtn {
       display: none;
       margin-top: 16px;
       background-color: #38a169;
     }
+    #loadMoreBtn:hover { background-color: #2f855a; }
     
-    #loadMoreBtn:hover {
-      background-color: #2f855a;
-    }
-    
-    /* Network visualization */
+    /* Style for the network visualization area */
     #cy {
       width: 100%;
       height: 600px;
@@ -145,7 +120,7 @@
       background-color: #fff;
     }
     
-    /* Tooltip */
+    /* Tooltip styling */
     #tooltip {
       position: absolute;
       display: none;
@@ -161,7 +136,7 @@
       line-height: 1.5;
     }
     
-    /* Tables */
+    /* Table styling */
     #table-container {
       margin-top: 24px;
       background-color: #fff;
@@ -169,73 +144,33 @@
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       overflow: hidden;
     }
-    
     table {
       width: 100%;
       border-collapse: collapse;
       table-layout: fixed;
     }
-    
     th, td {
       padding: 12px 15px;
       text-align: left;
       border-bottom: 1px solid #e9ecef;
-      /* Allow text to wrap and show full content */
       white-space: normal;
       word-wrap: break-word;
     }
     
-    /* Payload column special handling to show full content */
-    td.payload-column {
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-width: 500px;
-    }
-    
-    th {
-      background-color: #f1f5f9;
-      color: #4a5568;
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 12px;
-      letter-spacing: 0.5px;
-      position: sticky;
-      top: 0;
-    }
-    
-    tr:hover {
-      background-color: #f8f9fa;
+    /* Toggle for full payload view */
+    .payload-toggle {
       cursor: pointer;
-    }
-    
-    /* Legend */
-    #legend {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    
-    #legend th {
-      background-color: #f1f5f9;
-      padding: 10px;
-      text-align: left;
+      color: #4299e1;
+      text-decoration: underline;
+      display: block;
+      margin-top: 5px;
       font-size: 12px;
     }
+    .payload-toggle:hover { color: #3182ce; }
+    .payload-truncated { max-height: 100px; overflow: hidden; }
+    .payload-full { max-height: none; }
     
-    #legend td {
-      padding: 8px 10px;
-      font-size: 13px;
-    }
-    
-    .color-box {
-      width: 16px;
-      height: 16px;
-      display: inline-block;
-      margin-right: 5px;
-      border-radius: 3px;
-      vertical-align: middle;
-    }
-    
-    /* Loading overlay */
+    /* Overlay shown while loading data */
     #loadingOverlay {
       position: fixed;
       top: 0;
@@ -250,7 +185,6 @@
       justify-content: center;
       z-index: 9999;
     }
-    
     #loadingOverlay span {
       background: #2d3748;
       padding: 20px 30px;
@@ -259,7 +193,6 @@
       display: flex;
       align-items: center;
     }
-    
     #loadingOverlay span::before {
       content: '';
       display: inline-block;
@@ -271,17 +204,11 @@
       margin-right: 12px;
       animation: spin 1s linear infinite;
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
     
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    /* Responsive adjustments */
+    /* Adjust layout for smaller screens */
     @media (max-width: 1200px) {
-      body {
-        flex-direction: column;
-      }
-      
+      body { flex-direction: column; }
       #legend-container {
         width: 100%;
         height: auto;
@@ -290,109 +217,99 @@
         border-top: 1px solid #e9ecef;
         box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.05);
       }
-      
-      #main-container {
-        height: auto;
-        padding: 16px;
-      }
-    }
-    
-    /* Filter input box */
-    #infoFilterInput {
-      width: 100%;
-      margin-bottom: 16px;
-      padding: 10px 12px;
-      border: 1px solid #cbd5e0;
-      border-radius: 4px;
-      font-size: 14px;
-    }
-    
-    #infoFilterInput:focus {
-      border-color: #4299e1;
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
-    }
-    
-    /* Full payload view controls */
-    .payload-toggle {
-      cursor: pointer;
-      color: #4299e1;
-      text-decoration: underline;
-      display: block;
-      margin-top: 5px;
-      font-size: 12px;
-    }
-    
-    .payload-toggle:hover {
-      color: #3182ce;
-    }
-    
-    .payload-truncated {
-      max-height: 100px;
-      overflow: hidden;
-    }
-    
-    .payload-full {
-      max-height: none;
+      #main-container { height: auto; padding: 16px; }
     }
   </style>
 
-  <!-- Load Cytoscape.js for network visualization -->
+  <!-- Load Cytoscape for network graphs -->
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
-  <!-- Load Pyodide to run Python in the browser -->
+  <!-- Load Pyodide to run Python code in the browser -->
   <script src="https://cdn.jsdelivr.net/pyodide/v0.21.3/full/pyodide.js"></script>
 </head>
 <body>
-  <!-- This overlay appears when we are processing the CSV file or running heavy tasks -->
+  <!-- Overlay to show loading state -->
   <div id="loadingOverlay">
     <span>Processing data, please wait...</span>
   </div>
 
-  <!-- Main container holds the title, IP inputs, file input, network visualization, table, and buttons -->
+  <!-- Main content area -->
   <div id="main-container">
     <h2>MalScape</h2>
 
-    <!-- Input fields for the user to specify a start source and destination IP for filtering -->
+    <!-- Input section for IPs and CSV upload -->
     <div class="control-group">
       <div>
         <label for="startSource">Start Source IP:</label>
         <input type="text" id="startSource" placeholder="e.g. 192.168.1.10" />
-        
         <label for="startDestination">Start Destination IP:</label>
         <input type="text" id="startDestination" placeholder="e.g. 10.0.0.50" />
-        
         <button id="selectEdgeButton">Select Edge</button>
       </div>
-      
       <div style="margin-top: 16px;">
         <label for="fileInput">Upload CSV Data:</label>
         <input type="file" id="fileInput" accept=".csv" />
       </div>
     </div>
 
-    <!-- Div where the Cytoscape network graph will be rendered -->
+    <!-- Timeline control with speed options -->
+    <div class="control-group">
+      <label for="timeSlider">Timeline:</label>
+      <input type="range" id="timeSlider" min="1" max="100" value="100">
+      <span id="timeDisplay"></span>
+      <button id="playButton">▶</button>
+      <select id="speedSelector">
+        <option value="1">1x</option>
+        <option value="2">2x</option>
+        <option value="4">4x</option>
+        <option value="16">16x</option>
+        <option value="32">32x</option>
+        <option value="32">64x</option>
+        <option value="32">124x</option>
+      </select>
+    </div>
+
+    <!-- Visualization filter controls -->
+    <div class="control-group" id="visFilterGroup">
+      <label for="visFilterColumn">Filter Column:</label>
+      <select id="visFilterColumn">
+        <option value="No.">No.</option>
+        <option value="Time">Time</option>
+        <option value="Source">Source</option>
+        <option value="Destination">Destination</option>
+        <option value="Protocol">Protocol</option>
+        <option value="Length">Length</option>
+        <option value="Payload">Payload</option>
+      </select>
+      <!-- Searchable input for filtering keywords -->
+      <label for="keywordInput">Keyword:</label>
+      <input type="text" id="keywordInput" list="keywordOptions" placeholder="Select or search keyword" />
+      <datalist id="keywordOptions">
+        <!-- Options will be added dynamically -->
+      </datalist>
+      <button id="applyVisFilterBtn">Apply Visualization Filter</button>
+      <button id="clearVisFilterBtn">Clear Filter</button>
+    </div>
+
+    <!-- Area for Cytoscape network graph -->
     <div id="cy"></div>
     
-    <!-- Tooltip that appears when hovering over nodes/edges -->
+    <!-- Tooltip for nodes and edges -->
     <div id="tooltip"></div>
     
     <div class="control-group">
       <button id="unselectButton">Unselect All Edges</button>
-      
       <div style="margin-top: 16px;">
-        <label for="infoFilterInput">Filter Info:</label>
+        <label for="infoFilterInput">Filter Payload (Table):</label>
         <input type="text" id="infoFilterInput" placeholder="Enter search keyword" />
       </div>
     </div>
 
-    <!-- Container for the CSV data table that will be dynamically populated -->
+    <!-- Table to display CSV data -->
     <div id="table-container"></div>
-    
-    <!-- Button to load more rows of the table if there are too many to show at once -->
     <button id="loadMoreBtn">Load More Rows</button>
   </div>
 
-  <!-- Legend container on the side to show protocol color mappings -->
+  <!-- Sidebar for protocol legend -->
   <div id="legend-container">
     <h3>Protocol Legend</h3>
     <table id="legend">
@@ -412,29 +329,30 @@
   </div>
 
   <script>
-    // Warn the user if they try to leave the page accidentally
+    // Warn the user before they leave the page
     window.addEventListener('beforeunload', (e) => {
       e.preventDefault();
       e.returnValue = '';
     });
 
-    // Global variables to keep track of state
-    let pyodide; // Pyodide instance for running Python code in the browser
-    let globalCsvText = ""; // Stores the processed CSV text
-    let csvRows = []; // Array to hold each line of CSV data
-    let selectedEdges = new Set(); // Set of CSV row indices linked to selected edges
-    let globalCy; // Reference to the Cytoscape instance
-    let payloadColumnIndex = -1; // Will store the index of the "Payload" column (previously "Info")
-
-    // Array to keep track of all table row elements for easier manipulation later
+    // Global variables used throughout the app
+    let pyodide;
+    let globalCsvText = "";
+    let csvRows = [];
+    let csvHeaders = [];
+    let selectedEdges = new Set();
+    let globalCy;
+    let payloadColumnIndex = -1;
+    
+    // For filtering the visualization based on CSV data
+    let currentVisFilter = null;
+    
     let allRowElems = [];
-
-    // Variables to handle pagination of table rows
-    let displayOffset = 0;    // How many rows have been shown so far
-    const PAGE_SIZE = 50;     // We show 50 rows at a time
-    let currentAllowed = [];  // Indices of rows that are allowed to be displayed
-
-    // Get references to various HTML elements for use in our script
+    let displayOffset = 0;
+    const PAGE_SIZE = 50;
+    let currentAllowed = [];
+    
+    // Grab references to important DOM elements
     const fileInput = document.getElementById('fileInput');
     const tooltip = document.getElementById('tooltip');
     const unselectButton = document.getElementById('unselectButton');
@@ -443,14 +361,85 @@
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
     const selectEdgeButton = document.getElementById('selectEdgeButton');
-    const payloadFilterInput = document.getElementById('infoFilterInput'); // Keep the same ID for backward compatibility
-
-    // When the payload filter input changes, update the row visibility
+    const payloadFilterInput = document.getElementById('infoFilterInput');
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const playButton = document.getElementById('playButton');
+    const speedSelector = document.getElementById('speedSelector');
+    
+    // Controls for visualization filtering
+    const visFilterColumn = document.getElementById('visFilterColumn');
+    const keywordInput = document.getElementById('keywordInput');
+    const keywordOptions = document.getElementById('keywordOptions');
+    const applyVisFilterBtn = document.getElementById('applyVisFilterBtn');
+    const clearVisFilterBtn = document.getElementById('clearVisFilterBtn');
+    
+    let playInterval;
+    let isPlaying = false;
+    
+    // Update keyword suggestions when the selected filter column changes
+    visFilterColumn.addEventListener('change', () => {
+      updateKeywordSuggestions();
+    });
+    
+    // Toggle play/pause for the timeline with adjustable speed
+    playButton.addEventListener('click', () => {
+      if (!isPlaying) {
+        playButton.textContent = '⏸';
+        isPlaying = true;
+        playInterval = setInterval(() => {
+          let currentValue = parseInt(timeSlider.value);
+          let maxValue = parseInt(timeSlider.max);
+          let speed = parseFloat(speedSelector.value) || 1;
+          let increment = 50 * speed;
+          if (currentValue < maxValue) {
+            timeSlider.value = Math.min(currentValue + increment, maxValue);
+            updateTimeFilter();
+          } else {
+            clearInterval(playInterval);
+            playButton.textContent = '▶';
+            isPlaying = false;
+          }
+        }, 200);
+      } else {
+        clearInterval(playInterval);
+        playButton.textContent = '▶';
+        isPlaying = false;
+      }
+    });
+    
+    // Update table rows based on payload filter input
     payloadFilterInput.addEventListener('input', () => {
       updateRowVisibility();
     });
-
-    // When the "Select Edge" button is clicked, highlight the matching edge based on the input IPs
+    
+    // Apply the visualization filter using the keyword from the input
+    applyVisFilterBtn.addEventListener('click', () => {
+      const col = visFilterColumn.value;
+      const keyword = keywordInput.value.trim().toLowerCase();
+      if (!keyword) {
+        alert("Please select or type a keyword.");
+        return;
+      }
+      currentVisFilter = { column: col, keyword: keyword };
+      applyVisualizationFilter();
+    });
+    
+    // Remove the visualization filter and reset view
+    clearVisFilterBtn.addEventListener('click', () => {
+      currentVisFilter = null;
+      // Show all selected edges
+      globalCy.edges().forEach(edge => {
+        if (edge.hasClass('selected')) {
+          edge.show();
+        }
+      });
+      globalCy.nodes().forEach(node => node.show());
+      // Clear the keyword input field
+      keywordInput.value = "";
+    });
+    
+    // Button to select a specific edge by matching source and destination IPs
     selectEdgeButton.addEventListener('click', () => {
       const src = startSourceInput.value.trim();
       const dst = startDestinationInput.value.trim();
@@ -468,36 +457,130 @@
       if (foundEdge) {
         foundEdge.addClass('selected');
         (foundEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
-        // Animate to fit the matching edge in the viewport with a little padding
         globalCy.animate({
-          fit: {
-            eles: foundEdge,
-            padding: 50
-          },
+          fit: { eles: foundEdge, padding: 50 },
           duration: 500
         });
+        updateKeywordSuggestions();
         updateRowVisibility();
       } else {
         alert("No matching edge found for the given Source and Destination IP.");
       }
     });
-
-    // When the "Unselect All Edges" button is clicked, clear all selections
+    
+    // Unselect all currently selected edges
     unselectButton.addEventListener('click', () => {
       selectedEdges.clear();
       if (globalCy) {
         globalCy.edges().removeClass('selected');
       }
+      updateKeywordSuggestions();
       updateRowVisibility();
     });
-
-    // "Load More" button: show the next page of table rows when clicked
+    
+    // Load additional rows in the table (pagination)
     loadMoreBtn.addEventListener('click', () => {
       displayOffset += PAGE_SIZE;
       showNextChunk();
     });
-
-    // Load Pyodide and necessary Python packages (pandas, micropip, ipaddress)
+    
+    // Set up the timeline slider based on network node times
+    function setupTimeSlider() {
+      let maxTime = 0;
+      globalCy.nodes().forEach(node => {
+        if (node.data('timeIndex') > maxTime) {
+          maxTime = node.data('timeIndex');
+        }
+      });
+      timeSlider.min = 1;
+      timeSlider.max = maxTime;
+      timeSlider.value = maxTime;
+      timeDisplay.textContent = "Time cutoff: " + maxTime;
+      timeSlider.addEventListener('input', updateTimeFilter);
+      updateTimeFilter();
+    }
+    
+    // Update the network graph based on the timeline slider value
+    function updateTimeFilter() {
+      let timeValue = parseInt(timeSlider.value);
+      timeDisplay.textContent = "Time cutoff: " + timeValue;
+      if (!globalCy) return;
+      globalCy.nodes().forEach(node => {
+        if (node.data('timeIndex') <= timeValue) {
+          node.show();
+        } else {
+          node.hide();
+        }
+      });
+      globalCy.edges().forEach(edge => {
+        if (edge.source().visible() && edge.target().visible()) {
+          edge.show();
+        } else {
+          edge.hide();
+        }
+      });
+    }
+    
+    // Update the datalist options for keyword suggestions based on the selected CSV column
+    function updateKeywordSuggestions() {
+      // Clear out previous suggestions
+      keywordOptions.innerHTML = "";
+      let uniqueKeywords = new Set();
+      const col = visFilterColumn.value;
+      const colIndex = csvHeaders.indexOf(col);
+      if (colIndex === -1) return;
+      globalCy.edges().forEach(edge => {
+        if (edge.hasClass('selected')) {
+          let indices = edge.data('csvIndices') || [];
+          indices.forEach(idx => {
+            if (idx < 1 || idx >= csvRows.length) return;
+            let row = csvRows[idx].split(',').map(s => s.replace(/(^"|"$)/g, ''));
+            uniqueKeywords.add(row[colIndex].trim());
+          });
+        }
+      });
+      // Add unique keywords to the datalist
+      uniqueKeywords.forEach(keyword => {
+        if (keyword) {
+          let option = document.createElement('option');
+          option.value = keyword;
+          keywordOptions.appendChild(option);
+        }
+      });
+    }
+    
+    // Filter the visualization to only show selected edges matching the keyword
+    function applyVisualizationFilter() {
+      if (!currentVisFilter) return;
+      let colIndex = csvHeaders.indexOf(currentVisFilter.column);
+      if (colIndex === -1) {
+        alert("Selected column not found in CSV headers.");
+        return;
+      }
+      // Loop over selected edges and hide/show based on filter match
+      globalCy.edges().forEach(edge => {
+        if (edge.hasClass('selected')) {
+          let showEdge = false;
+          let indices = edge.data('csvIndices') || [];
+          for (let idx of indices) {
+            if (idx < 1 || idx >= csvRows.length) continue;
+            let row = csvRows[idx].split(',').map(s => s.replace(/(^"|"$)/g, ''));
+            let cellValue = row[colIndex].toLowerCase();
+            if (cellValue.indexOf(currentVisFilter.keyword) !== -1) {
+              showEdge = true;
+              break;
+            }
+          }
+          if (showEdge) {
+            edge.show();
+          } else {
+            edge.hide();
+          }
+        }
+      });
+    }
+    
+    // Load Pyodide and necessary Python packages for CSV processing
     async function loadPyodideAndPackages() {
       pyodide = await loadPyodide();
       await pyodide.loadPackage(['pandas', 'micropip']);
@@ -506,10 +589,9 @@ import micropip
 await micropip.install(['ipaddress'])
       `);
     }
-    // Start loading Pyodide immediately
     loadPyodideAndPackages();
-
-    // When a CSV file is selected, process it
+    
+    // Process the CSV file when the user uploads it
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -521,8 +603,10 @@ await micropip.install(['ipaddress'])
         const processedCSV = await runPythonScript(text, userSource, userDestination);
         globalCsvText = processedCSV;
         csvRows = processedCSV.trim().split('\n');
+        csvHeaders = csvRows[0].split(',').map(s => s.replace(/(^"|"$)/g, ''));
         createFullTable();
         visualizeNetwork(parseCSV(processedCSV));
+        setupTimeSlider();
         if (userSource && userDestination) {
           globalCy.edges().forEach(edge => {
             if (edge.data('source') === userSource && edge.data('target') === userDestination) {
@@ -530,6 +614,7 @@ await micropip.install(['ipaddress'])
               (edge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
             }
           });
+          updateKeywordSuggestions();
           updateRowVisibility();
         }
       } catch (err) {
@@ -539,8 +624,8 @@ await micropip.install(['ipaddress'])
         loadingOverlay.style.display = "none";
       }
     });
-
-    // Function to run a Python script in Pyodide to process the CSV text
+    
+    // Run a Python script via Pyodide to process CSV text
     async function runPythonScript(csvText, startSource, startDestination) {
       const pythonScript = `
 import csv
@@ -569,37 +654,23 @@ def process_csv(csv_text, start_source=None, start_destination=None):
         matches = df.index[(df['Source'] == start_source) & (df['Destination'] == start_destination)]
         if len(matches) > 0:
             df = df.loc[matches[0]:].reset_index(drop=True)
-    
-    # Rename "Info" column to "Payload" if it exists
     if "Info" in df.columns:
         df.rename(columns={"Info": "Payload"}, inplace=True)
-    
-    # Calculate connection counts but don't add as a column
     connection_counts = df.groupby(["Source","Destination"])["Source"].transform("count")
-
-    # Calculate node and edge weights for visualization but don't add to the dataframe
     node_weights = connection_counts.copy()
     edge_weights = connection_counts.copy()
-
     if node_weights.max() != node_weights.min():
         node_weights = (node_weights - node_weights.min()) / (node_weights.max() - node_weights.min())
     else:
         node_weights = pd.Series(1.0, index=node_weights.index)
-
     if edge_weights.max() != edge_weights.min():
         edge_weights = (edge_weights - edge_weights.min()) / (edge_weights.max() - edge_weights.min())
     else:
         edge_weights = pd.Series(1.0, index=edge_weights.index)
-
-    # Store weights in temporary variables without adding to the dataframe
-    temp_node_weights = node_weights
-    temp_edge_weights = edge_weights
-
-    df["Classification"] = df["Source"].apply(classify_ip)
-    
+    df["SourceClassification"] = df["Source"].apply(classify_ip)
+    df["DestinationClassification"] = df["Destination"].apply(classify_ip)
     if "Payload" in df.columns:
         df["Payload"] = df["Payload"].apply(lambda x: x.replace(',', '/') if pd.notna(x) else x)
-    
     out = StringIO()
     df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
     return out.getvalue()
@@ -610,8 +681,8 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       await pyodide.runPythonAsync(pythonScript);
       return pyodide.globals.get("processed");
     }
-
-    // Function to create an HTML table from the CSV rows with row click events
+    
+    // Create an HTML table from the CSV rows
     function createFullTable() {
       const container = document.getElementById('table-container');
       container.innerHTML = '';
@@ -620,9 +691,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       const table = document.createElement('table');
       const hdrLine = csvRows[0];
       const hdrCols = hdrLine.split(',').map(c => c.replace(/(^"|"$)/g, ''));
-      // Determine the index for the "Payload" column (case-insensitive)
       payloadColumnIndex = hdrCols.findIndex(col => col.toLowerCase() === "payload");
-      
       const hdrTr = document.createElement('tr');
       hdrCols.forEach(col => {
         let th = document.createElement('th');
@@ -632,7 +701,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       table.appendChild(hdrTr);
       for (let i = 1; i < csvRows.length; i++) {
         let tr = document.createElement('tr');
-        // Store the CSV row index as a data attribute
         tr.setAttribute('data-index', i);
         let cols = csvRows[i].split(',');
         cols.forEach(c => {
@@ -640,7 +708,6 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           td.textContent = c.replace(/(^"|"$)/g, '');
           tr.appendChild(td);
         });
-        // Add click event to navigate to the corresponding edge in the visualization
         tr.addEventListener('click', function() {
           const rowIndex = parseInt(this.getAttribute('data-index'));
           if (globalCy) {
@@ -653,18 +720,13 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
               return false;
             });
             if (targetEdge) {
-              // Optionally clear any other selections
               globalCy.edges().removeClass('selected');
               selectedEdges.clear();
-              // Highlight the found edge and update the selected CSV indices.
               targetEdge.addClass('selected');
               (targetEdge.data('csvIndices') || []).forEach(idx => selectedEdges.add(idx));
-              // Animate the view to bring the edge into focus.
+              updateKeywordSuggestions();
               globalCy.animate({
-                fit: {
-                  eles: targetEdge,
-                  padding: 50
-                },
+                fit: { eles: targetEdge, padding: 50 },
                 duration: 500
               });
               updateRowVisibility();
@@ -678,26 +740,19 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       displayOffset = 0;
       updateRowVisibility();
     }
-
-    /**
-     * Updates the visible table rows based on selected edges and the payload filter.
-     * Added safety checks to ensure that CSV data and table rows exist.
-     */
+    
+    // Update table rows visibility based on filter and selection
     function updateRowVisibility() {
       if (!csvRows || csvRows.length < 2 || allRowElems.length === 0) return;
-      
-      // Determine which rows are allowed based on selectedEdges (or all if none selected)
       let allowed = [];
       if (selectedEdges.size === 0) {
         for (let i = 1; i < csvRows.length; i++){
-          allowed.push(i); 
+          allowed.push(i);
         }
       } else {
         allowed = Array.from(selectedEdges);
       }
       allowed.sort((a, b) => a - b);
-      
-      // Now apply the filter on the "Payload" column (if the filter input is non-empty and the column exists)
       const filterText = payloadFilterInput.value.trim().toLowerCase();
       if (filterText && payloadColumnIndex !== -1) {
         allowed = allowed.filter(rowIndex => {
@@ -709,18 +764,13 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
           return false;
         });
       }
-      
-      // Hide all rows and then show allowed rows with pagination
       allRowElems.forEach(row => row.style.display = 'none');
       currentAllowed = allowed;
       displayOffset = 0;
       showNextChunk();
     }
-
-    /**
-     * Shows the next chunk of table rows (up to PAGE_SIZE).
-     * Safety check added in case there are no rows to display.
-     */
+    
+    // Show the next set of table rows (pagination)
     function showNextChunk() {
       if (!currentAllowed || currentAllowed.length === 0) {
         loadMoreBtn.style.display = 'none';
@@ -740,15 +790,15 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       displayOffset = end;
       loadMoreBtn.style.display = (displayOffset >= currentAllowed.length) ? 'none' : 'inline-block';
     }
-
-    /**
-     * Parses CSV text into Cytoscape elements (nodes and edges) for network visualization.
-     */
+    
+    // Convert CSV text into elements for Cytoscape
     function parseCSV(text) {
       if (!text) return [];
       let lines = text.trim().split('\n');
       if (lines.length < 2) return [];
       const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
+      const sourceClassIdx = header.indexOf("SourceClassification");
+      const destinationClassIdx = header.indexOf("DestinationClassification");
       let seenNodes = new Set();
       let edgesMap = new Map();
       let nodeElements = [];
@@ -760,16 +810,17 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         const protocolIdx = header.indexOf('Protocol');
         const source = cols[sourceIdx]?.trim();
         const destination = cols[destIdx]?.trim();
-        const protocol = cols[4]?.trim();
-        const classification = cols[10]?.trim();
+        const protocol = cols[protocolIdx]?.trim();
         const nodeWeight = parseFloat(cols[8]) || 0;
         const edgeWeight = parseFloat(cols[9]) || 0;
+        const sourceClassification = sourceClassIdx !== -1 ? cols[sourceClassIdx]?.trim() : 'External';
+        const destinationClassification = destinationClassIdx !== -1 ? cols[destinationClassIdx]?.trim() : 'External';
         if (source && !seenNodes.has(source)) {
           nodeElements.push({
             data: {
               id: source,
               label: source,
-              Classification: classification,
+              Classification: sourceClassification,
               NodeWeight: nodeWeight,
               timeIndex: rowNumber
             }
@@ -781,7 +832,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
             data: {
               id: destination,
               label: destination,
-              Classification: 'External',
+              Classification: destinationClassification,
               NodeWeight: nodeWeight,
               timeIndex: rowNumber
             }
@@ -810,6 +861,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
             target: val.destination,
             Protocol: val.protocol,
             EdgeWeight: val.totalEdgeWeight,
+            processCount: val.csvIndices.length,
             csvIndices: val.csvIndices,
             label: `(${val.csvIndices.length}) ${val.protocol}`
           }
@@ -817,10 +869,8 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
       });
       return [...nodeElements, ...edgeElements];
     }
-
-    /**
-     * Groups nodes into directed components using breadth-first search.
-     */
+    
+    // Group nodes using a BFS approach for directed components
     function groupDirectedComponents(cy) {
       let visited = new Set();
       let groupCount = 0;
@@ -842,13 +892,8 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         }
       });
     }
-
-    /**
-     * Positions each group of nodes in a time-based tree layout.
-     * Within each group, the root is the node with the smallest timeIndex.
-     * Nodes are layered (levels determined via a BFS over outgoing edges) and sorted by time.
-     * Groups with more nodes are placed higher on the visualization.
-     */
+    
+    // Position node groups in a tree layout based on time
     function positionGroupedComponentsTree(cy) {
       let groupMap = {};
       cy.nodes().forEach(n => {
@@ -906,11 +951,8 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
       });
     }
-
-    /**
-     * Initializes the Cytoscape network visualization with parsed nodes and edges,
-     * applies styles, sets up layout, and defines event handlers.
-     */
+    
+    // Initialize the Cytoscape network visualization
     function visualizeNetwork(elements) {
       const cy = cytoscape({
         container: document.getElementById('cy'),
@@ -949,7 +991,7 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
               'control-point-step-size': 30,
-              'width': 2,
+              'width': 'mapData(processCount, 1, 10, 2, 10)',
               'opacity': 0.8
             }
           },
@@ -1008,13 +1050,12 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
         ]
       });
       
-      // Set initial zoom level to 0.5 for a more zoomed-out view
       cy.zoom(0.5);
-
       globalCy = cy;
       groupDirectedComponents(cy);
       positionGroupedComponentsTree(cy);
-
+      
+      // Show tooltip with node or edge info on hover
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
         let px = evt.originalEvent.pageX;
@@ -1035,21 +1076,42 @@ processed = process_csv(csv_text, start_source="${startSource}", start_destinati
                                Rows: ${arr.length}`;
         }
       });
+      
+      // Hide tooltip when not hovering
       cy.on('mouseout', 'node,edge', () => {
         tooltip.style.display = 'none';
       });
+      
+      // Handle edge clicks for selection, with shift-click for group selection
       cy.on('click', 'edge', (evt) => {
         let edge = evt.target;
-        let arr = edge.data('csvIndices') || [];
-        if (!arr.length) return;
-        let allSelected = arr.every(idx => selectedEdges.has(idx));
-        if (allSelected) {
-          arr.forEach(idx => selectedEdges.delete(idx));
-          edge.removeClass('selected');
+        if (evt.originalEvent.shiftKey) {
+          let groupID = edge.source().data('groupID');
+          if (groupID !== undefined) {
+            cy.edges().forEach(e => {
+              if (
+                e.source().data('groupID') === groupID &&
+                e.target().data('groupID') === groupID
+              ) {
+                let indices = e.data('csvIndices') || [];
+                indices.forEach(idx => selectedEdges.add(idx));
+                e.addClass('selected');
+              }
+            });
+          }
         } else {
-          arr.forEach(idx => selectedEdges.add(idx));
-          edge.addClass('selected');
+          let indices = edge.data('csvIndices') || [];
+          if (!indices.length) return;
+          let allSelected = indices.every(idx => selectedEdges.has(idx));
+          if (allSelected) {
+            indices.forEach(idx => selectedEdges.delete(idx));
+            edge.removeClass('selected');
+          } else {
+            indices.forEach(idx => selectedEdges.add(idx));
+            edge.addClass('selected');
+          }
         }
+        updateKeywordSuggestions();
         displayOffset = 0;
         updateRowVisibility();
       });
