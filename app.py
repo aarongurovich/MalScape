@@ -118,7 +118,7 @@ def process_csv(csv_text, start_source=None, start_destination=None):
             target_cluster = matching_rows.iloc[0]['ClusterID']
             df = df[df['ClusterID'] == target_cluster]
         else:
-            # If the start_source is not found, return an empty dataframe (or handle as needed)
+            # If the start_source is not found, return an empty dataframe
             df = df[0:0]
     
     out = StringIO()
