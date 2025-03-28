@@ -120,12 +120,13 @@
       max-width: 300px;
       line-height: 1.5;
     }
+    /* Allow the table container to scroll so all columns are visible */
     #table-container {
       margin-top: 24px;
       background-color: #fff;
       border-radius: 8px;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
+      overflow: auto;
     }
     table {
       width: 100%;
@@ -229,7 +230,8 @@
         <label for="fileInput">Upload CSV Data:</label>
         <input type="file" id="fileInput" accept=".csv" />
       </div>
-      <div class="control-group">
+      <!-- Timeline controls -->
+      <div style="margin-top: 16px;">
         <label for="timeSlider">Timeline:</label>
         <input type="range" id="timeSlider" min="1" max="100" value="100">
         <span id="timeDisplay"></span>
@@ -247,7 +249,9 @@
           <option value="1024">1024x</option>
         </select>
       </div>
-      <div class="control-group" id="visFilterGroup">
+
+      <!-- Visualization filter controls -->
+      <div id="visFilterGroup">
         <label for="visFilterColumn">Filter Column:</label>
         <select id="visFilterColumn">
           <option value="No.">No.</option>
@@ -277,6 +281,8 @@
         </div>      
       </div>
     </div>
+    <button id="downloadCsvBtn">Download Processed CSV</button>
+
     <div id="cy"></div>
     <div id="tooltip"></div>
     <div class="control-group">
@@ -287,69 +293,19 @@
     </div>
     <div id="table-container"></div>
     <button id="loadMoreBtn">Load More Rows</button>
-  </div>
+    </div>
   <div id="legend-container">
     <h3>Protocol Legend</h3>
     <table id="legend">
-      <tr><th>Protocol</th><th>Color</th><th>Description</th></tr>
       <tr>
-        <td>DNS</td>
-        <td><span class="color-box" style="background-color:#6BAED6"></span></td>
-        <td>DNS Traffic</td>
+        <th>Protocol</th>
+        <th>Color</th>
       </tr>
-      <tr>
-        <td>FTP</td>
-        <td><span class="color-box" style="background-color:#3182BD"></span></td>
-        <td>FTP Traffic</td>
-      </tr>
-      <tr>
-        <td>FTP-DATA</td>
-        <td><span class="color-box" style="background-color:#08519C"></span></td>
-        <td>FTP Data Channel</td>
-      </tr>
-      <tr>
-        <td>HTTP</td>
-        <td><span class="color-box" style="background-color:#FF7F0E"></span></td>
-        <td>HTTP Traffic</td>
-      </tr>
-      <tr>
-        <td>SMB</td>
-        <td><span class="color-box" style="background-color:#2CA02C"></span></td>
-        <td>SMB File Sharing</td>
-      </tr>
-      <tr>
-        <td>SMTP</td>
-        <td><span class="color-box" style="background-color:#000000"></span></td>
-        <td>Email Traffic (SMTP)</td>
-      </tr>
-      <tr>
-        <td>SMTP/IMF</td>
-        <td><span class="color-box" style="background-color:#FF9896"></span></td>
-        <td>Email Traffic (IMF)</td>
-      </tr>
-      <tr>
-        <td>SSH</td>
-        <td><span class="color-box" style="background-color:#9467BD"></span></td>
-        <td>SSH Traffic</td>
-      </tr>
-      <tr>
-        <td>STP</td>
-        <td><span class="color-box" style="background-color:#8C564B"></span></td>
-        <td>Spanning Tree Protocol</td>
-      </tr>
-      <tr>
-        <td>TCP</td>
-        <td><span class="color-box" style="background-color:#17BECF"></span></td>
-        <td>TCP Traffic (default)</td>
-      </tr>
-      <tr>
-        <td>TLSv1</td>
-        <td><span class="color-box" style="background-color:#BCBD22"></span></td>
-        <td>TLS v1 Encrypted Traffic</td>
-      </tr>
+      <!-- Dynamic rows will be added here -->
     </table>
   </div>
   <script>
+    // Prevent accidental navigation away
     window.addEventListener('beforeunload', (e) => {
       e.preventDefault();
       e.returnValue = '';
@@ -366,6 +322,7 @@
     let displayOffset = 0;
     const PAGE_SIZE = 50;
     let currentAllowed = [];
+    let protocolColorMap = {};
 
     const fileInput = document.getElementById('fileInput');
     const tooltip = document.getElementById('tooltip');
@@ -376,6 +333,7 @@
     const startDestinationInput = document.getElementById('startDestination');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
     const payloadFilterInput = document.getElementById('infoFilterInput');
     const timeSlider = document.getElementById('timeSlider');
     const timeDisplay = document.getElementById('timeDisplay');
@@ -389,6 +347,34 @@
 
     let playInterval;
     let isPlaying = false;
+
+    function randomColor(){
+      return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    }
+    
+    function updateLegend() {
+      const legendTable = document.getElementById('legend');
+      legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
+      const protocolSet = new Set();
+      for (let i = 1; i < csvRows.length; i++){
+        const cols = csvRows[i].split(',').map(s => s.replace(/(^"|"$)/g, ''));
+        const protocolIndex = csvHeaders.indexOf('Protocol');
+        if (protocolIndex !== -1) {
+          const protocol = cols[protocolIndex]?.trim();
+          if (protocol) {
+            protocolSet.add(protocol);
+          }
+        }
+      }
+      Array.from(protocolSet).sort().forEach(protocol => {
+        if (!protocolColorMap[protocol]) {
+          protocolColorMap[protocol] = randomColor();
+        }
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
+        legendTable.appendChild(row);
+      });
+    }
 
     visFilterColumn.addEventListener('change', () => {
       updateKeywordSuggestions();
@@ -507,7 +493,8 @@
             EdgeWeight: aggregatedIndices.length,
             processCount: aggregatedIndices.length,
             csvIndices: aggregatedIndices,
-            label: `(${aggregatedIndices.length}) ${parts[2]}`
+            label: `(${aggregatedIndices.length}) ${parts[2]}`,
+            edgeColor: protocolColorMap[parts[2]] || '#000'
           }
         };
         globalCy.add(newEdge).addClass('selected');
@@ -520,6 +507,23 @@
     loadMoreBtn.addEventListener('click', () => {
       displayOffset += PAGE_SIZE;
       showNextChunk();
+    });
+
+    // New event listener for downloading the processed CSV file.
+    downloadCsvBtn.addEventListener('click', () => {
+      if (!globalCsvText) {
+        alert("No CSV data to download.");
+        return;
+      }
+      const blob = new Blob([globalCsvText], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "processed_data.csv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     });
 
     function setupTimeSlider() {
@@ -636,18 +640,10 @@
                 let cellValue = parseFloat(cellValueRaw);
                 if (!isNaN(cellValue)) {
                   switch (numericOperator) {
-                    case '>':
-                      if (cellValue > numericValue) isMatch = true;
-                      break;
-                    case '<':
-                      if (cellValue < numericValue) isMatch = true;
-                      break;
-                    case '>=':
-                      if (cellValue >= numericValue) isMatch = true;
-                      break;
-                    case '<=':
-                      if (cellValue <= numericValue) isMatch = true;
-                      break;
+                    case '>': if (cellValue > numericValue) isMatch = true; break;
+                    case '<': if (cellValue < numericValue) isMatch = true; break;
+                    case '>=': if (cellValue >= numericValue) isMatch = true; break;
+                    case '<=': if (cellValue <= numericValue) isMatch = true; break;
                   }
                 }
               } else {
@@ -674,7 +670,6 @@
       });
     }
 
-    // New function to call the backend endpoint for CSV processing
     async function runBackendScript(csvText, startSource, startDestination) {
       const response = await fetch('http://localhost:5000/process_csv', {
         method: 'POST',
@@ -700,41 +695,30 @@
         const userSource = startSourceInput.value.trim();
         const userDestination = startDestinationInput.value.trim(); 
         const processedCSV = await runBackendScript(text, userSource, userDestination);
+        // Print the first 50 lines of the processed CSV file to the console.
+        console.log("First 50 lines of processed CSV:");
+        processedCSV.split('\n').slice(0, 50).forEach(line => console.log(line));
         globalCsvText = processedCSV;
         csvRows = processedCSV.trim().split('\n');
         csvHeaders = csvRows[0].split(',').map(s => s.replace(/(^"|"$)/g, ''));
+        updateLegend();
         createFullTable();
-        
-        // Parse CSV into Cytoscape elements
         const parsedElements = parseCSV(processedCSV);
         let elementsToVisualize = parsedElements;
-        
-        // If a Start Source IP was entered, retrieve its ClusterID and filter elements
         if (userSource) {
-          // Find the node with the given Start Source IP
           const sourceNode = parsedElements.find(ele => ele.data && ele.data.id === userSource);
           if (sourceNode && sourceNode.data.ClusterID) {
             const targetCluster = sourceNode.data.ClusterID;
-            
-            // Separate nodes and edges
             const nodes = parsedElements.filter(ele => !ele.data.source);
             const edges = parsedElements.filter(ele => ele.data.source);
-            
-            // Filter nodes to only those with the matching ClusterID
             const filteredNodes = nodes.filter(node => node.data.ClusterID === targetCluster);
             const nodeIdSet = new Set(filteredNodes.map(node => node.data.id));
-            
-            // Filter edges: only keep edges where both the source and target nodes exist in the filtered set
             const filteredEdges = edges.filter(edge => nodeIdSet.has(edge.data.source) && nodeIdSet.has(edge.data.target));
-            
             elementsToVisualize = filteredNodes.concat(filteredEdges);
           }
         }
-        
         visualizeNetwork(elementsToVisualize);
         setupTimeSlider();
-        
-        // (Optional) If both source and destination are provided, highlight the matching edge(s)
         if (userSource && userDestination) {
           globalCy.edges().forEach(edge => {
             if (edge.data('source') === userSource && edge.data('target') === userDestination) {
@@ -753,18 +737,19 @@
       }
     });
 
+    // Updated function to display all columns in the table.
     function createFullTable() {
       const container = document.getElementById('table-container');
       container.innerHTML = '';
       allRowElems = [];
       if (csvRows.length < 2) return;
       const table = document.createElement('table');
+      // Use all headers as they are in the processed CSV.
       const originalHeaders = csvRows[0].split(',').map(c => c.replace(/(^"|"$)/g, ''));
-      const excluded = new Set(["SourceClassification", "DestinationClassification"]);
-      const filteredHeaders = originalHeaders.filter(col => !excluded.has(col));
-      payloadColumnIndex = filteredHeaders.findIndex(col => col.toLowerCase() === "payload");
+      const headersToShow = originalHeaders; // No exclusions.
+      payloadColumnIndex = headersToShow.findIndex(col => col.toLowerCase() === "payload");
       const hdrTr = document.createElement('tr');
-      filteredHeaders.forEach(col => {
+      headersToShow.forEach(col => {
         let th = document.createElement('th');
         th.textContent = col;
         hdrTr.appendChild(th);
@@ -774,13 +759,8 @@
         let tr = document.createElement('tr');
         tr.setAttribute('data-index', i);
         let cols = csvRows[i].split(',');
-        let filteredCols = [];
-        for (let j = 0; j < cols.length; j++){
-          if (!excluded.has(originalHeaders[j])) {
-            filteredCols.push(cols[j]);
-          }
-        }
-        filteredCols.forEach(c => {
+        // Use all columns from the row.
+        cols.forEach(c => {
           let td = document.createElement('td');
           td.textContent = c.replace(/(^"|"$)/g, '');
           tr.appendChild(td);
@@ -873,7 +853,7 @@
       const header = lines[0].split(',').map(s => s.replace(/(^"|"$)/g, '').trim());
       const sourceClassIdx = header.indexOf("SourceClassification");
       const destinationClassIdx = header.indexOf("DestinationClassification");
-      const clusterIdIdx = header.indexOf("ClusterID"); // new index for ClusterID
+      const clusterIdIdx = header.indexOf("ClusterID");
       let seenNodes = new Set();
       let edgesMap = new Map();
       let nodeElements = [];
@@ -940,7 +920,8 @@
             EdgeWeight: val.totalEdgeWeight,
             processCount: val.csvIndices.length,
             csvIndices: val.csvIndices,
-            label: `(${val.csvIndices.length}) ${val.protocol}`
+            label: `(${val.csvIndices.length}) ${val.protocol}`,
+            edgeColor: protocolColorMap[val.protocol] || '#000'
           }
         });
       });
@@ -961,7 +942,8 @@
           EdgeWeight: 1,
           processCount: 1,
           csvIndices: [rowIndex],
-          label: `${protocol}`
+          label: `${protocol}`,
+          edgeColor: protocolColorMap[protocol] || '#000'
         }
       };
     }
@@ -1085,52 +1067,10 @@
               'curve-style': 'bezier',
               'control-point-step-size': 30,
               'width': 'data(normalizedWeight)',
+              'line-color': 'data(edgeColor)',
+              'target-arrow-color': 'data(edgeColor)',
               'opacity': 0.8
             }
-          },
-          {
-            selector: 'edge[Protocol="DNS"]',
-            style: { 'line-color': '#6BAED6', 'target-arrow-color': '#6BAED6' }
-          },
-          {
-            selector: 'edge[Protocol="FTP"]',
-            style: { 'line-color': '#3182BD', 'target-arrow-color': '#3182BD' }
-          },
-          {
-            selector: 'edge[Protocol="FTP-DATA"]',
-            style: { 'line-color': '#08519C', 'target-arrow-color': '#08519C' }
-          },
-          {
-            selector: 'edge[Protocol="HTTP"]',
-            style: { 'line-color': '#FF7F0E', 'target-arrow-color': '#FF7F0E' }
-          },
-          {
-            selector: 'edge[Protocol="SMB"]',
-            style: { 'line-color': '#2CA02C', 'target-arrow-color': '#2CA02C' }
-          },
-          {
-            selector: 'edge[Protocol="SMTP"]',
-            style: { 'line-color': '#000000', 'target-arrow-color': '#000000' }
-          },
-          {
-            selector: 'edge[Protocol="SMTP/IMF"]',
-            style: { 'line-color': '#FF9896', 'target-arrow-color': '#FF9896' }
-          },
-          {
-            selector: 'edge[Protocol="SSH"]',
-            style: { 'line-color': '#9467BD', 'target-arrow-color': '#9467BD' }
-          },
-          {
-            selector: 'edge[Protocol="STP"]',
-            style: { 'line-color': '#8C564B', 'target-arrow-color': '#8C564B' }
-          },
-          {
-            selector: 'edge[Protocol="TCP"]',
-            style: { 'line-color': '#17BECF', 'target-arrow-color': '#17BECF' }
-          },
-          {
-            selector: 'edge[Protocol="TLSv1"]',
-            style: { 'line-color': '#BCBD22', 'target-arrow-color': '#BCBD22' }
           },
           {
             selector: 'edge.selected',

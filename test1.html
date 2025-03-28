@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive Cluster Heatmap with Network Visualization</title>
+  <!-- Include D3.js and Cytoscape -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+      color: #333;
+      background-color: #f8f9fa;
+    }
+    body { display: flex; }
+    #main-container {
+      flex: 1;
+      padding: 24px;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    #legend-container {
+      width: 220px;
+      background-color: #fff;
+      border-left: 1px solid #e9ecef;
+      padding: 16px 12px;
+      height: 100vh;
+      overflow-y: auto;
+      box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
+    }
+    h2 {
+      color: #2c3e50;
+      margin-top: 0;
+      margin-bottom: 24px;
+      font-size: 28px;
+      font-weight: 600;
+      border-bottom: 2px solid #4299e1;
+      padding-bottom: 8px;
+      display: inline-block;
+    }
+    h3 {
+      color: #2c3e50;
+      font-size: 16px;
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    .control-group {
+      margin-bottom: 20px;
+      padding: 16px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    label {
+      display: inline-block;
+      margin-right: 8px;
+      font-weight: 500;
+      color: #4a5568;
+    }
+    input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      margin-right: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus {
+      border-color: #4299e1;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    }
+    button {
+      background-color: #4299e1;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-right: 8px;
+    }
+    button:hover { background-color: #3182ce; }
+    #loadMoreBtn {
+      display: none;
+      margin-top: 16px;
+      background-color: #38a169;
+    }
+    #loadMoreBtn:hover { background-color: #2f855a; }
+    #cy {
+      width: 100%;
+      height: 600px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 24px;
+      background-color: #fff;
+      display: none; /* hidden until a cluster cell is clicked */
+    }
+    /* Table container for the CSV data of the cluster */
+    #table-container {
+      margin-bottom: 24px;
+      border-radius: 8px;
+      background-color: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      display: none; /* hidden until cluster is shown */
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #table-container table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto;
+    }
+    #table-container th, #table-container td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #e9ecef;
+      text-align: left;
+      white-space: nowrap;
+    }
+    #loadMoreTableBtn {
+      display: none;
+      margin-top: 8px;
+      background-color: #38a169;
+    }
+    #loadMoreTableBtn:hover { background-color: #2f855a; }
+    #tooltip {
+      position: absolute;
+      display: none;
+      background: #fff;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #2d3748;
+      pointer-events: none;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      max-width: 300px;
+      line-height: 1.5;
+    }
+    /* Heatmap cell styling */
+    .cell {
+      stroke: #fff;
+      stroke-width: 1px;
+      cursor: pointer;
+    }
+    /* Legend table styling */
+    .color-box {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      vertical-align: middle;
+      margin-right: 4px;
+      border: 1px solid #ccc;
+    }
+    #legend {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    #legend th, #legend td {
+      padding: 4px 6px;
+    }
+    /* Back button */
+    #backToHeatmap {
+      margin: 20px;
+      padding: 8px 16px;
+      font-size: 14px;
+      display: none;
+    }
+    /* Edge Filter Panel (shown after edge-click) */
+    #edgeFilterPanel {
+      position: absolute;
+      top: 80px;
+      right: 40px;
+      width: 320px;
+      padding: 12px;
+      background-color: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      display: none;
+      z-index: 9999;
+    }
+    #edgeFilterPanel h4 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+    #edgeFilterPanel label {
+      display: block;
+      margin-top: 8px;
+      font-weight: 500;
+      color: #4a5568;
+    }
+    #edgeFilterPanel input {
+      margin-bottom: 8px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <!-- Main container with controls and visualization -->
+  <div id="main-container">
+    <h2>MalScape</h2>
+    <!-- Heatmap & filter controls -->
+    <div class="control-group">
+      <label for="metricSelect">Metric (Measure):</label>
+      <select id="metricSelect">
+        <option value="count">Count (Number of Packets)</option>
+        <option value="Length" selected>Packet Length</option>
+        <option value="Seq">Sequence Number</option>
+        <option value="Ack">Acknowledgment Number</option>
+        <option value="Win">Window Size</option>
+        <option value="Len">Payload Length</option>
+        <option value="TSval">Timestamp Value</option>
+        <option value="TSecr">Timestamp Echo Reply</option>
+      </select>
+
+      <label for="payloadSearch">Search Payload Content:</label>
+      <input type="text" id="payloadSearch" placeholder="Enter keyword">
+
+      <label for="sourceFilter">Source IP:</label>
+      <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
+
+      <label for="destinationFilter">Destination IP:</label>
+      <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
+
+      <label for="protocolFilter">Network Protocol:</label>
+      <input type="text" id="protocolFilter" placeholder="e.g., TCP">
+
+      <label for="entropyMinFilter">Min Cluster Variation:</label>
+      <input type="number" id="entropyMinFilter" placeholder="e.g., 1.0" step="0.1">
+
+      <label for="entropyMaxFilter">Max Cluster Variation:</label>
+      <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
+
+      <label for="isLargePacketFilter">Show only large packets:</label>
+      <input type="checkbox" id="isLargePacketFilter">
+
+      <label for="isRetransmissionFilter">Show only retransmitted packets:</label>
+      <input type="checkbox" id="isRetransmissionFilter">
+
+      <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
+      <input type="checkbox" id="isSuspiciousAckFilter">
+    </div>
+    <!-- Heatmap container -->
+    <div id="heatmap"></div>
+    <!-- Load More button for heatmap -->
+    <button id="loadMoreBtn">Load More</button>
+    <!-- Back to Heatmap button -->
+    <button id="backToHeatmap">Back to Heatmap</button>
+
+    <!-- Cytoscape network visualization container -->
+    <div id="cy"></div>
+
+    <!-- Table container for CSV data of the selected cluster -->
+    <div id="table-container"></div>
+    <!-- Load More button for the cluster table -->
+    <button id="loadMoreTableBtn">Load More Rows</button>
+  </div>
+
+  <!-- Legend container -->
+  <div id="legend-container">
+    <h3>Protocol Legend</h3>
+    <table id="legend">
+      <tr>
+        <th>Protocol</th>
+        <th>Color</th>
+      </tr>
+      <!-- Dynamic rows will be added here -->
+    </table>
+  </div>
+  
+  <!-- Edge Filter Panel (appears when user clicks an edge) -->
+  <div id="edgeFilterPanel">
+    <h4>Edge Filter</h4>
+    <label for="edgeFilterSource">Source (partial ok):</label>
+    <input type="text" id="edgeFilterSource">
+    <label for="edgeFilterDestination">Destination (partial ok):</label>
+    <input type="text" id="edgeFilterDestination">
+    <label for="edgeFilterProtocol">Protocol (partial ok):</label>
+    <input type="text" id="edgeFilterProtocol">
+    <label for="edgeFilterWeight">Edge Weight (e.g. >=1000):</label>
+    <input type="text" id="edgeFilterWeight" placeholder=">=1000">
+    <label for="edgeFilterProcessCount">Process Count (e.g. >5):</label>
+    <input type="text" id="edgeFilterProcessCount" placeholder=">=5">
+    <button id="applyEdgeFilterBtn">Filter Edges</button>
+    <button id="clearEdgeFilterBtn">Clear Filter</button>
+  </div>
+
+  <script>
+    /*******************
+     * GLOBAL VARIABLES
+     *******************/
+    let globalData = [];         // All CSV data loaded via d3.csv
+    let pivotData = [];          // Aggregated pivot data by ClusterID
+    let currentLimit = 44*12+18;       // Number of clusters shown in heatmap initially
+    let protocolColorMap = {};   // Mapping protocols to random colors
+
+    let globalCy;                // Cytoscape instance
+    let selectedEdges = new Set(); // track selected edges by row index
+    let currentClusterID = null; // Which cluster is currently displayed
+
+    // For the cluster table
+    let clusterRows = [];         // All rows for the currently displayed cluster
+    let clusterColumns = [];      // Column names for the cluster
+    let tableOffset = 0;          // How many rows have been displayed so far
+    const TABLE_PAGE_SIZE = 50;   // Show 50 rows at a time
+
+    /*******************
+     * HELPER FUNCTIONS
+     *******************/
+    function randomColor(){
+      return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    }
+
+    // For numeric comparisons (e.g. >1000, >=500, < 100, etc.)
+    function parseNumericExpression(value) {
+      const match = value.match(/^(\>=|\<=|>|<)\s*(\d+(?:\.\d+)?)$/);
+      if (match) {
+        return { operator: match[1], number: parseFloat(match[2]) };
+      }
+      const justNum = parseFloat(value);
+      if (!isNaN(justNum) && value.trim() !== "") {
+        return { operator: '==', number: justNum };
+      }
+      return null;
+    }
+
+    // Update legend table based on protocols in globalData
+    function updateLegend() {
+      const legendTable = document.getElementById('legend');
+      legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
+      let protocols = new Set();
+      globalData.forEach(d => {
+        if (d.Protocol) protocols.add(d.Protocol.trim());
+      });
+      Array.from(protocols).sort().forEach(protocol => {
+        if (!protocolColorMap[protocol]) {
+          protocolColorMap[protocol] = randomColor();
+        }
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
+        legendTable.appendChild(row);
+      });
+    }
+
+    // Returns globalData filtered by the user’s inputs in the top filter controls.
+    function filteredGlobalData() {
+      let filtered = globalData;
+      const payloadKeyword = document.getElementById('payloadSearch').value.trim().toLowerCase();
+      if (payloadKeyword) {
+        filtered = filtered.filter(d => d.Payload && d.Payload.toLowerCase().includes(payloadKeyword));
+      }
+      const sourceFilter = document.getElementById('sourceFilter').value.trim().toLowerCase();
+      if (sourceFilter) {
+        filtered = filtered.filter(d => d.Source && d.Source.toLowerCase().includes(sourceFilter));
+      }
+      const destinationFilter = document.getElementById('destinationFilter').value.trim().toLowerCase();
+      if (destinationFilter) {
+        filtered = filtered.filter(d => d.Destination && d.Destination.toLowerCase().includes(destinationFilter));
+      }
+      const protocolFilter = document.getElementById('protocolFilter').value.trim().toLowerCase();
+      if (protocolFilter) {
+        filtered = filtered.filter(d => d.Protocol && d.Protocol.toLowerCase().includes(protocolFilter));
+      }
+      const entropyMin = parseFloat(document.getElementById('entropyMinFilter').value);
+      if (!isNaN(entropyMin)) {
+        filtered = filtered.filter(d => d.ClusterEntropy !== undefined && +d.ClusterEntropy >= entropyMin);
+      }
+      const entropyMax = parseFloat(document.getElementById('entropyMaxFilter').value);
+      if (!isNaN(entropyMax)) {
+        filtered = filtered.filter(d => d.ClusterEntropy !== undefined && +d.ClusterEntropy <= entropyMax);
+      }
+      const isLargePacketOnly = document.getElementById('isLargePacketFilter').checked;
+      if (isLargePacketOnly) {
+        filtered = filtered.filter(d => d.IsLargePacket === true || d.IsLargePacket === "True" || d.IsLargePacket === "true");
+      }
+      const isRetransmissionOnly = document.getElementById('isRetransmissionFilter').checked;
+      if (isRetransmissionOnly) {
+        filtered = filtered.filter(d => d.IsRetransmission === true || d.IsRetransmission === "True" || d.IsRetransmission === "true");
+      }
+      const isSuspiciousAckOnly = document.getElementById('isSuspiciousAckFilter').checked;
+      if (isSuspiciousAckOnly) {
+        filtered = filtered.filter(d => d.IsSuspiciousAck === true || d.IsSuspiciousAck === "True" || d.IsSuspiciousAck === "true");
+      }
+      return filtered;
+    }
+
+    // Aggregate data by ClusterID and update pivotData then render the heatmap.
+    function updateHeatmap() {
+      const metric = document.getElementById('metricSelect').value;
+      const dataForAggregation = filteredGlobalData();
+      const grouped = d3.rollup(
+        dataForAggregation,
+        v => metric === "count" ? v.length : d3.sum(v, d => d[metric]),
+        d => d.ClusterID
+      );
+      pivotData = [];
+      grouped.forEach((value, cluster) => {
+        pivotData.push({ cluster: cluster, value: value });
+      });
+      pivotData.sort((a, b) => b.value - a.value);
+      currentLimit = 44*12+18;
+      renderHeatmap(metric);
+    }
+
+    // Render the heatmap using pivotData (only first currentLimit clusters)
+    function renderHeatmap(metric) {
+      d3.select("#heatmap").select("svg").remove();
+      const displayData = pivotData.slice(0, currentLimit);
+      const maxVal = d3.max(pivotData, d => d.value);
+      const formatNumber = d3.format(".2s");
+      const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxVal]);
+      const availableWidth = window.innerWidth - 260; // leaving room for legend
+      const cellSize = 30;
+      const numCols = Math.floor(availableWidth / cellSize);
+      const numRows = Math.ceil(displayData.length / numCols);
+      const width = numCols * cellSize + 40;
+      const height = numRows * cellSize + 40;
+      
+      const svg = d3.select("#heatmap")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+      // Draw heatmap cells and attach click event to show network for that cluster.
+      svg.selectAll("rect")
+         .data(displayData)
+         .enter()
+         .append("rect")
+         .attr("class", "cell")
+         .attr("x", (d, i) => 20 + (i % numCols) * cellSize)
+         .attr("y", (d, i) => 20 + Math.floor(i / numCols) * cellSize)
+         .attr("width", cellSize)
+         .attr("height", cellSize)
+         .attr("fill", d => colorScale(d.value))
+         .on("mouseover", function(event, d) {
+            d3.select(this).attr("stroke", "black").attr("stroke-width", 2);
+         })
+         .on("mouseout", function() {
+            d3.select(this).attr("stroke", "#fff").attr("stroke-width", 1);
+         })
+         .on("click", function(event, d) {
+            showClusterNetwork(d.cluster);
+         });
+
+      // Annotate cells with the metric value
+      svg.selectAll("text.cellText")
+         .data(displayData)
+         .enter()
+         .append("text")
+         .attr("class", "cellText")
+         .attr("x", (d, i) => 20 + (i % numCols) * cellSize + cellSize / 2)
+         .attr("y", (d, i) => 20 + Math.floor(i / numCols) * cellSize + cellSize / 2)
+         .attr("text-anchor", "middle")
+         .attr("alignment-baseline", "central")
+         .attr("font-size", "10px")
+         .attr("fill", d => d.value > maxVal / 2 ? "white" : "black")
+         .text(d => d.value > 0 ? formatNumber(d.value) : "");
+
+      // Show or hide the Load More button
+      if (currentLimit < pivotData.length) {
+        d3.select("#loadMoreBtn").style("display", "inline-block");
+      } else {
+        d3.select("#loadMoreBtn").style("display", "none");
+      }
+    }
+
+    // Increase currentLimit and re-render heatmap
+    document.getElementById('loadMoreBtn').addEventListener('click', function() {
+      currentLimit += 39*3;
+      const metric = document.getElementById('metricSelect').value;
+      renderHeatmap(metric);
+    });
+
+    // Back to Heatmap: hide network view, hide table, show heatmap again.
+    function showHeatmap() {
+      document.getElementById('cy').style.display = 'none';
+      document.getElementById('backToHeatmap').style.display = 'none';
+      document.getElementById('edgeFilterPanel').style.display = 'none'; // Hide edge filter if open
+      document.getElementById('table-container').style.display = 'none';
+      document.getElementById('loadMoreTableBtn').style.display = 'none';
+      d3.select("#heatmap").style("display", "block");
+      clearEdgeFilter();
+    }
+    document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
+
+    // Build network elements (nodes and edges) for the selected cluster.
+    function generateNetworkElementsForCluster(clusterID, data) {
+      let filtered = data.filter(d => d.ClusterID == clusterID);
+      let seenNodes = new Set();
+      let nodeElements = [];
+      let edgesMap = new Map();
+      filtered.forEach((d, index) => {
+        let source = d.Source;
+        let destination = d.Destination;
+        let protocol = d.Protocol;
+        let nodeWeight = d.NodeWeight ? +d.NodeWeight : 0;
+        let sourceClassification = d.SourceClassification || 'External';
+        let destinationClassification = d.DestinationClassification || 'External';
+        if(source && !seenNodes.has(source)) {
+          nodeElements.push({
+            data: {
+              id: source,
+              label: source,
+              Classification: sourceClassification,
+              NodeWeight: nodeWeight,
+              timeIndex: index,
+              ClusterID: clusterID
+            }
+          });
+          seenNodes.add(source);
+        }
+        if(destination && !seenNodes.has(destination)) {
+          nodeElements.push({
+            data: {
+              id: destination,
+              label: destination,
+              Classification: destinationClassification,
+              NodeWeight: nodeWeight,
+              timeIndex: index,
+              ClusterID: clusterID
+            }
+          });
+          seenNodes.add(destination);
+        }
+        if(!source || !destination || !protocol) return;
+        let edgeKey = source + '|' + destination + '|' + protocol;
+        if(!edgesMap.has(edgeKey)) {
+          edgesMap.set(edgeKey, { source, destination, protocol, csvIndices: [], totalEdgeWeight: 0 });
+        }
+        let entry = edgesMap.get(edgeKey);
+        entry.csvIndices.push(index);
+        entry.totalEdgeWeight += d.Length ? +d.Length : 0;
+      });
+      let edgeElements = [];
+      edgesMap.forEach(val => {
+        edgeElements.push({
+          data: {
+            id: `edge-${val.source}-${val.destination}-${val.protocol}`,
+            source: val.source,
+            target: val.destination,
+            Protocol: val.protocol,
+            EdgeWeight: val.totalEdgeWeight,
+            processCount: val.csvIndices.length,
+            csvIndices: val.csvIndices,
+            label: `(${val.csvIndices.length}) ${val.protocol}`,
+            edgeColor: protocolColorMap[val.protocol] || '#000'
+          }
+        });
+      });
+      return nodeElements.concat(edgeElements);
+    }
+
+    // Create a table of CSV rows for the selected cluster
+    function createClusterTable(clusterID) {
+      clusterRows = globalData.filter(d => d.ClusterID == clusterID);
+      if (!clusterRows.length) {
+        const container = document.getElementById('table-container');
+        container.innerHTML = "<p>No rows found for this cluster.</p>";
+        container.style.display = "block";
+        document.getElementById('loadMoreTableBtn').style.display = "none";
+        return;
+      }
+      clusterColumns = Object.keys(clusterRows[0]);
+      tableOffset = 0;
+      const container = document.getElementById('table-container');
+      container.innerHTML = "";
+      container.style.display = "block";
+      const table = document.createElement('table');
+      table.id = "clusterTable";
+      const thead = document.createElement('thead');
+      const hdrRow = document.createElement('tr');
+      clusterColumns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        hdrRow.appendChild(th);
+      });
+      thead.appendChild(hdrRow);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      tbody.id = "clusterTableBody";
+      table.appendChild(tbody);
+      container.appendChild(table);
+      if (clusterRows.length > TABLE_PAGE_SIZE) {
+        document.getElementById('loadMoreTableBtn').style.display = "inline-block";
+      } else {
+        document.getElementById('loadMoreTableBtn').style.display = "none";
+      }
+      loadNextTableChunk();
+    }
+
+    // Load the next chunk (PAGE_SIZE) of rows into the table
+    function loadNextTableChunk() {
+      const tbody = document.getElementById('clusterTableBody');
+      if (!tbody) return;
+      let end = tableOffset + TABLE_PAGE_SIZE;
+      if (end > clusterRows.length) end = clusterRows.length;
+      for (let i = tableOffset; i < end; i++) {
+        const row = clusterRows[i];
+        const tr = document.createElement('tr');
+        clusterColumns.forEach(col => {
+          const td = document.createElement('td');
+          td.textContent = row[col] != null ? row[col] : "";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      }
+      tableOffset = end;
+      if (tableOffset >= clusterRows.length) {
+        document.getElementById('loadMoreTableBtn').style.display = "none";
+      }
+    }
+
+    // When a heatmap cell is clicked, show the network for that ClusterID plus the table.
+    function showClusterNetwork(clusterID) {
+      currentClusterID = clusterID;
+      let elements = generateNetworkElementsForCluster(clusterID, globalData);
+      if(elements.length === 0) {
+        alert("No network data for this cluster.");
+        return;
+      }
+      visualizeNetwork(elements);
+      d3.select("#heatmap").style("display", "none");
+      document.getElementById('backToHeatmap').style.display = 'inline-block';
+      createClusterTable(clusterID);
+    }
+
+    /*******************
+     * Cytoscape Visualization
+     *******************/
+    function groupDirectedComponents(cy) {
+      let visited = new Set();
+      let groupCount = 0;
+      function randomColor(){
+        return '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+      }
+      cy.nodes().forEach(node => {
+        if (!visited.has(node.id())) {
+          groupCount++;
+          const color = randomColor();
+          let bfs = cy.elements().bfs({ roots: node, directed: true });
+          bfs.path.forEach(ele => {
+            if (ele.isNode()) {
+              visited.add(ele.id());
+              ele.data('groupID', groupCount);
+              ele.data('color', color);
+            }
+          });
+        }
+      });
+    }
+
+    function positionGroupedComponentsTree(cy) {
+      let groupMap = {};
+      cy.nodes().forEach(n => {
+        let g = n.data('groupID') || 0;
+        if (!groupMap[g]) groupMap[g] = [];
+        groupMap[g].push(n);
+      });
+      let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
+      let groupYOffset = 0;
+      const verticalSpacingBetweenGroups = 300;
+      const levelHeight = 80;
+      const siblingSpacing = 100;
+      sortedGroups.forEach(([groupID, nodes]) => {
+        let root = nodes.reduce((prev, curr) => {
+          return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
+        }, null);
+        if (!root) return;
+        let levels = {};
+        let visited = new Set();
+        let queue = [];
+        levels[root.id()] = 0;
+        visited.add(root.id());
+        queue.push(root);
+        while (queue.length > 0) {
+          let current = queue.shift();
+          let currentLevel = levels[current.id()];
+          current.outgoers('edge').forEach(edge => {
+            let target = edge.target();
+            if (target.data('groupID') == groupID && !visited.has(target.id())) {
+              levels[target.id()] = currentLevel + 1;
+              visited.add(target.id());
+              queue.push(target);
+            }
+          });
+        }
+        let levelNodes = {};
+        nodes.forEach(n => {
+          let lvl = levels[n.id()] !== undefined ? levels[n.id()] : 0;
+          if (!levelNodes[lvl]) levelNodes[lvl] = [];
+          levelNodes[lvl].push(n);
+        });
+        Object.keys(levelNodes).forEach(lvlKey => {
+          let lvl = parseInt(lvlKey);
+          let nodesAtLevel = levelNodes[lvl];
+          nodesAtLevel.sort((a, b) => (a.data('timeIndex') || 0) - (b.data('timeIndex') || 0));
+          let totalWidth = (nodesAtLevel.length - 1) * siblingSpacing;
+          let startX = -totalWidth / 2;
+          nodesAtLevel.forEach((n, idx) => {
+            let x = startX + idx * siblingSpacing;
+            let y = groupYOffset + lvl * levelHeight;
+            n.position({x: x, y: y});
+          });
+        });
+        let maxLevel = Math.max(...Object.keys(levelNodes).map(Number));
+        groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
+      });
+    }
+
+    function visualizeNetwork(elements) {
+      document.getElementById('cy').style.display = 'block';
+      const cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: elements,
+        layout: { name: 'preset' },
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'color': '#000',
+              'font-size': 12,
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'shape': 'ellipse',
+              'font-family': 'Arial, sans-serif',
+              'font-weight': 'bold',
+              'text-opacity': 0,
+              'width': 'mapData(NodeWeight, 0, 1, 20, 40)',
+              'height': 'mapData(NodeWeight, 0, 1, 20, 40)',
+              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
+              'border-width': 2.0,
+              'content': 'data(label)'
+            }
+          },
+          {
+            selector: 'node[Classification="Internal"]',
+            style: { 'shape': 'rectangle' }
+          },
+          {
+            selector: 'node[color]',
+            style: { 'background-color': 'data(color)' }
+          },
+          {
+            selector: 'edge',
+            style: {
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier',
+              'control-point-step-size': 30,
+              'width': 'data(normalizedWeight)',
+              'line-color': 'data(edgeColor)',
+              'target-arrow-color': 'data(edgeColor)',
+              'opacity': 0.8
+            }
+          },
+          {
+            selector: 'edge.selected',
+            style: {
+              'line-color': 'red',
+              'target-arrow-color': 'red',
+              'width': 4
+            }
+          }
+        ]
+      });
+      cy.zoom(0.5);
+      globalCy = cy;
+      groupDirectedComponents(cy);
+      positionGroupedComponentsTree(cy);
+
+      // Compute normalized edge widths within each group
+      let groupEdges = {};
+      cy.edges().forEach(edge => {
+        let sourceGroup = edge.source().data('groupID');
+        let targetGroup = edge.target().data('groupID');
+        if(sourceGroup && sourceGroup === targetGroup) {
+          if(!groupEdges[sourceGroup]) groupEdges[sourceGroup] = [];
+          groupEdges[sourceGroup].push(edge);
+        }
+      });
+      Object.keys(groupEdges).forEach(groupID => {
+        let edges = groupEdges[groupID];
+        let counts = edges.map(e => e.data('processCount'));
+        let minCount = Math.min(...counts);
+        let maxCount = Math.max(...counts);
+        edges.forEach(e => {
+          let count = e.data('processCount');
+          let norm = 2;
+          if(maxCount !== minCount) {
+            norm = 2 + ((count - minCount) / (maxCount - minCount)) * (10 - 2);
+          }
+          e.data('normalizedWeight', norm);
+        });
+      });
+      cy.edges().forEach(edge => {
+        if(edge.data('normalizedWeight') === undefined) {
+          edge.data('normalizedWeight', 2);
+        }
+      });
+      
+      // Edge hover tooltip
+      cy.on('mouseover', 'node,edge', (evt) => {
+        let t = evt.target;
+        let px = evt.originalEvent.pageX;
+        let py = evt.originalEvent.pageY;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (px + 10) + 'px';
+        tooltip.style.top = (py + 10) + 'px';
+        if (t.isNode()) {
+          tooltip.innerHTML = `<strong>Node ID:</strong> ${t.id()}<br>
+                               <strong>Classification:</strong> ${t.data('Classification')}<br>
+                               <strong>Group:</strong> ${t.data('groupID') || 'N/A'}<br>`;
+        } else {
+          let arr = t.data('csvIndices') || [];
+          tooltip.innerHTML = `<strong>Edge:</strong><br>
+                               From: ${t.data('source')}<br>
+                               To: ${t.data('target')}<br>
+                               Protocol: ${t.data('Protocol')}<br>
+                               Rows: ${arr.length}<br>
+                               Weight: ${t.data('EdgeWeight')}`;
+        }
+      });
+      cy.on('mouseout', 'node,edge', () => {
+        tooltip.style.display = 'none';
+      });
+
+      // Edge click: select/unselect + show filter panel
+      cy.on('click', 'edge', (evt) => {
+        let edge = evt.target;
+        if (evt.originalEvent.shiftKey) {
+          let groupID = edge.source().data('groupID');
+          if (groupID !== undefined) {
+            cy.edges().forEach(e => {
+              if (e.source().data('groupID') === groupID &&
+                  e.target().data('groupID') === groupID) {
+                let indices = e.data('csvIndices') || [];
+                indices.forEach(idx => selectedEdges.add(idx));
+                e.addClass('selected');
+              }
+            });
+          }
+        } else {
+          let indices = edge.data('csvIndices') || [];
+          if (!indices.length) return;
+          let allSelected = indices.every(idx => selectedEdges.has(idx));
+          if (allSelected) {
+            indices.forEach(idx => selectedEdges.delete(idx));
+            edge.removeClass('selected');
+          } else {
+            indices.forEach(idx => selectedEdges.add(idx));
+            edge.addClass('selected');
+          }
+        }
+        showEdgeFilterPanel(edge.data());
+      });
+    }
+
+    /*******************
+     * EDGE FILTERING
+     *******************/
+    function showEdgeFilterPanel(edgeData) {
+      document.getElementById('edgeFilterSource').value = edgeData.source || "";
+      document.getElementById('edgeFilterDestination').value = edgeData.target || "";
+      document.getElementById('edgeFilterProtocol').value = edgeData.Protocol || "";
+      document.getElementById('edgeFilterWeight').value = "";
+      document.getElementById('edgeFilterProcessCount').value = "";
+      const panel = document.getElementById('edgeFilterPanel');
+      panel.style.display = 'block';
+    }
+
+    function clearEdgeFilter() {
+      if (!globalCy) return;
+      globalCy.edges().forEach(e => e.show());
+      document.getElementById('edgeFilterSource').value = "";
+      document.getElementById('edgeFilterDestination').value = "";
+      document.getElementById('edgeFilterProtocol').value = "";
+      document.getElementById('edgeFilterWeight').value = "";
+      document.getElementById('edgeFilterProcessCount').value = "";
+      document.getElementById('edgeFilterPanel').style.display = 'none';
+    }
+
+    function applyEdgeFilter() {
+      if (!globalCy) return;
+      let fSource = document.getElementById('edgeFilterSource').value.trim().toLowerCase();
+      let fDest = document.getElementById('edgeFilterDestination').value.trim().toLowerCase();
+      let fProto = document.getElementById('edgeFilterProtocol').value.trim().toLowerCase();
+      let fWeight = document.getElementById('edgeFilterWeight').value.trim();
+      let fProcessCount = document.getElementById('edgeFilterProcessCount').value.trim();
+
+      globalCy.edges().forEach(e => {
+        let d = e.data();
+        let keep = true;
+        if (fSource && !d.source.toLowerCase().includes(fSource)) keep = false;
+        if (fDest && !d.target.toLowerCase().includes(fDest)) keep = false;
+        if (fProto && !d.Protocol.toLowerCase().includes(fProto)) keep = false;
+        if (fWeight) {
+          let parsed = parseNumericExpression(fWeight);
+          if (parsed) {
+            const edgeVal = d.EdgeWeight || 0;
+            switch (parsed.operator) {
+              case '>':  if (!(edgeVal > parsed.number))  keep = false; break;
+              case '>=': if (!(edgeVal >= parsed.number)) keep = false; break;
+              case '<':  if (!(edgeVal < parsed.number))  keep = false; break;
+              case '<=': if (!(edgeVal <= parsed.number)) keep = false; break;
+              case '==': if (edgeVal !== parsed.number)   keep = false; break;
+              default: break;
+            }
+          }
+        }
+        if (fProcessCount) {
+          let parsedCount = parseNumericExpression(fProcessCount);
+          if (parsedCount) {
+            const countVal = d.processCount || 0;
+            switch (parsedCount.operator) {
+              case '>':  if (!(countVal > parsedCount.number))  keep = false; break;
+              case '>=': if (!(countVal >= parsedCount.number)) keep = false; break;
+              case '<':  if (!(countVal < parsedCount.number))  keep = false; break;
+              case '<=': if (!(countVal <= parsedCount.number)) keep = false; break;
+              case '==': if (countVal !== parsedCount.number)     keep = false; break;
+              default: break;
+            }
+          }
+        }
+        if (keep) e.show(); else e.hide();
+      });
+    }
+
+    document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
+    document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
+    document.getElementById('loadMoreTableBtn').addEventListener('click', loadNextTableChunk);
+
+    /*******************
+     * LOAD CSV DATA
+     *******************/
+    function isValidIP(ip) {
+      const regex = /^(25[0-5]|2[0-4]\d|[01]?\d?\d)(\.(25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$/;
+      return regex.test(ip);
+    }
+
+    d3.csv("processed.csv", d3.autoType).then(function(data) {
+      const invalidClusters = new Set();
+      data.forEach(function(d) {
+        if ((d.Source && !isValidIP(d.Source)) || (d.Destination && !isValidIP(d.Destination))) {
+          invalidClusters.add(d.ClusterID);
+        }
+      });
+      globalData = data.filter(d => !invalidClusters.has(d.ClusterID));
+      updateLegend();
+      updateHeatmap();
+    }).catch(function(error) {
+      console.error('Error loading the CSV file:', error);
+    });
+    
+    const tooltip = document.createElement('div');
+    tooltip.id = 'tooltip';
+    document.body.appendChild(tooltip);
+    
+    const filterIds = [
+      'metricSelect','payloadSearch','sourceFilter','destinationFilter',
+      'protocolFilter','entropyMinFilter','entropyMaxFilter',
+      'isLargePacketFilter','isRetransmissionFilter','isSuspiciousAckFilter'
+    ];
+    filterIds.forEach(id => {
+      document.getElementById(id).addEventListener('input', updateHeatmap);
+      document.getElementById(id).addEventListener('change', updateHeatmap);
+    });
+  </script> 
+</body>
+</html>
