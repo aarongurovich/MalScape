@@ -6,8 +6,9 @@
   <title>Interactive Cluster Heatmap with Network Visualization</title>
   <!-- Include D3.js and Cytoscape -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
   <style>
+    /* (Use the same styles as in your original file.) */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     * { box-sizing: border-box; }
     html, body {
@@ -106,15 +107,14 @@
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       margin-bottom: 24px;
       background-color: #fff;
-      display: none; /* hidden until a cluster cell is clicked */
+      display: none;
     }
-    /* Table container for the CSV data of the cluster */
     #table-container {
       margin-bottom: 24px;
       border-radius: 8px;
       background-color: #fff;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      display: none; /* hidden until cluster is shown */
+      display: none;
       max-height: 300px;
       overflow-y: auto;
     }
@@ -149,13 +149,6 @@
       max-width: 300px;
       line-height: 1.5;
     }
-    /* Heatmap cell styling */
-    .cell {
-      stroke: #fff;
-      stroke-width: 1px;
-      cursor: pointer;
-    }
-    /* Legend table styling */
     .color-box {
       display: inline-block;
       width: 12px;
@@ -171,14 +164,12 @@
     #legend th, #legend td {
       padding: 4px 6px;
     }
-    /* Back button */
     #backToHeatmap {
       margin: 20px;
       padding: 8px 16px;
       font-size: 14px;
       display: none;
     }
-    /* Edge Filter Panel (shown after edge-click) */
     #edgeFilterPanel {
       position: absolute;
       top: 80px;
@@ -209,12 +200,61 @@
       margin-bottom: 8px;
       width: 100%;
     }
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    .spinner {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #4299e1;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    .loading-text {
+      font-size: 18px;
+      color: #333;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading, please wait...</div>
+  </div>
+  
   <!-- Main container with controls and visualization -->
-  <div id="main-container">
+  <div id="main-container" style="margin-top: 60px;">
     <h2>MalScape</h2>
+     <!-- File Upload, CSV Type Selection, and Download Processed File Button -->
+    <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <label for="fileInput"><strong>Upload CSV File:</strong></label>
+      <input type="file" id="fileInput" accept=".csv">
+      <br>
+      <label for="csvType"><strong>CSV Type:</strong></label>
+      <select id="csvType">
+        <option value="raw">Raw CSV (process on server)</option>
+        <option value="processed">Processed CSV (visualize immediately)</option>
+      </select>
+      <!-- New Download Button -->
+      <button id="downloadBtn" style="display: none;">Download Processed CSV</button>
+    </div>
     <!-- Heatmap & filter controls -->
     <div class="control-group">
       <label for="metricSelect">Metric (Measure):</label>
@@ -228,31 +268,22 @@
         <option value="TSval">Timestamp Value</option>
         <option value="TSecr">Timestamp Echo Reply</option>
       </select>
-
       <label for="payloadSearch">Search Payload Content:</label>
       <input type="text" id="payloadSearch" placeholder="Enter keyword">
-
       <label for="sourceFilter">Source IP:</label>
       <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
-
       <label for="destinationFilter">Destination IP:</label>
       <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
-
       <label for="protocolFilter">Network Protocol:</label>
       <input type="text" id="protocolFilter" placeholder="e.g., TCP">
-
       <label for="entropyMinFilter">Min Cluster Variation:</label>
       <input type="number" id="entropyMinFilter" placeholder="e.g., 1.0" step="0.1">
-
       <label for="entropyMaxFilter">Max Cluster Variation:</label>
       <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
-
       <label for="isLargePacketFilter">Show only large packets:</label>
       <input type="checkbox" id="isLargePacketFilter">
-
       <label for="isRetransmissionFilter">Show only retransmitted packets:</label>
       <input type="checkbox" id="isRetransmissionFilter">
-
       <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
       <input type="checkbox" id="isSuspiciousAckFilter">
     </div>
@@ -262,16 +293,14 @@
     <button id="loadMoreBtn">Load More</button>
     <!-- Back to Heatmap button -->
     <button id="backToHeatmap">Back to Heatmap</button>
-
     <!-- Cytoscape network visualization container -->
     <div id="cy"></div>
-
     <!-- Table container for CSV data of the selected cluster -->
     <div id="table-container"></div>
     <!-- Load More button for the cluster table -->
     <button id="loadMoreTableBtn">Load More Rows</button>
   </div>
-
+  
   <!-- Legend container -->
   <div id="legend-container">
     <h3>Protocol Legend</h3>
@@ -280,11 +309,10 @@
         <th>Protocol</th>
         <th>Color</th>
       </tr>
-      <!-- Dynamic rows will be added here -->
     </table>
   </div>
   
-  <!-- Edge Filter Panel (appears when user clicks an edge) -->
+  <!-- Edge Filter Panel -->
   <div id="edgeFilterPanel">
     <h4>Edge Filter</h4>
     <label for="edgeFilterSource">Source (partial ok):</label>
@@ -300,132 +328,86 @@
     <button id="applyEdgeFilterBtn">Filter Edges</button>
     <button id="clearEdgeFilterBtn">Clear Filter</button>
   </div>
-
+  
   <script>
-    /*******************
-     * GLOBAL VARIABLES
-     *******************/
-    let globalData = [];         // All CSV data loaded via d3.csv
-    let pivotData = [];          // Aggregated pivot data by ClusterID
-    let currentLimit = 44*12+18;       // Number of clusters shown in heatmap initially
-    let protocolColorMap = {};   // Mapping protocols to random colors
-
-    let globalCy;                // Cytoscape instance
-    let selectedEdges = new Set(); // track selected edges by row index
-    let currentClusterID = null; // Which cluster is currently displayed
-
-    // For the cluster table
-    let clusterRows = [];         // All rows for the currently displayed cluster
-    let clusterColumns = [];      // Column names for the cluster
-    let tableOffset = 0;          // How many rows have been displayed so far
-    const TABLE_PAGE_SIZE = 50;   // Show 50 rows at a time
-
-    /*******************
-     * HELPER FUNCTIONS
-     *******************/
-    function randomColor(){
-      return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    // Global Variables
+    let pivotData = [];
+    let currentLimit = 44*12+18;
+    let protocolColorMap = {};
+    let globalCy;
+    let selectedEdges = new Set();
+    let currentClusterID = null;
+    let TABLE_PAGE_SIZE = 50;
+    let currentPage = 1;
+    let currentClusterTotal = 0;
+    let clusterColumns = [];
+    // New global variable to store processed CSV text
+    let processedCSVText = "";
+    
+    function showLoading() {
+      document.getElementById('loading-overlay').style.display = 'flex';
     }
-
-    // For numeric comparisons (e.g. >1000, >=500, < 100, etc.)
-    function parseNumericExpression(value) {
-      const match = value.match(/^(\>=|\<=|>|<)\s*(\d+(?:\.\d+)?)$/);
-      if (match) {
-        return { operator: match[1], number: parseFloat(match[2]) };
-      }
-      const justNum = parseFloat(value);
-      if (!isNaN(justNum) && value.trim() !== "") {
-        return { operator: '==', number: justNum };
-      }
-      return null;
+    function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
     }
-
-    // Update legend table based on protocols in globalData
+    
+    // Update legend based on globalData (set after CSV processing)
     function updateLegend() {
       const legendTable = document.getElementById('legend');
       legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
-      let protocols = new Set();
-      globalData.forEach(d => {
-        if (d.Protocol) protocols.add(d.Protocol.trim());
-      });
-      Array.from(protocols).sort().forEach(protocol => {
-        if (!protocolColorMap[protocol]) {
-          protocolColorMap[protocol] = randomColor();
-        }
-        const row = document.createElement('tr');
-        row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
-        legendTable.appendChild(row);
-      });
+      if(window.globalData) {
+        let protocols = new Set();
+        window.globalData.forEach(d => {
+          if (d.Protocol) protocols.add(d.Protocol.trim());
+        });
+        Array.from(protocols).sort().forEach(protocol => {
+          if (!protocolColorMap[protocol]) {
+            protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+          }
+          const row = document.createElement('tr');
+          row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
+          legendTable.appendChild(row);
+        });
+      }
     }
-
-    // Returns globalData filtered by the user’s inputs in the top filter controls.
-    function filteredGlobalData() {
-      let filtered = globalData;
-      const payloadKeyword = document.getElementById('payloadSearch').value.trim().toLowerCase();
-      if (payloadKeyword) {
-        filtered = filtered.filter(d => d.Payload && d.Payload.toLowerCase().includes(payloadKeyword));
-      }
-      const sourceFilter = document.getElementById('sourceFilter').value.trim().toLowerCase();
-      if (sourceFilter) {
-        filtered = filtered.filter(d => d.Source && d.Source.toLowerCase().includes(sourceFilter));
-      }
-      const destinationFilter = document.getElementById('destinationFilter').value.trim().toLowerCase();
-      if (destinationFilter) {
-        filtered = filtered.filter(d => d.Destination && d.Destination.toLowerCase().includes(destinationFilter));
-      }
-      const protocolFilter = document.getElementById('protocolFilter').value.trim().toLowerCase();
-      if (protocolFilter) {
-        filtered = filtered.filter(d => d.Protocol && d.Protocol.toLowerCase().includes(protocolFilter));
-      }
-      const entropyMin = parseFloat(document.getElementById('entropyMinFilter').value);
-      if (!isNaN(entropyMin)) {
-        filtered = filtered.filter(d => d.ClusterEntropy !== undefined && +d.ClusterEntropy >= entropyMin);
-      }
-      const entropyMax = parseFloat(document.getElementById('entropyMaxFilter').value);
-      if (!isNaN(entropyMax)) {
-        filtered = filtered.filter(d => d.ClusterEntropy !== undefined && +d.ClusterEntropy <= entropyMax);
-      }
-      const isLargePacketOnly = document.getElementById('isLargePacketFilter').checked;
-      if (isLargePacketOnly) {
-        filtered = filtered.filter(d => d.IsLargePacket === true || d.IsLargePacket === "True" || d.IsLargePacket === "true");
-      }
-      const isRetransmissionOnly = document.getElementById('isRetransmissionFilter').checked;
-      if (isRetransmissionOnly) {
-        filtered = filtered.filter(d => d.IsRetransmission === true || d.IsRetransmission === "True" || d.IsRetransmission === "true");
-      }
-      const isSuspiciousAckOnly = document.getElementById('isSuspiciousAckFilter').checked;
-      if (isSuspiciousAckOnly) {
-        filtered = filtered.filter(d => d.IsSuspiciousAck === true || d.IsSuspiciousAck === "True" || d.IsSuspiciousAck === "true");
-      }
-      return filtered;
-    }
-
-    // Aggregate data by ClusterID and update pivotData then render the heatmap.
+    
+    // Fetch aggregated heatmap data from the server
     function updateHeatmap() {
       const metric = document.getElementById('metricSelect').value;
-      const dataForAggregation = filteredGlobalData();
-      const grouped = d3.rollup(
-        dataForAggregation,
-        v => metric === "count" ? v.length : d3.sum(v, d => d[metric]),
-        d => d.ClusterID
-      );
-      pivotData = [];
-      grouped.forEach((value, cluster) => {
-        pivotData.push({ cluster: cluster, value: value });
-      });
-      pivotData.sort((a, b) => b.value - a.value);
-      currentLimit = 44*12+18;
-      renderHeatmap(metric);
+      const filterParams = {
+        payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
+        sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
+        destinationFilter: document.getElementById('destinationFilter').value.trim().toLowerCase(),
+        protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
+        entropyMin: document.getElementById('entropyMinFilter').value,
+        entropyMax: document.getElementById('entropyMaxFilter').value,
+        isLargePacketOnly: document.getElementById('isLargePacketFilter').checked,
+        isRetransmissionOnly: document.getElementById('isRetransmissionFilter').checked,
+        isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
+        metric: metric
+      };
+      fetch("http://127.0.0.1:5000/filter_and_aggregate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(filterParams)
+      })
+      .then(response => response.json())
+      .then(data => {
+         pivotData = data;
+         pivotData.sort((a, b) => b.value - a.value);
+         currentLimit = 44*12+18;
+         renderHeatmap(metric);
+      })
+      .catch(error => console.error("Error fetching aggregated data:", error));
     }
-
-    // Render the heatmap using pivotData (only first currentLimit clusters)
+    
     function renderHeatmap(metric) {
       d3.select("#heatmap").select("svg").remove();
       const displayData = pivotData.slice(0, currentLimit);
       const maxVal = d3.max(pivotData, d => d.value);
       const formatNumber = d3.format(".2s");
       const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxVal]);
-      const availableWidth = window.innerWidth - 260; // leaving room for legend
+      const availableWidth = window.innerWidth - 260;
       const cellSize = 30;
       const numCols = Math.floor(availableWidth / cellSize);
       const numRows = Math.ceil(displayData.length / numCols);
@@ -436,8 +418,7 @@
                     .append("svg")
                     .attr("width", width)
                     .attr("height", height);
-
-      // Draw heatmap cells and attach click event to show network for that cluster.
+      
       svg.selectAll("rect")
          .data(displayData)
          .enter()
@@ -457,8 +438,7 @@
          .on("click", function(event, d) {
             showClusterNetwork(d.cluster);
          });
-
-      // Annotate cells with the metric value
+      
       svg.selectAll("text.cellText")
          .data(displayData)
          .enter()
@@ -471,178 +451,120 @@
          .attr("font-size", "10px")
          .attr("fill", d => d.value > maxVal / 2 ? "white" : "black")
          .text(d => d.value > 0 ? formatNumber(d.value) : "");
-
-      // Show or hide the Load More button
+      
       if (currentLimit < pivotData.length) {
         d3.select("#loadMoreBtn").style("display", "inline-block");
       } else {
         d3.select("#loadMoreBtn").style("display", "none");
       }
     }
-
-    // Increase currentLimit and re-render heatmap
+    
     document.getElementById('loadMoreBtn').addEventListener('click', function() {
       currentLimit += 39*3;
       const metric = document.getElementById('metricSelect').value;
       renderHeatmap(metric);
     });
-
-    // Back to Heatmap: hide network view, hide table, show heatmap again.
+    
     function showHeatmap() {
       document.getElementById('cy').style.display = 'none';
       document.getElementById('backToHeatmap').style.display = 'none';
-      document.getElementById('edgeFilterPanel').style.display = 'none'; // Hide edge filter if open
+      document.getElementById('edgeFilterPanel').style.display = 'none';
       document.getElementById('table-container').style.display = 'none';
       document.getElementById('loadMoreTableBtn').style.display = 'none';
       d3.select("#heatmap").style("display", "block");
       clearEdgeFilter();
     }
     document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
-
-    // Build network elements (nodes and edges) for the selected cluster.
-    function generateNetworkElementsForCluster(clusterID, data) {
-      let filtered = data.filter(d => d.ClusterID == clusterID);
-      let seenNodes = new Set();
-      let nodeElements = [];
-      let edgesMap = new Map();
-      filtered.forEach((d, index) => {
-        let source = d.Source;
-        let destination = d.Destination;
-        let protocol = d.Protocol;
-        let nodeWeight = d.NodeWeight ? +d.NodeWeight : 0;
-        let sourceClassification = d.SourceClassification || 'External';
-        let destinationClassification = d.DestinationClassification || 'External';
-        if(source && !seenNodes.has(source)) {
-          nodeElements.push({
-            data: {
-              id: source,
-              label: source,
-              Classification: sourceClassification,
-              NodeWeight: nodeWeight,
-              timeIndex: index,
-              ClusterID: clusterID
-            }
-          });
-          seenNodes.add(source);
-        }
-        if(destination && !seenNodes.has(destination)) {
-          nodeElements.push({
-            data: {
-              id: destination,
-              label: destination,
-              Classification: destinationClassification,
-              NodeWeight: nodeWeight,
-              timeIndex: index,
-              ClusterID: clusterID
-            }
-          });
-          seenNodes.add(destination);
-        }
-        if(!source || !destination || !protocol) return;
-        let edgeKey = source + '|' + destination + '|' + protocol;
-        if(!edgesMap.has(edgeKey)) {
-          edgesMap.set(edgeKey, { source, destination, protocol, csvIndices: [], totalEdgeWeight: 0 });
-        }
-        let entry = edgesMap.get(edgeKey);
-        entry.csvIndices.push(index);
-        entry.totalEdgeWeight += d.Length ? +d.Length : 0;
-      });
-      let edgeElements = [];
-      edgesMap.forEach(val => {
-        edgeElements.push({
-          data: {
-            id: `edge-${val.source}-${val.destination}-${val.protocol}`,
-            source: val.source,
-            target: val.destination,
-            Protocol: val.protocol,
-            EdgeWeight: val.totalEdgeWeight,
-            processCount: val.csvIndices.length,
-            csvIndices: val.csvIndices,
-            label: `(${val.csvIndices.length}) ${val.protocol}`,
-            edgeColor: protocolColorMap[val.protocol] || '#000'
-          }
-        });
-      });
-      return nodeElements.concat(edgeElements);
+    
+    // Fetch network elements from server for the selected cluster
+    function showClusterNetwork(clusterID) {
+      currentClusterID = clusterID;
+      fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
+      .then(response => response.json())
+      .then(data => {
+         if(data.nodes.length === 0 && data.edges.length === 0) {
+             alert("No network data for this cluster.");
+             return;
+         }
+         // Combine nodes and edges arrays (each already wrapped in a data property)
+         const elementsCombined = data.nodes.concat(data.edges);
+         visualizeNetwork(elementsCombined);
+         d3.select("#heatmap").style("display", "none");
+         document.getElementById('backToHeatmap').style.display = 'inline-block';
+         createClusterTable(clusterID);
+      })
+      .catch(error => console.error("Error fetching network data:", error));
     }
-
-    // Create a table of CSV rows for the selected cluster
+    
+    // Create a table for the selected cluster using paginated data from server
     function createClusterTable(clusterID) {
-      clusterRows = globalData.filter(d => d.ClusterID == clusterID);
-      if (!clusterRows.length) {
-        const container = document.getElementById('table-container');
-        container.innerHTML = "<p>No rows found for this cluster.</p>";
-        container.style.display = "block";
-        document.getElementById('loadMoreTableBtn').style.display = "none";
-        return;
-      }
-      clusterColumns = Object.keys(clusterRows[0]);
-      tableOffset = 0;
+      currentPage = 1;
       const container = document.getElementById('table-container');
       container.innerHTML = "";
       container.style.display = "block";
-      const table = document.createElement('table');
-      table.id = "clusterTable";
-      const thead = document.createElement('thead');
-      const hdrRow = document.createElement('tr');
-      clusterColumns.forEach(col => {
-        const th = document.createElement('th');
-        th.textContent = col;
-        hdrRow.appendChild(th);
-      });
-      thead.appendChild(hdrRow);
-      table.appendChild(thead);
-      const tbody = document.createElement('tbody');
-      tbody.id = "clusterTableBody";
-      table.appendChild(tbody);
-      container.appendChild(table);
-      if (clusterRows.length > TABLE_PAGE_SIZE) {
-        document.getElementById('loadMoreTableBtn').style.display = "inline-block";
-      } else {
-        document.getElementById('loadMoreTableBtn').style.display = "none";
-      }
-      loadNextTableChunk();
+      fetch(`http://127.0.0.1:5000/get_cluster_rows?cluster_id=${clusterID}&page=1&page_size=${TABLE_PAGE_SIZE}`)
+      .then(response => response.json())
+      .then(data => {
+         const rows = data.rows;
+         currentClusterTotal = data.total;
+         if(rows.length === 0) {
+             container.innerHTML = "<p>No rows found for this cluster.</p>";
+             document.getElementById('loadMoreTableBtn').style.display = "none";
+             return;
+         }
+         clusterColumns = Object.keys(rows[0]);
+         const table = document.createElement('table');
+         table.id = "clusterTable";
+         const thead = document.createElement('thead');
+         const hdrRow = document.createElement('tr');
+         clusterColumns.forEach(col => {
+             const th = document.createElement('th');
+             th.textContent = col;
+             hdrRow.appendChild(th);
+         });
+         thead.appendChild(hdrRow);
+         table.appendChild(thead);
+         const tbody = document.createElement('tbody');
+         tbody.id = "clusterTableBody";
+         table.appendChild(tbody);
+         container.appendChild(table);
+         renderTableRows(rows);
+         if (TABLE_PAGE_SIZE < currentClusterTotal) {
+             document.getElementById('loadMoreTableBtn').style.display = "inline-block";
+         } else {
+             document.getElementById('loadMoreTableBtn').style.display = "none";
+         }
+      })
+      .catch(error => console.error("Error fetching cluster rows:", error));
     }
-
-    // Load the next chunk (PAGE_SIZE) of rows into the table
-    function loadNextTableChunk() {
+    
+    function renderTableRows(rows) {
       const tbody = document.getElementById('clusterTableBody');
-      if (!tbody) return;
-      let end = tableOffset + TABLE_PAGE_SIZE;
-      if (end > clusterRows.length) end = clusterRows.length;
-      for (let i = tableOffset; i < end; i++) {
-        const row = clusterRows[i];
-        const tr = document.createElement('tr');
-        clusterColumns.forEach(col => {
-          const td = document.createElement('td');
-          td.textContent = row[col] != null ? row[col] : "";
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      }
-      tableOffset = end;
-      if (tableOffset >= clusterRows.length) {
-        document.getElementById('loadMoreTableBtn').style.display = "none";
-      }
+      rows.forEach(row => {
+          const tr = document.createElement('tr');
+          clusterColumns.forEach(col => {
+              const td = document.createElement('td');
+              td.textContent = row[col] != null ? row[col] : "";
+              tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+      });
     }
-
-    // When a heatmap cell is clicked, show the network for that ClusterID plus the table.
-    function showClusterNetwork(clusterID) {
-      currentClusterID = clusterID;
-      let elements = generateNetworkElementsForCluster(clusterID, globalData);
-      if(elements.length === 0) {
-        alert("No network data for this cluster.");
-        return;
-      }
-      visualizeNetwork(elements);
-      d3.select("#heatmap").style("display", "none");
-      document.getElementById('backToHeatmap').style.display = 'inline-block';
-      createClusterTable(clusterID);
-    }
-
-    /*******************
-     * Cytoscape Visualization
-     *******************/
+    
+    document.getElementById('loadMoreTableBtn').addEventListener('click', function() {
+      currentPage += 1;
+      fetch(`http://127.0.0.1:5000/get_cluster_rows?cluster_id=${currentClusterID}&page=${currentPage}&page_size=${TABLE_PAGE_SIZE}`)
+      .then(response => response.json())
+      .then(data => {
+         renderTableRows(data.rows);
+         const totalFetched = currentPage * TABLE_PAGE_SIZE;
+         if (totalFetched >= currentClusterTotal) {
+             document.getElementById('loadMoreTableBtn').style.display = "none";
+         }
+      })
+      .catch(error => console.error("Error fetching more cluster rows:", error));
+    });
+    
     function groupDirectedComponents(cy) {
       let visited = new Set();
       let groupCount = 0;
@@ -664,7 +586,7 @@
         }
       });
     }
-
+    
     function positionGroupedComponentsTree(cy) {
       let groupMap = {};
       cy.nodes().forEach(n => {
@@ -722,7 +644,7 @@
         groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
       });
     }
-
+    
     function visualizeNetwork(elements) {
       document.getElementById('cy').style.display = 'block';
       const cy = cytoscape({
@@ -733,19 +655,38 @@
           {
             selector: 'node',
             style: {
+              // Size node based on raw NodeWeight relative to maximum in the graph.
+              'width': function(ele) {
+                let max = 0;
+                ele.cy().nodes().forEach(n => {
+                  let w = parseFloat(n.data('NodeWeight')) || 0;
+                  if(w > max){ max = w; }
+                });
+                let w = parseFloat(ele.data('NodeWeight')) || 0;
+                return max ? 30 + (w / max) * (150 - 30) : 30;
+              },
+              'height': function(ele) {
+                let max = 0;
+                ele.cy().nodes().forEach(n => {
+                  let w = parseFloat(n.data('NodeWeight')) || 0;
+                  if(w > max){ max = w; }
+                });
+                let w = parseFloat(ele.data('NodeWeight')) || 0;
+                return max ? 30 + (w / max) * (150 - 30) : 30;
+              },
+              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
+              'border-width': 2,
+              'border-color': '#333',
+              // Always show the label (IP). The label is taken from data(label)
+              'content': 'data(label)',
+              'font-size': 14,
               'color': '#000',
-              'font-size': 12,
               'text-valign': 'center',
               'text-halign': 'center',
-              'shape': 'ellipse',
-              'font-family': 'Arial, sans-serif',
-              'font-weight': 'bold',
-              'text-opacity': 0,
-              'width': 'mapData(NodeWeight, 0, 1, 20, 40)',
-              'height': 'mapData(NodeWeight, 0, 1, 20, 40)',
-              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
-              'border-width': 2.0,
-              'content': 'data(label)'
+              'text-opacity': 1,
+              'text-outline-width': 2,
+              'text-outline-color': '#fff',
+              'shape': 'ellipse'
             }
           },
           {
@@ -763,8 +704,13 @@
               'curve-style': 'bezier',
               'control-point-step-size': 30,
               'width': 'data(normalizedWeight)',
-              'line-color': 'data(edgeColor)',
-              'target-arrow-color': 'data(edgeColor)',
+              // Use the computed edgeColor if present; otherwise fall back to a default
+              'line-color': function(ele) {
+                return ele.data('edgeColor') || '#888';
+              },
+              'target-arrow-color': function(ele) {
+                return ele.data('edgeColor') || '#888';
+              },
               'opacity': 0.8
             }
           },
@@ -778,42 +724,32 @@
           }
         ]
       });
-      cy.zoom(0.5);
+      
+      // Compute maximum NodeWeight and assign normalized sizes (if not already computed)
       globalCy = cy;
-      groupDirectedComponents(cy);
-      positionGroupedComponentsTree(cy);
-
-      // Compute normalized edge widths within each group
-      let groupEdges = {};
+      
+      // Assign edge colors based on protocolColorMap (fallback if not defined)
       cy.edges().forEach(edge => {
-        let sourceGroup = edge.source().data('groupID');
-        let targetGroup = edge.target().data('groupID');
-        if(sourceGroup && sourceGroup === targetGroup) {
-          if(!groupEdges[sourceGroup]) groupEdges[sourceGroup] = [];
-          groupEdges[sourceGroup].push(edge);
-        }
+        let protocol = edge.data('Protocol');
+        edge.data('edgeColor', protocolColorMap[protocol] || '#888');
       });
-      Object.keys(groupEdges).forEach(groupID => {
-        let edges = groupEdges[groupID];
-        let counts = edges.map(e => e.data('processCount'));
-        let minCount = Math.min(...counts);
-        let maxCount = Math.max(...counts);
-        edges.forEach(e => {
-          let count = e.data('processCount');
-          let norm = 2;
-          if(maxCount !== minCount) {
-            norm = 2 + ((count - minCount) / (maxCount - minCount)) * (10 - 2);
-          }
-          e.data('normalizedWeight', norm);
-        });
-      });
+      
+      // If processCount is available on edges, normalize its weight
       cy.edges().forEach(edge => {
-        if(edge.data('normalizedWeight') === undefined) {
+        if (edge.data('processCount') !== undefined) {
+          let count = parseFloat(edge.data('processCount')) || 0;
+          // Here we simply map counts between 2 and 10 (adjust as needed)
+          const maxNormalizedWeight = 12; // Set your maximum normalized weight
+          const computedWeight = 2 + (count * 1);
+          edge.data('normalizedWeight', Math.min(computedWeight, maxNormalizedWeight));
+        } else {
           edge.data('normalizedWeight', 2);
         }
       });
       
-      // Edge hover tooltip
+      groupDirectedComponents(cy);
+      positionGroupedComponentsTree(cy);
+      
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
         let px = evt.originalEvent.pageX;
@@ -822,7 +758,7 @@
         tooltip.style.left = (px + 10) + 'px';
         tooltip.style.top = (py + 10) + 'px';
         if (t.isNode()) {
-          tooltip.innerHTML = `<strong>Node ID:</strong> ${t.id()}<br>
+          tooltip.innerHTML = `<strong>Node IP:</strong> ${t.id()}<br>
                                <strong>Classification:</strong> ${t.data('Classification')}<br>
                                <strong>Group:</strong> ${t.data('groupID') || 'N/A'}<br>`;
         } else {
@@ -835,11 +771,11 @@
                                Weight: ${t.data('EdgeWeight')}`;
         }
       });
+      
       cy.on('mouseout', 'node,edge', () => {
         tooltip.style.display = 'none';
       });
-
-      // Edge click: select/unselect + show filter panel
+      
       cy.on('click', 'edge', (evt) => {
         let edge = evt.target;
         if (evt.originalEvent.shiftKey) {
@@ -869,10 +805,7 @@
         showEdgeFilterPanel(edge.data());
       });
     }
-
-    /*******************
-     * EDGE FILTERING
-     *******************/
+    
     function showEdgeFilterPanel(edgeData) {
       document.getElementById('edgeFilterSource').value = edgeData.source || "";
       document.getElementById('edgeFilterDestination').value = edgeData.target || "";
@@ -882,7 +815,7 @@
       const panel = document.getElementById('edgeFilterPanel');
       panel.style.display = 'block';
     }
-
+    
     function clearEdgeFilter() {
       if (!globalCy) return;
       globalCy.edges().forEach(e => e.show());
@@ -893,7 +826,7 @@
       document.getElementById('edgeFilterProcessCount').value = "";
       document.getElementById('edgeFilterPanel').style.display = 'none';
     }
-
+    
     function applyEdgeFilter() {
       if (!globalCy) return;
       let fSource = document.getElementById('edgeFilterSource').value.trim().toLowerCase();
@@ -901,7 +834,7 @@
       let fProto = document.getElementById('edgeFilterProtocol').value.trim().toLowerCase();
       let fWeight = document.getElementById('edgeFilterWeight').value.trim();
       let fProcessCount = document.getElementById('edgeFilterProcessCount').value.trim();
-
+      
       globalCy.edges().forEach(e => {
         let d = e.data();
         let keep = true;
@@ -939,31 +872,82 @@
         if (keep) e.show(); else e.hide();
       });
     }
-
+    
     document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
     document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
-    document.getElementById('loadMoreTableBtn').addEventListener('click', loadNextTableChunk);
-
-    /*******************
-     * LOAD CSV DATA
-     *******************/
-    function isValidIP(ip) {
-      const regex = /^(25[0-5]|2[0-4]\d|[01]?\d?\d)(\.(25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$/;
-      return regex.test(ip);
+    
+    function parseNumericExpression(value) {
+      const match = value.match(/^(\>=|\<=|>|<)\s*(\d+(?:\.\d+)?)$/);
+      if (match) {
+        return { operator: match[1], number: parseFloat(match[2]) };
+      }
+      const justNum = parseFloat(value);
+      if (!isNaN(justNum) && value.trim() !== "") {
+        return { operator: '==', number: justNum };
+      }
+      return null;
     }
-
-    d3.csv("processed.csv", d3.autoType).then(function(data) {
-      const invalidClusters = new Set();
-      data.forEach(function(d) {
-        if ((d.Source && !isValidIP(d.Source)) || (d.Destination && !isValidIP(d.Destination))) {
-          invalidClusters.add(d.ClusterID);
+    
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        showLoading();
+        const csvText = e.target.result;
+        const csvType = document.getElementById("csvType").value;
+        if (csvType === "raw") {
+          fetch("http://127.0.0.1:5000/process_csv", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ csv_text: csvText })
+          })
+          .then(response => response.text())
+          .then(processedText => {
+            try {
+              window.globalData = d3.csvParse(processedText, d3.autoType);
+              processedCSVText = processedText;  // Store processed CSV text
+              document.getElementById("downloadBtn").style.display = "inline-block"; // Show download button
+              updateLegend();
+              updateHeatmap();
+            } catch (error) {
+              console.error("Error parsing processed CSV:", error);
+            } finally {
+              hideLoading();
+            }
+          })
+          .catch(error => {
+            console.error("Error processing CSV on server:", error);
+            hideLoading();
+          });
+        } else {
+          try {
+            window.globalData = d3.csvParse(csvText, d3.autoType);
+            processedCSVText = csvText;  // Already processed
+            document.getElementById("downloadBtn").style.display = "inline-block"; // Show download button
+            updateLegend();
+            updateHeatmap();
+          } catch (error) {
+            console.error("Error parsing CSV:", error);
+          } finally {
+            hideLoading();
+          }
         }
-      });
-      globalData = data.filter(d => !invalidClusters.has(d.ClusterID));
-      updateLegend();
-      updateHeatmap();
-    }).catch(function(error) {
-      console.error('Error loading the CSV file:', error);
+      };
+      reader.readAsText(file);
+    });
+    
+    // Download button event listener
+    document.getElementById("downloadBtn").addEventListener("click", function() {
+      const blob = new Blob([processedCSVText], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "processed.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     });
     
     const tooltip = document.createElement('div');

@@ -5,12 +5,21 @@ from ipaddress import ip_address, ip_network
 from io import StringIO
 import re
 import networkx as nx
-import community as community_louvain 
+import community.community_louvain as community_louvain
 import numpy as np
 from flask_cors import CORS
+import argparse
+import sys
+import logging
 
-app = Flask(__name__, static_folder='static')
-CORS(app)  # Enable CORS for all routes
+# Configure logging to only log errors (to reduce overhead)
+logging.basicConfig(
+    level=logging.ERROR,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+# Global variable for the processed dataframe
+global_df = None
 
 # Precompute internal subnets and their integer ranges for fast IP classification.
 internal_subnets = [
@@ -22,18 +31,14 @@ internal_ranges = [(int(net.network_address), int(net.broadcast_address)) for ne
 def classify_ip_vector(ip):
     try:
         ip_int = int(ip_address(ip))
-    except ValueError:
-        return "Invalid IP"
+    except:
+        return "External"
     for rmin, rmax in internal_ranges:
         if rmin <= ip_int <= rmax:
             return "Internal"
     return "External"
 
 def parse_payload_vectorized(payload_series):
-    """
-    Extract columns from the payload:
-      - SourcePort, DestinationPort, Flags, Seq, Ack, Win, Len, TSval, TSecr.
-    """
     cols = ["SourcePort", "DestinationPort", "Flags", "Seq", "Ack", "Win", "Len", "TSval", "TSecr"]
     df_extracted = pd.DataFrame(index=payload_series.index, columns=cols)
     sp_dp_flags = payload_series.str.extract(r'^\s*:?\s*(\d+)\s*>\s*(\d+)\s*\[([^\]]+)\]', expand=True)
@@ -49,15 +54,14 @@ def parse_payload_vectorized(payload_series):
     df_extracted.fillna("N/A", inplace=True)
     return df_extracted
 
-def compute_clusters(df):
-    """
-    Compute clusters using the Louvain method.
-    """
+def compute_clusters(df, resolution=2.5):
     G = nx.Graph()
-    for src, dst in zip(df['Source'], df['Destination']):
+    groups = df.groupby(["Source", "Destination"])
+    for (src, dst), group in groups:
         if pd.notna(src) and pd.notna(dst):
-            G.add_edge(src, dst)
-    partition = community_louvain.best_partition(G)
+            weight = group.shape[0]
+            G.add_edge(src, dst, weight=weight)
+    partition = community_louvain.best_partition(G, weight='weight', resolution=resolution)
     return partition
 
 def compute_entropy(series):
@@ -65,21 +69,12 @@ def compute_entropy(series):
     p = counts / counts.sum()
     return -np.sum(p * np.log(p))
 
-def process_csv(csv_text, start_source=None, start_destination=None):
-    """
-    Reads CSV input, processes payload fields, classifies IP addresses, computes additional
-    behavioral, traffic, and temporal features, and finally computes clusters and cluster entropy.
-    
-    Derived columns include:
-      - ConnectionID, SeqDelta, AckDelta, IsRetransmission, TCPFlagCount,
-        InterArrivalTime, BytesPerSecond, IsLargePacket, PayloadLength, BurstID,
-        IsSuspiciousAck, and ClusterEntropy.
-    """
+def process_csv_to_df(csv_text):
     df = pd.read_csv(StringIO(csv_text), dtype=str)
-    
-    # Verify minimal required columns.
     if not all(col in df.columns for col in ["Source", "Destination"]):
-        raise ValueError("Missing required column: Source or Destination")
+        error_msg = "Missing required column: Source or Destination"
+        logging.error(error_msg)
+        raise ValueError(error_msg)
     
     processed_cols = ["Source", "Destination", "Payload", "SourcePort", "DestinationPort", "Flags", 
                       "Seq", "Ack", "Win", "Len", "TSval", "TSecr", 
@@ -88,38 +83,26 @@ def process_csv(csv_text, start_source=None, start_destination=None):
                       "InterArrivalTime", "BytesPerSecond", "IsLargePacket", "PayloadLength",
                       "BurstID", "IsSuspiciousAck", "ClusterEntropy"]
     if all(col in df.columns for col in processed_cols):
-        out = StringIO()
-        df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
-        return out.getvalue()
+        return df
 
-    # Rename 'Info' to 'Payload' if needed.
     if "Info" in df.columns:
         df.rename(columns={"Info": "Payload"}, inplace=True)
     
-    # Process Payload if it exists.
     if "Payload" in df.columns:
         df["Payload"] = df["Payload"].fillna("").str.replace(',', '/', regex=False)
         extracted = parse_payload_vectorized(df["Payload"])
         df = pd.concat([df, extracted], axis=1)
     
-    # Compute connection counts.
     connection_counts = df.groupby(["Source", "Destination"])["Source"].transform("count")
-    node_weights = connection_counts.copy()
-    edge_weights = connection_counts.copy()
-    if node_weights.max() != node_weights.min():
-        node_weights = (node_weights - node_weights.min()) / (node_weights.max() - node_weights.min())
+    if connection_counts.max() != connection_counts.min():
+        node_weights = (connection_counts - connection_counts.min()) / (connection_counts.max() - connection_counts.min())
     else:
-        node_weights = pd.Series(1.0, index=node_weights.index)
-    if edge_weights.max() != edge_weights.min():
-        edge_weights = (edge_weights - edge_weights.min()) / (edge_weights.max() - edge_weights.min())
-    else:
-        edge_weights = pd.Series(1.0, index=edge_weights.index)
-    
-    # Classify IPs.
+        node_weights = pd.Series(1.0, index=connection_counts.index)
+    df["NodeWeight"] = node_weights
+    # Always compute classification for Source and Destination
     df["SourceClassification"] = df["Source"].apply(classify_ip_vector)
     df["DestinationClassification"] = df["Destination"].apply(classify_ip_vector)
     
-    # --- Derived Columns ---
     df["ConnectionID"] = df["Source"] + ":" + df["SourcePort"].fillna("N/A") + "-" + df["Destination"] + ":" + df["DestinationPort"].fillna("N/A")
     for col in ["Time", "Length"]:
         df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -138,13 +121,11 @@ def process_csv(csv_text, start_source=None, start_destination=None):
     df["PrevSeq"] = df.groupby("ConnectionID")["Seq"].shift(1)
     df["IsSuspiciousAck"] = df.apply(lambda row: True if pd.notnull(row["PrevSeq"]) and row["Ack"] < row["PrevSeq"] else False, axis=1)
     df.drop(columns=["PrevSeq"], inplace=True)
-    # --- End Derived Columns ---
-
-    # Compute clusters using Louvain.
-    node_cluster = compute_clusters(df)
-    df["ClusterID"] = df["Source"].apply(lambda x: node_cluster.get(x, 'N/A'))
     
-    # Compute ClusterEntropy.
+    # Compute clusters and convert them to strings
+    node_cluster = compute_clusters(df, resolution=2.5)
+    df["ClusterID"] = df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
+    
     cluster_entropy = {}
     for cluster, group in df.groupby("ClusterID"):
         ent_protocol = compute_entropy(group["Protocol"]) if "Protocol" in group.columns else 0
@@ -153,33 +134,196 @@ def process_csv(csv_text, start_source=None, start_destination=None):
         cluster_entropy[cluster] = (ent_protocol + ent_srcport + ent_dstport) / 3
     df["ClusterEntropy"] = df["ClusterID"].map(cluster_entropy)
     
-    if start_source:
-        matching_rows = df[df["Source"] == start_source]
-        if not matching_rows.empty:
-            target_cluster = matching_rows.iloc[0]["ClusterID"]
-            df = df[df["ClusterID"] == target_cluster]
-        else:
-            df = df[0:0]
-    
+    return df
+
+def process_csv(csv_text):
+    df = process_csv_to_df(csv_text)
     out = StringIO()
     df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
     return out.getvalue()
 
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+@app.route('/filter_and_aggregate', methods=['POST'])
+def filter_and_aggregate():
+    global global_df
+    if global_df is None:
+        return jsonify([])
+    data = request.get_json()
+    payloadKeyword = data.get("payloadKeyword", "").lower()
+    sourceFilter = data.get("sourceFilter", "").lower()
+    destinationFilter = data.get("destinationFilter", "").lower()
+    protocolFilter = data.get("protocolFilter", "").lower()
+    try:
+        entropyMin = float(data.get("entropyMin", float('-inf')))
+    except Exception as e:
+        logging.error(f"Error parsing entropyMin: {e}")
+        entropyMin = float('-inf')
+    try:
+        entropyMax = float(data.get("entropyMax", float('inf')))
+    except Exception as e:
+        logging.error(f"Error parsing entropyMax: {e}")
+        entropyMax = float('inf')
+    isLargePacketOnly = data.get("isLargePacketOnly", False)
+    isRetransmissionOnly = data.get("isRetransmissionOnly", False)
+    isSuspiciousAckOnly = data.get("isSuspiciousAckOnly", False)
+    metric = data.get("metric", "count")
+    
+    df = global_df.copy()
+    if payloadKeyword:
+        df = df[df["Payload"].str.lower().str.contains(payloadKeyword, na=False)]
+    if sourceFilter:
+        df = df[df["Source"].str.lower().str.contains(sourceFilter, na=False)]
+    if destinationFilter:
+        df = df[df["Destination"].str.lower().str.contains(destinationFilter, na=False)]
+    if protocolFilter:
+        df = df[df["Protocol"].str.lower().str.contains(protocolFilter, na=False)]
+    df["ClusterEntropy"] = pd.to_numeric(df["ClusterEntropy"], errors='coerce')
+    df = df[(df["ClusterEntropy"] >= entropyMin) & (df["ClusterEntropy"] <= entropyMax)]
+    if isLargePacketOnly:
+        df = df[df["IsLargePacket"] == True]
+    if isRetransmissionOnly:
+        df = df[df["IsRetransmission"] == True]
+    if isSuspiciousAckOnly:
+        df = df[df["IsSuspiciousAck"] == True]
+    
+    if metric == "count":
+        agg = df.groupby("ClusterID").size()
+    else:
+        df[metric] = pd.to_numeric(df[metric], errors='coerce').fillna(0)
+        agg = df.groupby("ClusterID")[metric].sum()
+    pivot = [{"cluster": cluster, "value": value} for cluster, value in agg.items()]
+    return jsonify(pivot)
+
+@app.route('/cluster_network', methods=['GET'])
+def cluster_network():
+    global global_df
+    if global_df is None:
+        return jsonify({"nodes": [], "edges": []})
+    
+    cluster_id_param = request.args.get("cluster_id")
+    # Use string comparison to ensure consistency
+    df_cluster = global_df[global_df["ClusterID"] == str(cluster_id_param)]
+    
+    nodes = {}
+    edges = {}
+    for idx, row in df_cluster.iterrows():
+        source = str(row.get("Source", "")).strip()
+        destination = str(row.get("Destination", "")).strip()
+        protocol = str(row.get("Protocol", "")).strip()
+        # Skip if any endpoint is missing or empty
+        if not source or not destination or not protocol:
+            continue
+        # Always ensure a classification is present
+        let_source_class = row.get("SourceClassification") or classify_ip_vector(source)
+        let_destination_class = row.get("DestinationClassification") or classify_ip_vector(destination)
+        if source not in nodes:
+            nodes[source] = {
+                "data": {
+                    "id": source,
+                    "label": source,
+                    "Classification": let_source_class,
+                    "NodeWeight": row.get("NodeWeight", 0)
+                }
+            }
+        if destination not in nodes:
+            nodes[destination] = {
+                "data": {
+                    "id": destination,
+                    "label": destination,
+                    "Classification": let_destination_class,
+                    "NodeWeight": row.get("NodeWeight", 0)
+                }
+            }
+        edge_key = f"{source}|{destination}|{protocol}"
+        if edge_key not in edges:
+            edges[edge_key] = {
+                "data": {
+                    "id": f"edge-{source}-{destination}-{protocol}",
+                    "source": source,
+                    "target": destination,
+                    "Protocol": protocol,
+                    "EdgeWeight": 0,
+                    "processCount": 0,
+                    "csvIndices": []
+                }
+            }
+        try:
+            length = float(row.get("Length", 0))
+        except:
+            length = 0
+        edges[edge_key]["data"]["EdgeWeight"] += length
+        edges[edge_key]["data"]["processCount"] += 1
+    return jsonify({"nodes": list(nodes.values()), "edges": list(edges.values())})
+
+@app.route('/get_cluster_rows', methods=['GET'])
+def get_cluster_rows():
+    global global_df
+    if global_df is None:
+        return jsonify({"rows": [], "total": 0})
+    cluster_id = request.args.get("cluster_id")
+    try:
+        page = int(request.args.get("page", 1))
+    except Exception as e:
+        logging.error(f"Error parsing page: {e}")
+        page = 1
+    try:
+        page_size = int(request.args.get("page_size", 50))
+    except Exception as e:
+        logging.error(f"Error parsing page_size: {e}")
+        page_size = 50
+    # Ensure cluster_id comparison is done as strings
+    df_cluster = global_df[global_df["ClusterID"] == str(cluster_id)]
+    total = len(df_cluster)
+    start = (page - 1) * page_size
+    end = start + page_size
+    rows = df_cluster.iloc[start:end].to_dict(orient="records")
+    return jsonify({"rows": rows, "total": total})
+
 @app.route('/process_csv', methods=['POST'])
 def process_csv_endpoint():
+    global global_df
     try:
         data = request.get_json()
         csv_text = data.get("csv_text", "")
-        start_source = data.get("start_source")
-        start_destination = data.get("start_destination")
-        processed = process_csv(csv_text, start_source, start_destination)
-        return Response(processed, mimetype='text/plain')
+        processed_text = process_csv(csv_text)
+        global_df = process_csv_to_df(csv_text)
+        return Response(processed_text, mimetype='text/plain')
     except Exception as e:
+        logging.error(f"Error processing CSV: {e}")
         return jsonify({"error": str(e)}), 400
 
 @app.route('/')
 def index():
     return send_from_directory('static', 'index.html')
 
+def main_cli():
+    parser = argparse.ArgumentParser(description="Process CSV files for network traffic analysis.")
+    parser.add_argument("input_file", help="Path to the input CSV file")
+    parser.add_argument("-o", "--output_file", help="Output CSV file name", default="processed.csv")
+    args = parser.parse_args()
+    try:
+        with open(args.input_file, 'r') as f:
+            csv_text = f.read()
+    except Exception as e:
+        logging.error(f"Error reading input file: {e}")
+        sys.exit(1)
+    try:
+        processed_csv = process_csv(csv_text)
+    except Exception as e:
+        logging.error(f"Error processing CSV: {e}")
+        sys.exit(1)
+    try:
+        with open(args.output_file, 'w') as f:
+            f.write(processed_csv)
+        logging.error(f"Processed CSV saved to {args.output_file}")
+    except Exception as e:
+        logging.error(f"Error saving output file: {e}")
+        sys.exit(1)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    if len(sys.argv) > 1 and sys.argv[1] != "runserver":
+        main_cli()
+    else:
+        app.run(debug=True)

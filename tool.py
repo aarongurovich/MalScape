@@ -5,7 +5,7 @@ from io import StringIO
 import re
 import argparse
 import networkx as nx
-import community as community_louvain 
+import community.community_louvain as community_louvain
 import numpy as np
 
 # Precompute internal subnets and their integer ranges for fast IP classification.
