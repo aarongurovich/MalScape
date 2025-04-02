@@ -41,16 +41,19 @@ def classify_ip_vector(ip):
 def parse_payload_vectorized(payload_series):
     cols = ["SourcePort", "DestinationPort", "Flags", "Seq", "Ack", "Win", "Len", "TSval", "TSecr"]
     df_extracted = pd.DataFrame(index=payload_series.index, columns=cols)
-    sp_dp_flags = payload_series.str.extract(r'^\s*:?\s*(\d+)\s*>\s*(\d+)\s*\[([^\]]+)\]', expand=True)
+    
+    # Updated regex: Accepts either '>' or '→' as the delimiter.
+    sp_dp_flags = payload_series.str.extract(r'^\s*:?\s*(\d+)\s*(?:>|→)\s*(\d+)\s*\[([^\]]+)\]', expand=True)
+    
     df_extracted["SourcePort"]      = sp_dp_flags[0]
     df_extracted["DestinationPort"] = sp_dp_flags[1]
     df_extracted["Flags"]           = sp_dp_flags[2]
-    df_extracted["Seq"]   = payload_series.str.extract(r'Seq=(\d+)',   expand=False)
-    df_extracted["Ack"]   = payload_series.str.extract(r'Ack=(\d+)',   expand=False)
-    df_extracted["Win"]   = payload_series.str.extract(r'Win=(\d+)',   expand=False)
-    df_extracted["Len"]   = payload_series.str.extract(r'Len=(\d+)',   expand=False)
-    df_extracted["TSval"] = payload_series.str.extract(r'TSval=(\d+)', expand=False)
-    df_extracted["TSecr"] = payload_series.str.extract(r'TSecr=(\d+)', expand=False)
+    df_extracted["Seq"]             = payload_series.str.extract(r'Seq=(\d+)',   expand=False)
+    df_extracted["Ack"]             = payload_series.str.extract(r'Ack=(\d+)',   expand=False)
+    df_extracted["Win"]             = payload_series.str.extract(r'Win=(\d+)',   expand=False)
+    df_extracted["Len"]             = payload_series.str.extract(r'Len=(\d+)',   expand=False)
+    df_extracted["TSval"]           = payload_series.str.extract(r'TSval=(\d+)', expand=False)
+    df_extracted["TSecr"]           = payload_series.str.extract(r'TSecr=(\d+)', expand=False)
     df_extracted.fillna("N/A", inplace=True)
     return df_extracted
 
@@ -104,15 +107,17 @@ def process_csv_to_df(csv_text):
     df["DestinationClassification"] = df["Destination"].apply(classify_ip_vector)
     
     df["ConnectionID"] = df["Source"] + ":" + df["SourcePort"].fillna("N/A") + "-" + df["Destination"] + ":" + df["DestinationPort"].fillna("N/A")
-    for col in ["Time", "Length"]:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # Convert Time column using the new format with milliseconds
+    try:
+        df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+    except Exception as e:
+        logging.error(f"Error converting Time column to datetime: {e}")
+    df["Length"] = pd.to_numeric(df["Length"], errors='coerce')
     for col in ["Seq", "Ack", "Win", "Len", "TSval", "TSecr"]:
         df[col] = pd.to_numeric(df[col], errors='coerce')
-    df["SeqDelta"] = df.groupby("ConnectionID")["Seq"].diff()
-    df["AckDelta"] = df.groupby("ConnectionID")["Ack"].diff()
-    df["IsRetransmission"] = df["SeqDelta"] == 0
-    df["TCPFlagCount"] = df["Flags"].apply(lambda x: len(str(x).split()) if pd.notnull(x) and x != "N/A" else 0)
-    df["InterArrivalTime"] = df.groupby("ConnectionID")["Time"].diff()
+    # Compute InterArrivalTime in seconds
+    df["InterArrivalTime"] = df.groupby("ConnectionID")["Time"].diff().dt.total_seconds()
     df["BytesPerSecond"] = df["Length"] / df["InterArrivalTime"]
     df["BytesPerSecond"] = df["BytesPerSecond"].replace([np.inf, -np.inf], np.nan)
     df["IsLargePacket"] = df["Length"] > 1000
@@ -278,8 +283,59 @@ def get_cluster_rows():
     total = len(df_cluster)
     start = (page - 1) * page_size
     end = start + page_size
-    rows = df_cluster.iloc[start:end].to_dict(orient="records")
+    # Replace NaN values with None so that JSON is valid
+    rows = df_cluster.iloc[start:end].replace({np.nan: None}).to_dict(orient="records")
     return jsonify({"rows": rows, "total": total})
+
+@app.route('/get_cluster_table', methods=['GET'])
+def get_cluster_table():
+    global global_df
+    if global_df is None:
+        return "<p>No data available.</p>"
+    cluster_id = request.args.get("cluster_id")
+    try:
+        page = int(request.args.get("page", 1))
+    except Exception as e:
+        logging.error(f"Error parsing page: {e}")
+        page = 1
+    try:
+        page_size = int(request.args.get("page_size", 50))
+    except Exception as e:
+        logging.error(f"Error parsing page_size: {e}")
+        page_size = 50
+
+    # Filter for the selected cluster (ensure string comparison)
+    df_cluster = global_df[global_df["ClusterID"] == str(cluster_id)]
+    total = len(df_cluster)
+    start = (page - 1) * page_size
+    end = start + page_size
+    # Replace NaN with None so that they become empty strings in HTML
+    rows = df_cluster.iloc[start:end].replace({np.nan: None}).to_dict(orient="records")
+    
+    if not rows:
+        return "<p>No rows found for this cluster.</p>"
+    
+    # Use the keys of the first row as the table columns
+    columns = list(rows[0].keys())
+    # Start building the HTML table string
+    html = "<table style='width:100%; border-collapse: collapse; border:1px solid #ddd;'>"
+    # Create table header
+    html += "<thead><tr>"
+    for col in columns:
+        html += f"<th style='padding:8px; border:1px solid #ddd; text-align:left;'>{col}</th>"
+    html += "</tr></thead>"
+    # Create table body rows
+    html += "<tbody>"
+    for row in rows:
+        html += "<tr>"
+        for col in columns:
+            cell = row[col] if row[col] is not None else ""
+            html += f"<td style='padding:8px; border:1px solid #ddd;'>{cell}</td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    # Add a simple summary with a hidden element carrying the total row count for pagination
+    html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
+    return html
 
 @app.route('/process_csv', methods=['POST'])
 def process_csv_endpoint():
@@ -293,6 +349,19 @@ def process_csv_endpoint():
     except Exception as e:
         logging.error(f"Error processing CSV: {e}")
         return jsonify({"error": str(e)}), 400
+
+# New endpoint to download the processed CSV file
+@app.route('/download_csv', methods=['GET'])
+def download_csv():
+    global global_df
+    if global_df is None:
+        return jsonify({"error": "No processed data available."}), 400
+    csv_io = StringIO()
+    global_df.to_csv(csv_io, index=False, quoting=csv.QUOTE_MINIMAL)
+    csv_io.seek(0)
+    return Response(csv_io.getvalue(), 
+                    mimetype='text/csv', 
+                    headers={'Content-Disposition': 'attachment;filename=processed.csv'})
 
 @app.route('/')
 def index():

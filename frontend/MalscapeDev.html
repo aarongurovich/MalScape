@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive Cluster Heatmap with Network Visualization</title>
+  <!-- Include D3.js and Cytoscape -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+  <style>
+    /* (Use the same styles as in your original file.) */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+      color: #333;
+      background-color: #f8f9fa;
+    }
+    body { display: flex; }
+    #main-container {
+      flex: 1;
+      padding: 24px;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    #legend-container {
+      width: 220px;
+      background-color: #fff;
+      border-left: 1px solid #e9ecef;
+      padding: 16px 12px;
+      height: 100vh;
+      overflow-y: auto;
+      box-shadow: -4px 0 8px rgba(0, 0, 0, 0.05);
+    }
+    h2 {
+      color: #2c3e50;
+      margin-top: 0;
+      margin-bottom: 24px;
+      font-size: 28px;
+      font-weight: 600;
+      border-bottom: 2px solid #4299e1;
+      padding-bottom: 8px;
+      display: inline-block;
+    }
+    h3 {
+      color: #2c3e50;
+      font-size: 16px;
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    .control-group {
+      margin-bottom: 20px;
+      padding: 16px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    label {
+      display: inline-block;
+      margin-right: 8px;
+      font-weight: 500;
+      color: #4a5568;
+    }
+    input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      margin-right: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus {
+      border-color: #4299e1;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    }
+    button {
+      background-color: #4299e1;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-right: 8px;
+    }
+    button:hover { background-color: #3182ce; }
+    #loadMoreBtn {
+      display: none;
+      margin-top: 16px;
+      background-color: #38a169;
+    }
+    #loadMoreBtn:hover { background-color: #2f855a; }
+    #cy {
+      width: 100%;
+      height: 600px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 24px;
+      background-color: #fff;
+      display: none;
+    }
+    #table-container {
+      margin-bottom: 24px;
+      border-radius: 8px;
+      background-color: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #table-container table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto;
+    }
+    #table-container th, #table-container td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #e9ecef;
+      text-align: left;
+      white-space: nowrap;
+    }
+    /* Pagination controls for table */
+    #table-pagination {
+      display: none;
+      margin-top: 8px;
+      text-align: center;
+    }
+    #table-pagination input {
+      width: 60px;
+      text-align: center;
+    }
+    #tooltip {
+      position: absolute;
+      display: none;
+      background: #fff;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #2d3748;
+      pointer-events: none;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      max-width: 300px;
+      line-height: 1.5;
+    }
+    .color-box {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      vertical-align: middle;
+      margin-right: 4px;
+      border: 1px solid #ccc;
+    }
+    #legend {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    #legend th, #legend td {
+      padding: 4px 6px;
+    }
+    #backToHeatmap {
+      margin: 20px;
+      padding: 8px 16px;
+      font-size: 14px;
+      display: none;
+    }
+    #edgeFilterPanel {
+      position: absolute;
+      top: 80px;
+      right: 40px;
+      width: 320px;
+      padding: 12px;
+      background-color: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      display: none;
+      z-index: 9999;
+    }
+    #edgeFilterPanel h4 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+    #edgeFilterPanel label {
+      display: block;
+      margin-top: 8px;
+      font-weight: 500;
+      color: #4a5568;
+    }
+    #edgeFilterPanel input {
+      margin-bottom: 8px;
+      width: 100%;
+    }
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    .spinner {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #4299e1;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    .loading-text {
+      font-size: 18px;
+      color: #333;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading, please wait...</div>
+  </div>
+  
+  <!-- Main container with controls and visualization -->
+  <div id="main-container" style="margin-top: 60px;">
+    <h2>MalScape</h2>
+    <!-- File Upload and Download Button -->
+    <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <label for="fileInput"><strong>Upload CSV File:</strong></label>
+      <input type="file" id="fileInput" accept=".csv">
+      <button id="downloadButton">Download Processed CSV File</button>
+    </div>
+
+    <!-- Heatmap & filter controls -->
+    <div class="control-group">
+      <label for="metricSelect">Metric (Measure):</label>
+      <select id="metricSelect">
+        <option value="count">Count (Number of Packets)</option>
+        <option value="Length" selected>Packet Length</option>
+        <option value="Seq">Sequence Number</option>
+        <option value="Ack">Acknowledgment Number</option>
+        <option value="Win">Window Size</option>
+        <option value="Len">Payload Length</option>
+        <option value="TSval">Timestamp Value</option>
+        <option value="TSecr">Timestamp Echo Reply</option>
+      </select>
+      <label for="payloadSearch">Search Payload Content:</label>
+      <input type="text" id="payloadSearch" placeholder="Enter keyword">
+      <label for="sourceFilter">Source IP:</label>
+      <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
+      <label for="destinationFilter">Destination IP:</label>
+      <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
+      <label for="protocolFilter">Network Protocol:</label>
+      <input type="text" id="protocolFilter" placeholder="e.g., TCP">
+      <label for="entropyMinFilter">Min Cluster Variation:</label>
+      <input type="number" id="entropyMinFilter" placeholder="e.g., 1.0" step="0.1">
+      <label for="entropyMaxFilter">Max Cluster Variation:</label>
+      <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
+      <label for="isLargePacketFilter">Show only large packets:</label>
+      <input type="checkbox" id="isLargePacketFilter">
+      <label for="isRetransmissionFilter">Show only retransmitted packets:</label>
+      <input type="checkbox" id="isRetransmissionFilter">
+      <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
+      <input type="checkbox" id="isSuspiciousAckFilter">
+    </div>
+    <!-- Heatmap container -->
+    <div id="heatmap"></div>
+    <!-- Load More button for heatmap -->
+    <button id="loadMoreBtn">Load More</button>
+    <!-- Back to Heatmap button -->
+    <button id="backToHeatmap">Back to Heatmap</button>
+    <!-- Cytoscape network visualization container -->
+    <div id="cy"></div>
+    <!-- Table container for CSV data of the selected cluster -->
+    <div id="table-container"></div>
+    <!-- Pagination controls for the cluster table -->
+    <div id="table-pagination">
+      <span>Page <input type="number" id="currentPageInput" value="1" min="1" style="width:60px;"> of <span id="totalPages">?</span></span>
+      <button id="goPageBtn">Go</button>
+    </div>
+  </div>
+  
+  <!-- Legend container -->
+  <div id="legend-container">
+    <h3>Protocol Legend</h3>
+    <table id="legend">
+      <tr>
+        <th>Protocol</th>
+        <th>Color</th>
+      </tr>
+    </table>
+  </div>
+  
+  <!-- Edge Filter Panel -->
+  <div id="edgeFilterPanel">
+    <h4>Edge Filter</h4>
+    <label for="edgeFilterSource">Source (partial ok):</label>
+    <input type="text" id="edgeFilterSource">
+    <label for="edgeFilterDestination">Destination (partial ok):</label>
+    <input type="text" id="edgeFilterDestination">
+    <label for="edgeFilterProtocol">Protocol (partial ok):</label>
+    <input type="text" id="edgeFilterProtocol">
+    <label for="edgeFilterWeight">Edge Weight (e.g. >=1000):</label>
+    <input type="text" id="edgeFilterWeight" placeholder=">=1000">
+    <label for="edgeFilterProcessCount">Process Count (e.g. >5):</label>
+    <input type="text" id="edgeFilterProcessCount" placeholder=">=5">
+    <button id="applyEdgeFilterBtn">Filter Edges</button>
+    <button id="clearEdgeFilterBtn">Clear Filter</button>
+  </div>
+  
+  <script>
+    // Global Variables
+    let pivotData = [];
+    let currentLimit = 44 * 12 + 18;
+    let protocolColorMap = {};
+    let globalCy;
+    let selectedEdges = new Set();
+    let currentClusterID = null;
+    const TABLE_PAGE_SIZE = 50;
+    
+    function showLoading() {
+      document.getElementById('loading-overlay').style.display = 'flex';
+    }
+    function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
+    }
+    
+    // Update legend based on globalData (set after CSV processing)
+    function updateLegend() {
+      const legendTable = document.getElementById('legend');
+      legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
+      if (window.globalData) {
+        let protocols = new Set();
+        window.globalData.forEach(d => {
+          if (d.Protocol) protocols.add(d.Protocol.trim());
+        });
+        Array.from(protocols).sort().forEach(protocol => {
+          if (!protocolColorMap[protocol]) {
+            protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+          }
+          const row = document.createElement('tr');
+          row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
+          legendTable.appendChild(row);
+        });
+      }
+    }
+    
+    // Fetch aggregated heatmap data from the server
+    function updateHeatmap() {
+      const metric = document.getElementById('metricSelect').value;
+      const filterParams = {
+        payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
+        sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
+        destinationFilter: document.getElementById('destinationFilter').value.trim().toLowerCase(),
+        protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
+        entropyMin: document.getElementById('entropyMinFilter').value,
+        entropyMax: document.getElementById('entropyMaxFilter').value,
+        isLargePacketOnly: document.getElementById('isLargePacketFilter').checked,
+        isRetransmissionOnly: document.getElementById('isRetransmissionFilter').checked,
+        isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
+        metric: metric
+      };
+      fetch("http://127.0.0.1:5000/filter_and_aggregate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(filterParams)
+      })
+      .then(response => response.json())
+      .then(data => {
+         pivotData = data;
+         pivotData.sort((a, b) => b.value - a.value);
+         currentLimit = 44 * 12 + 18;
+         renderHeatmap(metric);
+      })
+      .catch(error => console.error("Error fetching aggregated data:", error));
+    }
+    
+    function renderHeatmap(metric) {
+      d3.select("#heatmap").select("svg").remove();
+      const displayData = pivotData.slice(0, currentLimit);
+      const maxVal = d3.max(pivotData, d => d.value);
+      const formatNumber = d3.format(".2s");
+      const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxVal]);
+      const availableWidth = window.innerWidth - 260;
+      const cellSize = 30;
+      const numCols = Math.floor(availableWidth / cellSize);
+      const numRows = Math.ceil(displayData.length / numCols);
+      const width = numCols * cellSize + 40;
+      const height = numRows * cellSize + 40;
+      
+      const svg = d3.select("#heatmap")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+      
+      svg.selectAll("rect")
+         .data(displayData)
+         .enter()
+         .append("rect")
+         .attr("class", "cell")
+         .attr("x", (d, i) => 20 + (i % numCols) * cellSize)
+         .attr("y", (d, i) => 20 + Math.floor(i / numCols) * cellSize)
+         .attr("width", cellSize)
+         .attr("height", cellSize)
+         .attr("fill", d => colorScale(d.value))
+         .on("mouseover", function(event, d) {
+            d3.select(this).attr("stroke", "black").attr("stroke-width", 2);
+         })
+         .on("mouseout", function() {
+            d3.select(this).attr("stroke", "#fff").attr("stroke-width", 1);
+         })
+         .on("click", function(event, d) {
+            showClusterNetwork(d.cluster);
+         });
+      
+      svg.selectAll("text.cellText")
+         .data(displayData)
+         .enter()
+         .append("text")
+         .attr("class", "cellText")
+         .attr("x", (d, i) => 20 + (i % numCols) * cellSize + cellSize / 2)
+         .attr("y", (d, i) => 20 + Math.floor(i / numCols) * cellSize + cellSize / 2)
+         .attr("text-anchor", "middle")
+         .attr("alignment-baseline", "central")
+         .attr("font-size", "10px")
+         .attr("fill", d => d.value > maxVal / 2 ? "white" : "black")
+         .text(d => d.value > 0 ? formatNumber(d.value) : "");
+      
+      // The load more button is not used in pagination mode.
+      d3.select("#loadMoreBtn").style("display", "none");
+    }
+    
+    function showHeatmap() {
+      document.getElementById('cy').style.display = 'none';
+      document.getElementById('backToHeatmap').style.display = 'none';
+      document.getElementById('edgeFilterPanel').style.display = 'none';
+      document.getElementById('table-container').style.display = 'none';
+      document.getElementById('table-pagination').style.display = 'none';
+      d3.select("#heatmap").style("display", "block");
+      clearEdgeFilter();
+    }
+    document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
+    
+    // Fetch network elements from server for the selected cluster and load table using backend-generated HTML with pagination.
+    function showClusterNetwork(clusterID) {
+      currentClusterID = clusterID;
+      fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
+      .then(response => response.json())
+      .then(data => {
+         if (data.nodes.length === 0 && data.edges.length === 0) {
+             alert("No network data for this cluster.");
+             return;
+         }
+         // Combine nodes and edges arrays
+         const elementsCombined = data.nodes.concat(data.edges);
+         visualizeNetwork(elementsCombined);
+         d3.select("#heatmap").style("display", "none");
+         document.getElementById('backToHeatmap').style.display = 'inline-block';
+         createClusterTable(clusterID);
+      })
+      .catch(error => console.error("Error fetching network data:", error));
+    }
+    
+    // Load a specific page of the cluster table
+    function loadClusterTablePage(clusterID, page) {
+      fetch(`http://127.0.0.1:5000/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+      .then(response => response.text())
+      .then(html => {
+         const container = document.getElementById('table-container');
+         container.innerHTML = html;
+         // Display pagination controls
+         document.getElementById('table-pagination').style.display = 'block';
+         // Assume the backend returns a summary element with id "table-summary" and data-total attribute.
+         const summaryElem = document.getElementById('table-summary');
+         if(summaryElem) {
+             const total = parseInt(summaryElem.dataset.total);
+             const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+             document.getElementById('totalPages').textContent = totalPages;
+             document.getElementById('currentPageInput').value = page;
+         }
+      })
+      .catch(error => console.error("Error fetching cluster table:", error));
+    }
+    
+    // Create table for selected cluster (load page 1)
+    function createClusterTable(clusterID) {
+      loadClusterTablePage(clusterID, 1);
+      document.getElementById('table-container').style.display = "block";
+    }
+    
+    document.getElementById('goPageBtn').addEventListener('click', function() {
+      let page = parseInt(document.getElementById('currentPageInput').value);
+      if (page >= 1) {
+         loadClusterTablePage(currentClusterID, page);
+      }
+    });
+    
+    // Network visualization functions
+    function groupDirectedComponents(cy) {
+      let visited = new Set();
+      let groupCount = 0;
+      function randomColor(){
+        return '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+      }
+      cy.nodes().forEach(node => {
+        if (!visited.has(node.id())) {
+          groupCount++;
+          const color = randomColor();
+          let bfs = cy.elements().bfs({ roots: node, directed: true });
+          bfs.path.forEach(ele => {
+            if (ele.isNode()) {
+              visited.add(ele.id());
+              ele.data('groupID', groupCount);
+              ele.data('color', color);
+            }
+          });
+        }
+      });
+    }
+    
+    function positionGroupedComponentsTree(cy) {
+      let groupMap = {};
+      cy.nodes().forEach(n => {
+        let g = n.data('groupID') || 0;
+        if (!groupMap[g]) groupMap[g] = [];
+        groupMap[g].push(n);
+      });
+      let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
+      let groupYOffset = 0;
+      const verticalSpacingBetweenGroups = 300;
+      const levelHeight = 80;
+      const siblingSpacing = 500;
+      sortedGroups.forEach(([groupID, nodes]) => {
+        let root = nodes.reduce((prev, curr) => {
+          return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
+        }, null);
+        if (!root) return;
+        let levels = {};
+        let visited = new Set();
+        let queue = [];
+        levels[root.id()] = 0;
+        visited.add(root.id());
+        queue.push(root);
+        while (queue.length > 0) {
+          let current = queue.shift();
+          let currentLevel = levels[current.id()];
+          current.outgoers('edge').forEach(edge => {
+            let target = edge.target();
+            if (target.data('groupID') == groupID && !visited.has(target.id())) {
+              levels[target.id()] = currentLevel + 1;
+              visited.add(target.id());
+              queue.push(target);
+            }
+          });
+        }
+        let levelNodes = {};
+        nodes.forEach(n => {
+          let lvl = levels[n.id()] !== undefined ? levels[n.id()] : 0;
+          if (!levelNodes[lvl]) levelNodes[lvl] = [];
+          levelNodes[lvl].push(n);
+        });
+        Object.keys(levelNodes).forEach(lvlKey => {
+          let lvl = parseInt(lvlKey);
+          let nodesAtLevel = levelNodes[lvl];
+          nodesAtLevel.sort((a, b) => (a.data('timeIndex') || 0) - (b.data('timeIndex') || 0));
+          let totalWidth = (nodesAtLevel.length - 1) * siblingSpacing;
+          let startX = -totalWidth / 2;
+          nodesAtLevel.forEach((n, idx) => {
+            let x = startX + idx * siblingSpacing;
+            let y = groupYOffset + lvl * levelHeight;
+            n.position({x: x, y: y});
+          });
+        });
+        let maxLevel = Math.max(...Object.keys(levelNodes).map(Number));
+        groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
+      });
+    }
+    
+    function visualizeNetwork(elements) {
+      document.getElementById('cy').style.display = 'block';
+      const cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: elements,
+        layout: { name: 'preset' },
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'width': function(ele) {
+                let max = 0;
+                ele.cy().nodes().forEach(n => {
+                  let w = parseFloat(n.data('NodeWeight')) || 0;
+                  if (w > max) { max = w; }
+                });
+                let w = parseFloat(ele.data('NodeWeight')) || 0;
+                return max ? 30 + (w / max) * (150 - 30) : 30;
+              },
+              'height': function(ele) {
+                let max = 0;
+                ele.cy().nodes().forEach(n => {
+                  let w = parseFloat(n.data('NodeWeight')) || 0;
+                  if (w > max) { max = w; }
+                });
+                let w = parseFloat(ele.data('NodeWeight')) || 0;
+                return max ? 30 + (w / max) * (150 - 30) : 30;
+              },
+              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
+              'border-width': 2,
+              'border-color': '#333',
+              'content': 'data(label)',
+              'font-size': 14,
+              'color': '#000',
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'text-opacity': 1,
+              'text-outline-width': 2,
+              'text-outline-color': '#fff',
+              'shape': 'ellipse'
+            }
+          },
+          {
+            selector: 'node[Classification="Internal"]',
+            style: { 'shape': 'rectangle' }
+          },
+          {
+            selector: 'node[color]',
+            style: { 'background-color': 'data(color)' }
+          },
+          {
+            selector: 'edge',
+            style: {
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier',
+              'control-point-step-size': 30,
+              'width': 'data(normalizedWeight)',
+              'line-color': function(ele) {
+                return ele.data('edgeColor') || '#888';
+              },
+              'target-arrow-color': function(ele) {
+                return ele.data('edgeColor') || '#888';
+              },
+              'opacity': 0.8
+            }
+          },
+          {
+            selector: 'edge.selected',
+            style: {
+              'line-color': 'red',
+              'target-arrow-color': 'red',
+              'width': 4
+            }
+          }
+        ]
+      });
+      
+      globalCy = cy;
+      
+      cy.edges().forEach(edge => {
+        let protocol = edge.data('Protocol');
+        edge.data('edgeColor', protocolColorMap[protocol] || '#888');
+      });
+      
+      cy.edges().forEach(edge => {
+        if (edge.data('processCount') !== undefined) {
+          let count = parseFloat(edge.data('processCount')) || 0;
+          const maxNormalizedWeight = 12;
+          const computedWeight = 2 + (count * 1);
+          edge.data('normalizedWeight', Math.min(computedWeight, maxNormalizedWeight));
+        } else {
+          edge.data('normalizedWeight', 2);
+        }
+      });
+      
+      groupDirectedComponents(cy);
+      positionGroupedComponentsTree(cy);
+      
+      cy.on('mouseover', 'node,edge', (evt) => {
+        let t = evt.target;
+        let px = evt.originalEvent.pageX;
+        let py = evt.originalEvent.pageY;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (px + 10) + 'px';
+        tooltip.style.top = (py + 10) + 'px';
+        if (t.isNode()) {
+          tooltip.innerHTML = `<strong>Node IP:</strong> ${t.id()}<br>
+                               <strong>Classification:</strong> ${t.data('Classification')}<br>
+                               <strong>Group:</strong> ${t.data('groupID') || 'N/A'}<br>`;
+        } else {
+          let arr = t.data('csvIndices') || [];
+          tooltip.innerHTML = `<strong>Edge:</strong><br>
+                               From: ${t.data('source')}<br>
+                               To: ${t.data('target')}<br>
+                               Protocol: ${t.data('Protocol')}<br>
+                               Rows: ${arr.length}<br>
+                               Weight: ${t.data('EdgeWeight')}`;
+        }
+      });
+      
+      cy.on('mouseout', 'node,edge', () => {
+        tooltip.style.display = 'none';
+      });
+      
+      cy.on('click', 'edge', (evt) => {
+        let edge = evt.target;
+        if (evt.originalEvent.shiftKey) {
+          let groupID = edge.source().data('groupID');
+          if (groupID !== undefined) {
+            cy.edges().forEach(e => {
+              if (e.source().data('groupID') === groupID &&
+                  e.target().data('groupID') === groupID) {
+                let indices = e.data('csvIndices') || [];
+                indices.forEach(idx => selectedEdges.add(idx));
+                e.addClass('selected');
+              }
+            });
+          }
+        } else {
+          let indices = edge.data('csvIndices') || [];
+          if (!indices.length) return;
+          let allSelected = indices.every(idx => selectedEdges.has(idx));
+          if (allSelected) {
+            indices.forEach(idx => selectedEdges.delete(idx));
+            edge.removeClass('selected');
+          } else {
+            indices.forEach(idx => selectedEdges.add(idx));
+            edge.addClass('selected');
+          }
+        }
+        showEdgeFilterPanel(edge.data());
+      });
+    }
+    
+    function showEdgeFilterPanel(edgeData) {
+      document.getElementById('edgeFilterSource').value = edgeData.source || "";
+      document.getElementById('edgeFilterDestination').value = edgeData.target || "";
+      document.getElementById('edgeFilterProtocol').value = edgeData.Protocol || "";
+      document.getElementById('edgeFilterWeight').value = "";
+      document.getElementById('edgeFilterProcessCount').value = "";
+      const panel = document.getElementById('edgeFilterPanel');
+      panel.style.display = 'block';
+    }
+    
+    function clearEdgeFilter() {
+      if (!globalCy) return;
+      globalCy.edges().forEach(e => e.show());
+      document.getElementById('edgeFilterSource').value = "";
+      document.getElementById('edgeFilterDestination').value = "";
+      document.getElementById('edgeFilterProtocol').value = "";
+      document.getElementById('edgeFilterWeight').value = "";
+      document.getElementById('edgeFilterProcessCount').value = "";
+      document.getElementById('edgeFilterPanel').style.display = 'none';
+    }
+    
+    function applyEdgeFilter() {
+      if (!globalCy) return;
+      let fSource = document.getElementById('edgeFilterSource').value.trim().toLowerCase();
+      let fDest = document.getElementById('edgeFilterDestination').value.trim().toLowerCase();
+      let fProto = document.getElementById('edgeFilterProtocol').value.trim().toLowerCase();
+      let fWeight = document.getElementById('edgeFilterWeight').value.trim();
+      let fProcessCount = document.getElementById('edgeFilterProcessCount').value.trim();
+      
+      globalCy.edges().forEach(e => {
+        let d = e.data();
+        let keep = true;
+        if (fSource && !d.source.toLowerCase().includes(fSource)) keep = false;
+        if (fDest && !d.target.toLowerCase().includes(fDest)) keep = false;
+        if (fProto && !d.Protocol.toLowerCase().includes(fProto)) keep = false;
+        if (fWeight) {
+          let parsed = parseNumericExpression(fWeight);
+          if (parsed) {
+            const edgeVal = d.EdgeWeight || 0;
+            switch (parsed.operator) {
+              case '>':  if (!(edgeVal > parsed.number))  keep = false; break;
+              case '>=': if (!(edgeVal >= parsed.number)) keep = false; break;
+              case '<':  if (!(edgeVal < parsed.number))  keep = false; break;
+              case '<=': if (!(edgeVal <= parsed.number)) keep = false; break;
+              case '==': if (edgeVal !== parsed.number)   keep = false; break;
+              default: break;
+            }
+          }
+        }
+        if (fProcessCount) {
+          let parsedCount = parseNumericExpression(fProcessCount);
+          if (parsedCount) {
+            const countVal = d.processCount || 0;
+            switch (parsedCount.operator) {
+              case '>':  if (!(countVal > parsedCount.number))  keep = false; break;
+              case '>=': if (!(countVal >= parsedCount.number)) keep = false; break;
+              case '<':  if (!(countVal < parsedCount.number))  keep = false; break;
+              case '<=': if (!(countVal <= parsedCount.number)) keep = false; break;
+              case '==': if (countVal !== parsedCount.number)     keep = false; break;
+              default: break;
+            }
+          }
+        }
+        if (keep) e.show(); else e.hide();
+      });
+    }
+    
+    document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
+    document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
+    
+    function parseNumericExpression(value) {
+      const match = value.match(/^(\>=|\<=|>|<)\s*(\d+(?:\.\d+)?)$/);
+      if (match) {
+        return { operator: match[1], number: parseFloat(match[2]) };
+      }
+      const justNum = parseFloat(value);
+      if (!isNaN(justNum) && value.trim() !== "") {
+        return { operator: '==', number: justNum };
+      }
+      return null;
+    }
+    
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        showLoading();
+        const csvText = e.target.result;
+        fetch("http://127.0.0.1:5000/process_csv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csv_text: csvText })
+        })
+        .then(response => response.text())
+        .then(processedText => {
+          try {
+            window.globalData = d3.csvParse(processedText, d3.autoType);
+            updateLegend();
+            updateHeatmap();
+          } catch (error) {
+            console.error("Error parsing processed CSV:", error);
+          } finally {
+            hideLoading();
+          }
+        })
+        .catch(error => {
+          console.error("Error processing CSV on server:", error);
+          hideLoading();
+        });
+      };
+      reader.readAsText(file);
+    });
+    
+    // Add event listener to the download button
+    document.getElementById("downloadButton").addEventListener("click", function() {
+      // Redirect to the download endpoint so the browser downloads the processed CSV
+      window.location.href = "http://127.0.0.1:5000/download_csv";
+    });
+    
+    const tooltip = document.createElement('div');
+    tooltip.id = 'tooltip';
+    document.body.appendChild(tooltip);
+    
+    const filterIds = [
+      'metricSelect','payloadSearch','sourceFilter','destinationFilter',
+      'protocolFilter','entropyMinFilter','entropyMaxFilter',
+      'isLargePacketFilter','isRetransmissionFilter','isSuspiciousAckFilter'
+    ];
+    filterIds.forEach(id => {
+      document.getElementById(id).addEventListener('input', updateHeatmap);
+      document.getElementById(id).addEventListener('change', updateHeatmap);
+    });
+  </script> 
+</body>
+</html>

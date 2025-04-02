@@ -1,5 +1,3 @@
-phishing.csv
-processed.csv
+csvs/
 Day 1/
-processedPhishing.csv
-no_precursor_client_compromise_exfil_sams_launch_v.csv
+unused_csvs/
