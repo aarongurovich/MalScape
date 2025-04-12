@@ -461,7 +461,7 @@
       const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
       const heatmapData = dataByMetric.map(({ metric, pivotData }) => ({
         metric,
-        values: [...pivotData].sort(comparator).slice(0, 550)
+        values: [...pivotData].sort(comparator).slice(0, 700)
       }));
       
       // Compute maximum number of columns among all metrics rows
