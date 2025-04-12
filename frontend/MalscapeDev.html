@@ -29,7 +29,11 @@
       height: 100vh;
       overflow-y: auto;
     }
-    
+    /* Set consistent width for node and edge size input fields */
+    #nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax {
+      width: 200px;
+    }
+
     /* Legend container styles on the side */
     #legend-container {
       width: 220px;
@@ -308,9 +312,17 @@
       <label for="protocolFilter">Network Protocol:</label>
       <input type="text" id="protocolFilter" placeholder="e.g., TCP">
       <label for="entropyMinFilter">Min Cluster Variation:</label>
-      <input type="number" id="entropyMinFilter" placeholder="e.g., 1.0" step="0.1">
+      <input type="number" id="entropyMinFilter"  placeholder="e.g., 1.0" step="0.1">
       <label for="entropyMaxFilter">Max Cluster Variation:</label>
       <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
+      <label for="edgeWidthMax">Max Edge Width:</label>
+      <input type="number" id="edgeWidthMax" placeholder="e.g., 12 (maximum)" step="1" min="2" max="12">
+      <label for="edgeWidthMin">Min Edge Width:</label>
+      <input type="number" id="edgeWidthMin" placeholder="e.g., 2 (minimum)" step="1" min="2" max="12">
+      <label for="nodeSizeMin">Min Node Size:</label>
+      <input type="number" id="nodeSizeMin" placeholder="e.g., 15 (minimum)" step="1" min="15" max="50">
+      <label for="nodeSizeMax">Max Node Size:</label>
+      <input type="number" id="nodeSizeMax" placeholder="e.g., 50 (maximum)" step="1" min="15" max="50">
       <label for="isLargePacketFilter">Show only large packets:</label>
       <input type="checkbox" id="isLargePacketFilter">
       <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
@@ -322,6 +334,8 @@
     <button id="loadMoreBtn">Load More</button>
     <!-- Back to Heatmap button: lets you return from the network view -->
     <button id="backToHeatmap">Back to Heatmap</button>
+    <!-- Refresh cluster -->
+    <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
     <!-- Cytoscape network visualization container -->
     <div id="cy"></div>
     <!-- Table container for CSV data of the selected cluster -->
@@ -591,6 +605,7 @@
       document.getElementById('edgeFilterPanel').style.display = 'none';
       document.getElementById('table-container').style.display = 'none';
       document.getElementById('table-pagination').style.display = 'none';
+      document.getElementById('refreshNetworkBtn').style.display = 'none';
       d3.select("#heatmap").style("display", "block");
       clearEdgeFilter();
     }
@@ -610,6 +625,7 @@
           visualizeNetwork(elementsCombined);
           d3.select("#heatmap").style("display", "none");
           document.getElementById('backToHeatmap').style.display = 'inline-block';
+          document.getElementById('refreshNetworkBtn').style.display = 'inline-block';
           createClusterTable(clusterID);
           document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
         })
@@ -821,9 +837,10 @@
       cy.edges().forEach(edge => {
         if (edge.data('processCount') !== undefined) {
           let count = parseFloat(edge.data('processCount')) || 0;
-          const maxNormalizedWeight = 12;
+          const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
+          const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
           const computedWeight = 2 + (count * 1);
-          edge.data('normalizedWeight', Math.min(computedWeight, maxNormalizedWeight));
+          edge.data('normalizedWeight', Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight));
         } else {
           edge.data('normalizedWeight', 2);
         }
@@ -1015,6 +1032,13 @@
     // Download button just sends the browser to our download endpoint
     document.getElementById("downloadButton").addEventListener("click", function() {
       window.location.href = "http://127.0.0.1:5000/download_csv";
+    });
+
+    // Cluster refresh button
+    document.getElementById("refreshNetworkBtn").addEventListener("click", function() {
+      if (currentClusterID && window.globalData) {
+        showClusterNetwork(currentClusterID);
+      }
     });
     
     // Create a tooltip element that will be used for hover details on the heatmap and network
