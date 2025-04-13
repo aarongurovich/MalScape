@@ -130,7 +130,7 @@
       background-color: #fff;
       display: none;
     }
-    
+
     /* Table container for CSV data, initially hidden */
     #table-container {
       margin-bottom: 24px;
@@ -281,51 +281,54 @@
   <div id="main-container" style="margin-top: 60px;">
     <h2>MalScape</h2>
     <!-- File Upload and Download Button (for CSV file input/output) -->
-    <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-      <label for="fileInput"><strong>Upload CSV File:</strong></label>
-      <input type="file" id="fileInput" accept=".csv">
-      <button id="downloadButton">Download Processed CSV File</button>
-    </div>
-
-    <!-- Heatmap & filter controls section -->
-    <div class="control-group">
-      <!-- These controls let you choose how to order and filter the heatmap rows -->
-      <label for="rowOrderSelect">Order Cells in Each Row By:</label>
-      <select id="rowOrderSelect">
-        <option value="descending">Descending (by value)</option>
-        <option value="ascending">Ascending (by value)</option>
-      </select>
-      <label for="minSourceAmtFilter">Min Unique Sources:</label>
-      <input type="number" id="minSourceAmtFilter" placeholder="e.g., 1" step="1">
-      <label for="maxSourceAmtFilter">Max Unique Sources:</label>
-      <input type="number" id="maxSourceAmtFilter" placeholder="e.g., 100" step="1">
-      <label for="minDestinationAmtFilter">Min Unique Destinations:</label>
-      <input type="number" id="minDestinationAmtFilter" placeholder="e.g., 1" step="1">
-      <label for="maxDestinationAmtFilter">Max Unique Destinations:</label>
-      <input type="number" id="maxDestinationAmtFilter" placeholder="e.g., 100" step="1">
-      <label for="payloadSearch">Search Payload Content:</label>
-      <input type="text" id="payloadSearch" placeholder="Enter keyword">
-      <label for="sourceFilter">Source IP:</label>
-      <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
-      <label for="destinationFilter">Destination IP:</label>
-      <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
-      <label for="protocolFilter">Network Protocol:</label>
-      <input type="text" id="protocolFilter" placeholder="e.g., TCP">
-      <label for="entropyMinFilter">Min Cluster Variation:</label>
-      <input type="number" id="entropyMinFilter"  placeholder="e.g., 1.0" step="0.1">
-      <label for="entropyMaxFilter">Max Cluster Variation:</label>
-      <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
-      <label for="isLargePacketFilter">Show only large packets:</label>
-      <input type="checkbox" id="isLargePacketFilter">
-      <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
-      <input type="checkbox" id="isSuspiciousAckFilter">
+    <div id="topControls">
+      <!-- File Upload and Download Button (for CSV file input/output) -->
+      <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <label for="fileInput"><strong>Upload CSV File:</strong></label>
+        <input type="file" id="fileInput" accept=".csv">
+        <button id="downloadButton">Download Processed CSV File</button>
+      </div>
+    
+      <!-- Heatmap & filter controls section -->
+      <div class="control-group">
+        <!-- These controls let you choose how to order and filter the heatmap rows -->
+        <label for="rowOrderSelect">Order Cells in Each Row By:</label>
+        <select id="rowOrderSelect">
+          <option value="descending">Descending (by value)</option>
+          <option value="ascending">Ascending (by value)</option>
+        </select>
+        <label for="minSourceAmtFilter">Min Unique Sources:</label>
+        <input type="number" id="minSourceAmtFilter" placeholder="e.g., 1" step="1">
+        <label for="maxSourceAmtFilter">Max Unique Sources:</label>
+        <input type="number" id="maxSourceAmtFilter" placeholder="e.g., 100" step="1">
+        <label for="minDestinationAmtFilter">Min Unique Destinations:</label>
+        <input type="number" id="minDestinationAmtFilter" placeholder="e.g., 1" step="1">
+        <label for="maxDestinationAmtFilter">Max Unique Destinations:</label>
+        <input type="number" id="maxDestinationAmtFilter" placeholder="e.g., 100" step="1">
+        <label for="payloadSearch">Search Payload Content:</label>
+        <input type="text" id="payloadSearch" placeholder="Enter keyword">
+        <label for="sourceFilter">Source IP:</label>
+        <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
+        <label for="destinationFilter">Destination IP:</label>
+        <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
+        <label for="protocolFilter">Network Protocol:</label>
+        <input type="text" id="protocolFilter" placeholder="e.g., TCP">
+        <label for="entropyMinFilter">Min Cluster Variation:</label>
+        <input type="number" id="entropyMinFilter"  placeholder="e.g., 1.0" step="0.1">
+        <label for="entropyMaxFilter">Max Cluster Variation:</label>
+        <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
+        <label for="isLargePacketFilter">Show only large packets:</label>
+        <input type="checkbox" id="isLargePacketFilter">
+        <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
+        <input type="checkbox" id="isSuspiciousAckFilter">
+      </div>
     </div>
 
     <div id="sizeControls" style="display: none; margin-top: 16px;">
-    <label for="edgeWidthMax">Max Edge Width:</label>
-    <input type="number" id="edgeWidthMax" placeholder="e.g., 12 (maximum)" step="1" min="2" max="12">
     <label for="edgeWidthMin">Min Edge Width:</label>
-    <input type="number" id="edgeWidthMin" placeholder="e.g., 2 (minimum)" step="1" min="2" max="12">
+    <input type="number" id="edgeWidthMin" placeholder="e.g., 2" step="1" min="1">
+    <label for="edgeWidthMax">Max Edge Width:</label>
+    <input type="number" id="edgeWidthMax" placeholder="e.g., 12" step="1" min="1">
     <label for="nodeSizeMin">Min Node Size:</label>
     <input type="number" id="nodeSizeMin" placeholder="e.g., 15" step="1" min="1">
     <label for="nodeSizeMax">Max Node Size:</label>
@@ -342,6 +345,13 @@
     <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
     <!-- Cytoscape network visualization container -->
     <div id="cy"></div>
+
+    <!-- Search bar to filter by Payload (client-side only) -->
+    <div id="table-search-container" style="display:none; margin-bottom: 12px;">
+      <label for="tableSearchInput"><strong>Search Payload:</strong></label>
+      <input type="text" id="tableSearchInput" placeholder="Enter keyword..." style="padding: 6px 10px; width: 250px;">
+    </div>
+
     <!-- Table container for CSV data of the selected cluster -->
     <div id="table-container"></div>
     <!-- Pagination controls for the CSV data table -->
@@ -606,38 +616,41 @@
     
     // Show the heatmap view and hide other panels (network/table)
     function showHeatmap() {
-      document.getElementById('cy').style.display = 'none';
-      document.getElementById('backToHeatmap').style.display = 'none';
-      document.getElementById('edgeFilterPanel').style.display = 'none';
-      document.getElementById('table-container').style.display = 'none';
-      document.getElementById('table-pagination').style.display = 'none';
-      document.getElementById('refreshNetworkBtn').style.display = 'none';
-      document.getElementById('sizeControls').style.display = 'none';
-      d3.select("#heatmap").style("display", "block");
-      clearEdgeFilter();
-    }
+    document.getElementById('cy').style.display = 'none';
+    document.getElementById('backToHeatmap').style.display = 'none';
+    document.getElementById('edgeFilterPanel').style.display = 'none';
+    document.getElementById('table-container').style.display = 'none';
+    document.getElementById('table-pagination').style.display = 'none';
+    document.getElementById('refreshNetworkBtn').style.display = 'none';
+    document.getElementById('sizeControls').style.display = 'none';
+    document.getElementById('table-search-container').style.display = "none";
+    document.getElementById('topControls').style.display = 'block'; // ✅ SHOW top controls
+    d3.select("#heatmap").style("display", "block");
+    clearEdgeFilter();
+  }
     document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
     
     // When a cluster is selected, fetch its network data from the server and show it
     function showClusterNetwork(clusterID) {
-      currentClusterID = clusterID;
-      fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
-        .then(response => response.json())
-        .then(data => {
-          if (data.nodes.length === 0 && data.edges.length === 0) {
-            alert("No network data for this cluster.");
-            return;
-          }
-          const elementsCombined = data.nodes.concat(data.edges);
-          visualizeNetwork(elementsCombined);
-          d3.select("#heatmap").style("display", "none");
-          document.getElementById('backToHeatmap').style.display = 'inline-block';
-          document.getElementById('refreshNetworkBtn').style.display = 'inline-block';
-          createClusterTable(clusterID);
-          document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
-        })
-        .catch(error => console.error("Error fetching network data:", error));
-    }
+    currentClusterID = clusterID;
+    fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
+      .then(response => response.json())
+      .then(data => {
+        if (data.nodes.length === 0 && data.edges.length === 0) {
+          alert("No network data for this cluster.");
+          return;
+        }
+        const elementsCombined = data.nodes.concat(data.edges);
+        visualizeNetwork(elementsCombined);
+        d3.select("#heatmap").style("display", "none");
+        document.getElementById('backToHeatmap').style.display = 'inline-block';
+        document.getElementById('refreshNetworkBtn').style.display = 'inline-block';
+        document.getElementById('topControls').style.display = 'none'; // 🔴 HIDE top controls
+        createClusterTable(clusterID);
+        document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      })
+      .catch(error => console.error("Error fetching network data:", error));
+  }
     
     // Load a page of cluster data table using pagination
     function loadClusterTablePage(clusterID, page) {
@@ -662,6 +675,7 @@
     function createClusterTable(clusterID) {
       loadClusterTablePage(clusterID, 1);
       document.getElementById('table-container').style.display = "block";
+      document.getElementById('table-search-container').style.display = "block";
     }
     
     // Pagination button to navigate to a specified page
@@ -1134,6 +1148,19 @@
           d3.select("#exploreClusterBtn").remove();
         }
       }
+    });
+
+    // Payload search filter for the displayed table
+    document.getElementById('tableSearchInput').addEventListener('input', function () {
+      const query = this.value.trim().toLowerCase();
+      const rows = document.querySelectorAll('#table-container table tbody tr');
+
+      rows.forEach(row => {
+        const match = Array.from(row.cells).some(cell =>
+          cell.textContent.toLowerCase().includes(query)
+        );
+        row.style.display = match ? "" : "none";
+      });
     });
     
   </script> 
