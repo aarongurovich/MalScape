@@ -736,9 +736,9 @@
       });
       let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
       let groupYOffset = 0;
-      const verticalSpacingBetweenGroups = 300;
-      const levelHeight = 80;
-      const siblingSpacing = 500;
+      const verticalSpacingBetweenGroups = 200;
+      const levelHeight = 130;
+      const siblingSpacing = 200;
       sortedGroups.forEach(([groupID, nodes]) => {
         let root = nodes.reduce((prev, curr) => {
           return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
@@ -871,7 +871,7 @@
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
               'control-point-step-size': 30,
-              'width': 'data(normalizedWeight)',
+              'width': 'data(normalizedWidth)',
               'line-color': function(ele) {
                 return ele.data('edgeColor') || '#888';
               },
@@ -886,7 +886,8 @@
             style: {
               'line-color': 'red',
               'target-arrow-color': 'red',
-              'width': 4
+              'opacity': 1,
+              'z-index': 9999
             }
           }
         ]
@@ -895,23 +896,27 @@
       globalCy = cy;
       
       // Assign colors to edges based on protocol
+      // Avoids red since selected edges are red
       cy.edges().forEach(edge => {
         let protocol = edge.data('Protocol');
-        edge.data('edgeColor', protocolColorMap[protocol] || '#888');
+        let color = protocolColorMap[protocol] || '#888';
+        if (/^#?f{2}0000$/i.test(color) || color.toLowerCase() === 'red') {
+          color = '#880000'; // dark red alternative, or just pick a safe one
+        }
+        edge.data('edgeColor', color);
       });
       
       // Calculate normalized edge widths based on process count
       cy.edges().forEach(edge => {
-        if (edge.data('processCount') !== undefined) {
-          let count = parseFloat(edge.data('processCount')) || 0;
-          const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
-          const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
-          const computedWeight = 2 + (count * 1);
-          edge.data('normalizedWeight', Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight));
-        } else {
-          edge.data('normalizedWeight', 2);
-        }
-      });
+      let count = parseFloat(edge.data('processCount')) || 0;
+      const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
+      const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
+      const computedWeight = 2 + (count * 1);
+      const clamped = Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight);
+      
+      edge.data('normalizedWeight', clamped);     // legacy (can remove later)
+      edge.data('normalizedWidth', clamped);      //  for rendering
+    });
       
       // Group components and position them in a tree layout
       groupDirectedComponents(cy);
@@ -948,31 +953,69 @@
       // On edge click: support selecting edges (with shift for group selection)
       cy.on('click', 'edge', (evt) => {
       const edge = evt.target;
-      const source = edge.data('source');
-      const destination = edge.data('target');
-      const protocol = edge.data('Protocol');
-      const pageSize = 50;
-      const page = 1;
+      const edgeId = edge.id();
 
-      fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${pageSize}`)
-        .then(res => res.text())
-        .then(html => {
-          const container = document.getElementById('table-container');
-          container.innerHTML = html;
-          container.style.display = 'block';
-          document.getElementById('table-pagination').style.display = 'block';
+      // Toggle selection state
+      if (selectedEdges.has(edgeId)) {
+      selectedEdges.delete(edgeId);
+      edge.removeClass('selected');
+      edge.data('normalizedWidth', edge.data('originalWidth'));  //  restore width
+    } else {
+      selectedEdges.add(edgeId);
+      edge.data('originalWidth', edge.data('normalizedWidth'));  //  save current width
+      edge.data('normalizedWidth', edge.data('normalizedWidth')); // lock width
+      edge.addClass('selected');
+    }
 
-          const summaryElem = document.getElementById('table-summary');
-          if (summaryElem) {
-            const total = parseInt(summaryElem.dataset.total);
-            const totalPages = Math.ceil(total / pageSize);
-            document.getElementById('totalPages').textContent = totalPages;
-            document.getElementById('currentPageInput').value = page;
-          }
+      // Update the table based on all selected edges
+      const selectedEdgeData = Array.from(selectedEdges).map(id => {
+        const e = cy.getElementById(id);
+        return {
+          source: e.data('source'),
+          destination: e.data('target'),
+          protocol: e.data('Protocol')
+        };
+      });
 
-          // Save current edge filter globally to use in pagination
-          window.edgeFilterState = { source, destination, protocol };
-        });
+      if (selectedEdgeData.length === 0) {
+      // No selected edges: show full cluster table
+      if (currentClusterID) {
+        loadClusterTablePage(currentClusterID, 1);
+        document.getElementById('table-container').style.display = 'block';
+        document.getElementById('table-pagination').style.display = 'block';
+        window.edgeFilterState = null;
+      }
+      return;
+    }
+
+      // Build query string for selected edges
+      fetch("http://127.0.0.1:5000/get_multi_edge_table", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          edges: selectedEdgeData,
+          page: 1,
+          page_size: 50
+        })
+      })
+      .then(res => res.text())
+      .then(html => {
+        const container = document.getElementById('table-container');
+        container.innerHTML = html;
+        container.style.display = 'block';
+        document.getElementById('table-pagination').style.display = 'block';
+
+        const summaryElem = document.getElementById('table-summary');
+        if (summaryElem) {
+          const total = parseInt(summaryElem.dataset.total);
+          const totalPages = Math.ceil(total / 50);
+          document.getElementById('totalPages').textContent = totalPages;
+          document.getElementById('currentPageInput').value = 1;
+        }
+
+        // Save for pagination
+        window.edgeFilterState = selectedEdgeData;
+      });
     });
     }
     
