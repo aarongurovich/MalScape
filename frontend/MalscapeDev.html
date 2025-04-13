@@ -665,13 +665,30 @@
     }
     
     // Pagination button to navigate to a specified page
-    document.getElementById('goPageBtn').addEventListener('click', function() {
-      let page = parseInt(document.getElementById('currentPageInput').value);
-      if (page >= 1) {
-         loadClusterTablePage(currentClusterID, page);
+    document.getElementById('goPageBtn').addEventListener('click', function () {
+    let page = parseInt(document.getElementById('currentPageInput').value);
+    if (page >= 1) {
+      if (window.edgeFilterState) {
+        const { source, destination, protocol } = window.edgeFilterState;
+        fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+          .then(res => res.text())
+          .then(html => {
+            const container = document.getElementById('table-container');
+            container.innerHTML = html;
+            const summaryElem = document.getElementById('table-summary');
+            if (summaryElem) {
+              const total = parseInt(summaryElem.dataset.total);
+              const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+              document.getElementById('totalPages').textContent = totalPages;
+              document.getElementById('currentPageInput').value = page;
+            }
+          });
+      } else if (currentClusterID) {
+        loadClusterTablePage(currentClusterID, page);
       }
-    });
-    
+    }
+  });
+
     // Group nodes into directed components in the network using BFS
     function groupDirectedComponents(cy) {
       let visited = new Set();
@@ -916,33 +933,33 @@
       
       // On edge click: support selecting edges (with shift for group selection)
       cy.on('click', 'edge', (evt) => {
-        let edge = evt.target;
-        if (evt.originalEvent.shiftKey) {
-          let groupID = edge.source().data('groupID');
-          if (groupID !== undefined) {
-            cy.edges().forEach(e => {
-              if (e.source().data('groupID') === groupID &&
-                  e.target().data('groupID') === groupID) {
-                let indices = e.data('csvIndices') || [];
-                indices.forEach(idx => selectedEdges.add(idx));
-                e.addClass('selected');
-              }
-            });
+      const edge = evt.target;
+      const source = edge.data('source');
+      const destination = edge.data('target');
+      const protocol = edge.data('Protocol');
+      const pageSize = 50;
+      const page = 1;
+
+      fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${pageSize}`)
+        .then(res => res.text())
+        .then(html => {
+          const container = document.getElementById('table-container');
+          container.innerHTML = html;
+          container.style.display = 'block';
+          document.getElementById('table-pagination').style.display = 'block';
+
+          const summaryElem = document.getElementById('table-summary');
+          if (summaryElem) {
+            const total = parseInt(summaryElem.dataset.total);
+            const totalPages = Math.ceil(total / pageSize);
+            document.getElementById('totalPages').textContent = totalPages;
+            document.getElementById('currentPageInput').value = page;
           }
-        } else {
-          let indices = edge.data('csvIndices') || [];
-          if (!indices.length) return;
-          let allSelected = indices.every(idx => selectedEdges.has(idx));
-          if (allSelected) {
-            indices.forEach(idx => selectedEdges.delete(idx));
-            edge.removeClass('selected');
-          } else {
-            indices.forEach(idx => selectedEdges.add(idx));
-            edge.addClass('selected');
-          }
-        }
-        showEdgeFilterPanel(edge.data());
-      });
+
+          // Save current edge filter globally to use in pagination
+          window.edgeFilterState = { source, destination, protocol };
+        });
+    });
     }
     
     // Show the edge filter panel and prefill with the edge's data

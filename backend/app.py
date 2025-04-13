@@ -440,6 +440,55 @@ def download_csv():
 def index():
     return send_from_directory('static', 'index.html')
 
+@app.route('/get_edge_table', methods=['GET'])
+def get_edge_table():
+    global global_df
+    if global_df is None:
+        return "<p>No data available.</p>"
+
+    source = request.args.get("source")
+    destination = request.args.get("destination")
+    protocol = request.args.get("protocol")
+
+    try:
+        page = int(request.args.get("page", 1))
+    except:
+        page = 1
+    try:
+        page_size = int(request.args.get("page_size", 50))
+    except:
+        page_size = 50
+
+    df_filtered = global_df[
+        (global_df["Source"] == source) & 
+        (global_df["Destination"] == destination) & 
+        (global_df["Protocol"] == protocol)
+    ]
+
+    total = len(df_filtered)
+    start = (page - 1) * page_size
+    end = start + page_size
+    rows = df_filtered.iloc[start:end].replace({np.nan: None}).to_dict(orient="records")
+
+    if not rows:
+        return "<p>No rows found for this edge.</p>"
+
+    columns = list(rows[0].keys())
+    html = "<table style='width:100%; border-collapse: collapse; border:1px solid #ddd;'>"
+    html += "<thead><tr>"
+    for col in columns:
+        html += f"<th style='padding:8px; border:1px solid #ddd; text-align:left;'>{col}</th>"
+    html += "</tr></thead><tbody>"
+    for row in rows:
+        html += "<tr>"
+        for col in columns:
+            val = row[col] if row[col] is not None else ""
+            html += f"<td style='padding:8px; border:1px solid #ddd;'>{val}</td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
+    return html
+
 # Main CLI function to process a CSV file from the command line and save the output
 def main_cli():
     parser = argparse.ArgumentParser(description="Process CSV files for network traffic analysis.")
