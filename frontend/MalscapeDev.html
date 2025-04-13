@@ -1150,16 +1150,26 @@
       }
     });
 
-    // Payload search filter for the displayed table
+    // Payload search filter (only filters Payload column)
     document.getElementById('tableSearchInput').addEventListener('input', function () {
       const query = this.value.trim().toLowerCase();
       const rows = document.querySelectorAll('#table-container table tbody tr');
+      const headerCells = document.querySelectorAll('#table-container table thead th');
+      let payloadIndex = -1;
+
+      // Find index of the Payload column
+      headerCells.forEach((th, idx) => {
+        if (th.textContent.trim().toLowerCase() === 'payload') {
+          payloadIndex = idx;
+        }
+      });
+
+      if (payloadIndex === -1) return; // Do nothing if column not found
 
       rows.forEach(row => {
-        const match = Array.from(row.cells).some(cell =>
-          cell.textContent.toLowerCase().includes(query)
-        );
-        row.style.display = match ? "" : "none";
+        const cell = row.cells[payloadIndex];
+        const text = cell ? cell.textContent.toLowerCase() : '';
+        row.style.display = text.includes(query) ? '' : 'none';
       });
     });
     
