@@ -158,6 +158,20 @@ def process_csv_to_df(csv_text):
     
     return df
 
+def convert_nan_to_none(obj):
+    """
+    Recursively converts any np.nan (or float('nan')) found in dicts or lists to None.
+    """
+    if isinstance(obj, dict):
+        return {k: convert_nan_to_none(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_nan_to_none(item) for item in obj]
+    elif isinstance(obj, float) and np.isnan(obj):
+        return None
+    else:
+        return obj
+    
+
 # Convert the processed DataFrame back to CSV text for output
 def process_csv(csv_text):
     df = process_csv_to_df(csv_text)
@@ -288,12 +302,14 @@ def cluster_network():
         source = str(row.get("Source", "")).strip()
         destination = str(row.get("Destination", "")).strip()
         protocol = str(row.get("Protocol", "")).strip()
-        # Skip if either the source, destination, or protocol are missing
+        # Skip if any required field is missing
         if not source or not destination or not protocol:
             continue
         # Ensure classification is set; compute if not already in the row
         let_source_class = row.get("SourceClassification") or classify_ip_vector(source)
         let_destination_class = row.get("DestinationClassification") or classify_ip_vector(destination)
+        
+        # Create node entry for the source
         if source not in nodes:
             nodes[source] = {
                 "data": {
@@ -303,6 +319,7 @@ def cluster_network():
                     "NodeWeight": row.get("NodeWeight", 0)
                 }
             }
+        # Create node entry for the destination
         if destination not in nodes:
             nodes[destination] = {
                 "data": {
@@ -331,7 +348,10 @@ def cluster_network():
             length = 0
         edges[edge_key]["data"]["EdgeWeight"] += length
         edges[edge_key]["data"]["processCount"] += 1
-    return jsonify({"nodes": list(nodes.values()), "edges": list(edges.values())})
+
+    # Prepare the data and convert NaN values before sending the JSON response
+    network_data = {"nodes": list(nodes.values()), "edges": list(edges.values())}
+    return jsonify(convert_nan_to_none(network_data))
 
 # Endpoint to return rows of a cluster in JSON format (used for pagination)
 @app.route('/get_cluster_rows', methods=['GET'])
