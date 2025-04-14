@@ -29,7 +29,11 @@
       height: 100vh;
       overflow-y: auto;
     }
-    
+    /* Set consistent width for node and edge size input fields */
+    #nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax {
+      width: 200px;
+    }
+
     /* Legend container styles on the side */
     #legend-container {
       width: 220px;
@@ -126,7 +130,7 @@
       background-color: #fff;
       display: none;
     }
-    
+
     /* Table container for CSV data, initially hidden */
     #table-container {
       margin-bottom: 24px;
@@ -277,53 +281,77 @@
   <div id="main-container" style="margin-top: 60px;">
     <h2>MalScape</h2>
     <!-- File Upload and Download Button (for CSV file input/output) -->
-    <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-      <label for="fileInput"><strong>Upload CSV File:</strong></label>
-      <input type="file" id="fileInput" accept=".csv">
-      <button id="downloadButton">Download Processed CSV File</button>
+    <div id="topControls">
+      <!-- File Upload and Download Button (for CSV file input/output) -->
+      <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <label for="fileInput"><strong>Upload CSV File:</strong></label>
+        <input type="file" id="fileInput" accept=".csv">
+        <button id="downloadButton">Download Processed CSV File</button>
+      </div>
+    
+      <!-- Heatmap & filter controls section -->
+      <div class="control-group">
+        <!-- These controls let you choose how to order and filter the heatmap rows -->
+        <label for="rowOrderSelect">Order Cells in Each Row By:</label>
+        <select id="rowOrderSelect">
+          <option value="descending">Descending (by value)</option>
+          <option value="ascending">Ascending (by value)</option>
+        </select>
+        <label for="minSourceAmtFilter">Min Unique Sources:</label>
+        <input type="number" id="minSourceAmtFilter" placeholder="e.g., 1" step="1">
+        <label for="maxSourceAmtFilter">Max Unique Sources:</label>
+        <input type="number" id="maxSourceAmtFilter" placeholder="e.g., 100" step="1">
+        <label for="minDestinationAmtFilter">Min Unique Destinations:</label>
+        <input type="number" id="minDestinationAmtFilter" placeholder="e.g., 1" step="1">
+        <label for="maxDestinationAmtFilter">Max Unique Destinations:</label>
+        <input type="number" id="maxDestinationAmtFilter" placeholder="e.g., 100" step="1">
+        <label for="payloadSearch">Search Payload Content:</label>
+        <input type="text" id="payloadSearch" placeholder="Enter keyword">
+        <label for="sourceFilter">Source IP:</label>
+        <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
+        <label for="destinationFilter">Destination IP:</label>
+        <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
+        <label for="protocolFilter">Network Protocol:</label>
+        <input type="text" id="protocolFilter" placeholder="e.g., TCP">
+        <label for="entropyMinFilter">Min Cluster Variation:</label>
+        <input type="number" id="entropyMinFilter"  placeholder="e.g., 1.0" step="0.1">
+        <label for="entropyMaxFilter">Max Cluster Variation:</label>
+        <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
+        <label for="isLargePacketFilter">Show only large packets:</label>
+        <input type="checkbox" id="isLargePacketFilter">
+        <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
+        <input type="checkbox" id="isSuspiciousAckFilter">
+      </div>
     </div>
 
-    <!-- Heatmap & filter controls section -->
-    <div class="control-group">
-      <!-- These controls let you choose how to order and filter the heatmap rows -->
-      <label for="rowOrderSelect">Order Cells in Each Row By:</label>
-      <select id="rowOrderSelect">
-        <option value="descending">Descending (by value)</option>
-        <option value="ascending">Ascending (by value)</option>
-      </select>
-      <label for="minSourceAmtFilter">Min Unique Sources:</label>
-      <input type="number" id="minSourceAmtFilter" placeholder="e.g., 1" step="1">
-      <label for="maxSourceAmtFilter">Max Unique Sources:</label>
-      <input type="number" id="maxSourceAmtFilter" placeholder="e.g., 100" step="1">
-      <label for="minDestinationAmtFilter">Min Unique Destinations:</label>
-      <input type="number" id="minDestinationAmtFilter" placeholder="e.g., 1" step="1">
-      <label for="maxDestinationAmtFilter">Max Unique Destinations:</label>
-      <input type="number" id="maxDestinationAmtFilter" placeholder="e.g., 100" step="1">
-      <label for="payloadSearch">Search Payload Content:</label>
-      <input type="text" id="payloadSearch" placeholder="Enter keyword">
-      <label for="sourceFilter">Source IP:</label>
-      <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
-      <label for="destinationFilter">Destination IP:</label>
-      <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
-      <label for="protocolFilter">Network Protocol:</label>
-      <input type="text" id="protocolFilter" placeholder="e.g., TCP">
-      <label for="entropyMinFilter">Min Cluster Variation:</label>
-      <input type="number" id="entropyMinFilter" placeholder="e.g., 1.0" step="0.1">
-      <label for="entropyMaxFilter">Max Cluster Variation:</label>
-      <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
-      <label for="isLargePacketFilter">Show only large packets:</label>
-      <input type="checkbox" id="isLargePacketFilter">
-      <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
-      <input type="checkbox" id="isSuspiciousAckFilter">
+    <div id="sizeControls" style="display: none; margin-top: 16px;">
+    <label for="edgeWidthMin">Min Edge Width:</label>
+    <input type="number" id="edgeWidthMin" placeholder="e.g., 2" step="1" min="1">
+    <label for="edgeWidthMax">Max Edge Width:</label>
+    <input type="number" id="edgeWidthMax" placeholder="e.g., 12" step="1" min="1">
+    <label for="nodeSizeMin">Min Node Size:</label>
+    <input type="number" id="nodeSizeMin" placeholder="e.g., 15" step="1" min="1">
+    <label for="nodeSizeMax">Max Node Size:</label>
+    <input type="number" id="nodeSizeMax" placeholder="e.g., 50" step="1" min="1">
     </div>
+
     <!-- Container where the heatmap visualization will be drawn -->
     <div id="heatmap"></div>
     <!-- Hidden button to load additional heatmap data -->
     <button id="loadMoreBtn">Load More</button>
     <!-- Back to Heatmap button: lets you return from the network view -->
     <button id="backToHeatmap">Back to Heatmap</button>
+    <!-- Refresh cluster -->
+    <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
     <!-- Cytoscape network visualization container -->
     <div id="cy"></div>
+
+    <!-- Search bar to filter by Payload (client-side only) -->
+    <div id="table-search-container" style="display:none; margin-bottom: 12px;">
+      <label for="tableSearchInput"><strong>Search Payload:</strong></label>
+      <input type="text" id="tableSearchInput" placeholder="Enter keyword..." style="padding: 6px 10px; width: 250px;">
+    </div>
+
     <!-- Table container for CSV data of the selected cluster -->
     <div id="table-container"></div>
     <!-- Pagination controls for the CSV data table -->
@@ -455,13 +483,37 @@
         });
     }
     
+    // Update legend for cluster view: show only protocols present in the network data for this cluster
+function updateLegendForCluster(networkData) {
+  const legendTable = document.getElementById('legend');
+  legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
+  const protocolsSet = new Set();
+  if (networkData.edges) {
+    networkData.edges.forEach(edge => {
+      if (edge.data.Protocol) {
+        protocolsSet.add(edge.data.Protocol.trim());
+      }
+    });
+  }
+  Array.from(protocolsSet).sort().forEach(protocol => {
+    if (!protocolColorMap[protocol]) {
+      // Assign a new random color if not already assigned
+      protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    }
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
+    legendTable.appendChild(row);
+  });
+}
+
+
     // Function to render the heatmap using D3 based on the aggregated data received
     function renderCombinedHeatmap(dataByMetric) {
       const orderOption = document.getElementById("rowOrderSelect").value || "descending";
       const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
       const heatmapData = dataByMetric.map(({ metric, pivotData }) => ({
         metric,
-        values: [...pivotData].sort(comparator).slice(0, 550)
+        values: [...pivotData].sort(comparator).slice(0, 700)
       }));
       
       // Compute maximum number of columns among all metrics rows
@@ -569,11 +621,13 @@
                    .style("margin-left", "10px")
                    .on("click", function() {
                      showClusterNetwork(clickedCluster);
+                     document.getElementById('sizeControls').style.display = 'block';
                    });
                } else {
                  d3.select("#exploreClusterBtn")
                    .on("click", function() {
                      showClusterNetwork(clickedCluster);
+                     document.getElementById('sizeControls').style.display = 'block';
                    });
                }
              });
@@ -586,35 +640,45 @@
     
     // Show the heatmap view and hide other panels (network/table)
     function showHeatmap() {
-      document.getElementById('cy').style.display = 'none';
-      document.getElementById('backToHeatmap').style.display = 'none';
-      document.getElementById('edgeFilterPanel').style.display = 'none';
-      document.getElementById('table-container').style.display = 'none';
-      document.getElementById('table-pagination').style.display = 'none';
-      d3.select("#heatmap").style("display", "block");
-      clearEdgeFilter();
-    }
-    document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
+  document.getElementById('cy').style.display = 'none';
+  document.getElementById('backToHeatmap').style.display = 'none';
+  document.getElementById('edgeFilterPanel').style.display = 'none';
+  document.getElementById('table-container').style.display = 'none';
+  document.getElementById('table-pagination').style.display = 'none';
+  document.getElementById('refreshNetworkBtn').style.display = 'none';
+  document.getElementById('sizeControls').style.display = 'none';
+  document.getElementById('table-search-container').style.display = "none";
+  document.getElementById('topControls').style.display = 'block'; // Show top controls
+  d3.select("#heatmap").style("display", "block");
+  updateLegend();
+  clearEdgeFilter();
+}
+document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
     
     // When a cluster is selected, fetch its network data from the server and show it
     function showClusterNetwork(clusterID) {
-      currentClusterID = clusterID;
-      fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
-        .then(response => response.json())
-        .then(data => {
-          if (data.nodes.length === 0 && data.edges.length === 0) {
-            alert("No network data for this cluster.");
-            return;
-          }
-          const elementsCombined = data.nodes.concat(data.edges);
-          visualizeNetwork(elementsCombined);
-          d3.select("#heatmap").style("display", "none");
-          document.getElementById('backToHeatmap').style.display = 'inline-block';
-          createClusterTable(clusterID);
-          document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
-        })
-        .catch(error => console.error("Error fetching network data:", error));
-    }
+  currentClusterID = clusterID;
+  fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
+    .then(response => response.json())
+    .then(data => {
+      if (data.nodes.length === 0 && data.edges.length === 0) {
+        alert("No network data for this cluster.");
+        return;
+      }
+      // Update legend with only the protocols present in this cluster
+      updateLegendForCluster(data);
+      
+      const elementsCombined = data.nodes.concat(data.edges);
+      visualizeNetwork(elementsCombined);
+      d3.select("#heatmap").style("display", "none");
+      document.getElementById('backToHeatmap').style.display = 'inline-block';
+      document.getElementById('refreshNetworkBtn').style.display = 'inline-block';
+      document.getElementById('topControls').style.display = 'none'; // Hide top controls
+      createClusterTable(clusterID);
+      document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    })
+    .catch(error => console.error("Error fetching network data:", error));
+}
     
     // Load a page of cluster data table using pagination
     function loadClusterTablePage(clusterID, page) {
@@ -639,16 +703,34 @@
     function createClusterTable(clusterID) {
       loadClusterTablePage(clusterID, 1);
       document.getElementById('table-container').style.display = "block";
+      document.getElementById('table-search-container').style.display = "block";
     }
     
     // Pagination button to navigate to a specified page
-    document.getElementById('goPageBtn').addEventListener('click', function() {
-      let page = parseInt(document.getElementById('currentPageInput').value);
-      if (page >= 1) {
-         loadClusterTablePage(currentClusterID, page);
+    document.getElementById('goPageBtn').addEventListener('click', function () {
+    let page = parseInt(document.getElementById('currentPageInput').value);
+    if (page >= 1) {
+      if (window.edgeFilterState) {
+        const { source, destination, protocol } = window.edgeFilterState;
+        fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+          .then(res => res.text())
+          .then(html => {
+            const container = document.getElementById('table-container');
+            container.innerHTML = html;
+            const summaryElem = document.getElementById('table-summary');
+            if (summaryElem) {
+              const total = parseInt(summaryElem.dataset.total);
+              const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+              document.getElementById('totalPages').textContent = totalPages;
+              document.getElementById('currentPageInput').value = page;
+            }
+          });
+      } else if (currentClusterID) {
+        loadClusterTablePage(currentClusterID, page);
       }
-    });
-    
+    }
+  });
+
     // Group nodes into directed components in the network using BFS
     function groupDirectedComponents(cy) {
       let visited = new Set();
@@ -682,9 +764,9 @@
       });
       let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
       let groupYOffset = 0;
-      const verticalSpacingBetweenGroups = 300;
-      const levelHeight = 80;
-      const siblingSpacing = 500;
+      const verticalSpacingBetweenGroups = 200;
+      const levelHeight = 130;
+      const siblingSpacing = 200;
       sortedGroups.forEach(([groupID, nodes]) => {
         let root = nodes.reduce((prev, curr) => {
           return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
@@ -731,6 +813,47 @@
       });
     }
     
+    // Helper function to compute the clamped node size
+    function getNodeSize(ele) {
+      let minSize = parseFloat(document.getElementById('nodeSizeMin').value);
+      let maxSize = parseFloat(document.getElementById('nodeSizeMax').value);
+
+      // Apply defaults only if both are missing
+      if (isNaN(minSize) && isNaN(maxSize)) {
+        minSize = 30;
+        maxSize = 65;
+      } else {
+        // If one is missing, use the other as a fallback
+        if (isNaN(minSize)) minSize = maxSize;
+        if (isNaN(maxSize)) maxSize = minSize;
+      }
+
+      // Prevent accidental inversion
+      if (maxSize < minSize) {
+        const temp = maxSize;
+        maxSize = minSize;
+        minSize = temp;
+      }
+
+      // Get min/max NodeWeight from all nodes
+      let maxWeight = 0;
+      let minWeight = Infinity;
+      ele.cy().nodes().forEach(n => {
+        const w = parseFloat(n.data('NodeWeight')) || 0;
+        if (w > maxWeight) maxWeight = w;
+        if (w < minWeight) minWeight = w;
+      });
+      if (!isFinite(minWeight)) minWeight = 0;
+
+      const currentWeight = parseFloat(ele.data('NodeWeight')) || 0;
+
+      if (maxWeight === minWeight) return minSize;
+
+      const scaled = minSize + ((currentWeight - minWeight) / (maxWeight - minWeight)) * (maxSize - minSize);
+      return Math.min(Math.max(scaled, minSize), maxSize);
+    }
+
+
     // Visualize the network using Cytoscape with our configured styles and layout
     function visualizeNetwork(elements) {
       document.getElementById('cy').style.display = 'block';
@@ -739,26 +862,14 @@
         elements: elements,
         layout: { name: 'preset' },
         style: [
-          {
+                  {
             selector: 'node',
             style: {
               'width': function(ele) {
-                let max = 0;
-                ele.cy().nodes().forEach(n => {
-                  let w = parseFloat(n.data('NodeWeight')) || 0;
-                  if (w > max) { max = w; }
-                });
-                let w = parseFloat(ele.data('NodeWeight')) || 0;
-                return max ? 15 + (w / max) * (50 - 15) : 15;
+                return getNodeSize(ele);
               },
               'height': function(ele) {
-                let max = 0;
-                ele.cy().nodes().forEach(n => {
-                  let w = parseFloat(n.data('NodeWeight')) || 0;
-                  if (w > max) { max = w; }
-                });
-                let w = parseFloat(ele.data('NodeWeight')) || 0;
-                return max ? 15 + (w / max) * (50 - 15) : 15;
+                return getNodeSize(ele);
               },
               'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
               'border-width': 2,
@@ -788,7 +899,7 @@
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
               'control-point-step-size': 30,
-              'width': 'data(normalizedWeight)',
+              'width': 'data(normalizedWidth)',
               'line-color': function(ele) {
                 return ele.data('edgeColor') || '#888';
               },
@@ -803,7 +914,8 @@
             style: {
               'line-color': 'red',
               'target-arrow-color': 'red',
-              'width': 4
+              'opacity': 1,
+              'z-index': 9999
             }
           }
         ]
@@ -812,22 +924,27 @@
       globalCy = cy;
       
       // Assign colors to edges based on protocol
+      // Avoids red since selected edges are red
       cy.edges().forEach(edge => {
         let protocol = edge.data('Protocol');
-        edge.data('edgeColor', protocolColorMap[protocol] || '#888');
+        let color = protocolColorMap[protocol] || '#888';
+        if (/^#?f{2}0000$/i.test(color) || color.toLowerCase() === 'red') {
+          color = '#880000'; // dark red alternative, or just pick a safe one
+        }
+        edge.data('edgeColor', color);
       });
       
       // Calculate normalized edge widths based on process count
       cy.edges().forEach(edge => {
-        if (edge.data('processCount') !== undefined) {
-          let count = parseFloat(edge.data('processCount')) || 0;
-          const maxNormalizedWeight = 12;
-          const computedWeight = 2 + (count * 1);
-          edge.data('normalizedWeight', Math.min(computedWeight, maxNormalizedWeight));
-        } else {
-          edge.data('normalizedWeight', 2);
-        }
-      });
+      let count = parseFloat(edge.data('processCount')) || 0;
+      const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
+      const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
+      const computedWeight = 2 + (count * 1);
+      const clamped = Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight);
+      
+      edge.data('normalizedWeight', clamped);     // legacy (can remove later)
+      edge.data('normalizedWidth', clamped);      //  for rendering
+    });
       
       // Group components and position them in a tree layout
       groupDirectedComponents(cy);
@@ -863,33 +980,71 @@
       
       // On edge click: support selecting edges (with shift for group selection)
       cy.on('click', 'edge', (evt) => {
-        let edge = evt.target;
-        if (evt.originalEvent.shiftKey) {
-          let groupID = edge.source().data('groupID');
-          if (groupID !== undefined) {
-            cy.edges().forEach(e => {
-              if (e.source().data('groupID') === groupID &&
-                  e.target().data('groupID') === groupID) {
-                let indices = e.data('csvIndices') || [];
-                indices.forEach(idx => selectedEdges.add(idx));
-                e.addClass('selected');
-              }
-            });
-          }
-        } else {
-          let indices = edge.data('csvIndices') || [];
-          if (!indices.length) return;
-          let allSelected = indices.every(idx => selectedEdges.has(idx));
-          if (allSelected) {
-            indices.forEach(idx => selectedEdges.delete(idx));
-            edge.removeClass('selected');
-          } else {
-            indices.forEach(idx => selectedEdges.add(idx));
-            edge.addClass('selected');
-          }
-        }
-        showEdgeFilterPanel(edge.data());
+      const edge = evt.target;
+      const edgeId = edge.id();
+
+      // Toggle selection state
+      if (selectedEdges.has(edgeId)) {
+      selectedEdges.delete(edgeId);
+      edge.removeClass('selected');
+      edge.data('normalizedWidth', edge.data('originalWidth'));  //  restore width
+    } else {
+      selectedEdges.add(edgeId);
+      edge.data('originalWidth', edge.data('normalizedWidth'));  //  save current width
+      edge.data('normalizedWidth', edge.data('normalizedWidth')); // lock width
+      edge.addClass('selected');
+    }
+
+      // Update the table based on all selected edges
+      const selectedEdgeData = Array.from(selectedEdges).map(id => {
+        const e = cy.getElementById(id);
+        return {
+          source: e.data('source'),
+          destination: e.data('target'),
+          protocol: e.data('Protocol')
+        };
       });
+
+      if (selectedEdgeData.length === 0) {
+      // No selected edges: show full cluster table
+      if (currentClusterID) {
+        loadClusterTablePage(currentClusterID, 1);
+        document.getElementById('table-container').style.display = 'block';
+        document.getElementById('table-pagination').style.display = 'block';
+        window.edgeFilterState = null;
+      }
+      return;
+    }
+
+      // Build query string for selected edges
+      fetch("http://127.0.0.1:5000/get_multi_edge_table", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          edges: selectedEdgeData,
+          page: 1,
+          page_size: 50
+        })
+      })
+      .then(res => res.text())
+      .then(html => {
+        const container = document.getElementById('table-container');
+        container.innerHTML = html;
+        container.style.display = 'block';
+        document.getElementById('table-pagination').style.display = 'block';
+
+        const summaryElem = document.getElementById('table-summary');
+        if (summaryElem) {
+          const total = parseInt(summaryElem.dataset.total);
+          const totalPages = Math.ceil(total / 50);
+          document.getElementById('totalPages').textContent = totalPages;
+          document.getElementById('currentPageInput').value = 1;
+        }
+
+        // Save for pagination
+        window.edgeFilterState = selectedEdgeData;
+      });
+    });
     }
     
     // Show the edge filter panel and prefill with the edge's data
@@ -1016,6 +1171,13 @@
     document.getElementById("downloadButton").addEventListener("click", function() {
       window.location.href = "http://127.0.0.1:5000/download_csv";
     });
+
+    // Cluster refresh button
+    document.getElementById("refreshNetworkBtn").addEventListener("click", function() {
+      if (currentClusterID && window.globalData) {
+        showClusterNetwork(currentClusterID);
+      }
+    });
     
     // Create a tooltip element that will be used for hover details on the heatmap and network
     const tooltip = document.createElement('div');
@@ -1057,6 +1219,29 @@
           d3.select("#exploreClusterBtn").remove();
         }
       }
+    });
+
+    // Payload search filter (only filters Payload column)
+    document.getElementById('tableSearchInput').addEventListener('input', function () {
+      const query = this.value.trim().toLowerCase();
+      const rows = document.querySelectorAll('#table-container table tbody tr');
+      const headerCells = document.querySelectorAll('#table-container table thead th');
+      let payloadIndex = -1;
+
+      // Find index of the Payload column
+      headerCells.forEach((th, idx) => {
+        if (th.textContent.trim().toLowerCase() === 'payload') {
+          payloadIndex = idx;
+        }
+      });
+
+      if (payloadIndex === -1) return; // Do nothing if column not found
+
+      rows.forEach(row => {
+        const cell = row.cells[payloadIndex];
+        const text = cell ? cell.textContent.toLowerCase() : '';
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
     });
     
   </script> 
