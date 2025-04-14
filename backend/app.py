@@ -179,8 +179,6 @@ def filter_and_aggregate():
     sourceFilter = data.get("sourceFilter", "").lower()
     destinationFilter = data.get("destinationFilter", "").lower()
     protocolFilter = data.get("protocolFilter", "").lower()
-    sourcePortFilter = data.get("sourcePortFilter", "").lower()
-    destinationPortFilter = data.get("destinationPortFilter", "").lower()
     
     try:
         entropyMin = float(data.get("entropyMin", float('-inf')))
