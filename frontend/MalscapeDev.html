@@ -499,7 +499,7 @@
           nodes: Object.values(combinedNodes),
           edges: Object.values(combinedEdges)
         };
-        updateLegendForCluster(combinedData);
+        updateLegend(combinedData);
         visualizeNetwork(combinedData);
         d3.select("#heatmap").style("display", "none");
         document.getElementById("backToHeatmap").style.display = "inline-block";
@@ -707,7 +707,7 @@
             alert("No network data for this cluster.");
             return;
           }
-          updateLegendForCluster(data);
+          updateLegend(data);
           const elementsCombined = data.nodes.concat(data.edges);
           visualizeNetwork(elementsCombined);
           d3.select("#heatmap").style("display", "none");
