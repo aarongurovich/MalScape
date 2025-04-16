@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="icon" type="image/png" href="favicon.png"> <!-- Favicon -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>MalScape</title>
@@ -204,7 +203,7 @@
       display: none;
     }
     
-    /* Edge Filter Panel styling: appears when filtering edges in network view */
+    /* Edge Filter Panel styling */
     #edgeFilterPanel {
       position: absolute;
       top: 80px;
@@ -236,7 +235,7 @@
       width: 100%;
     }
     
-    /* Loading overlay styles: covers the page when data is loading */
+    /* Loading overlay styles */
     #loading-overlay {
       position: fixed;
       top: 0;
@@ -264,7 +263,6 @@
       color: #333;
     }
     
-    /* Keyframe animation for spinner rotation */
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -272,27 +270,23 @@
   </style>
 </head>
 <body>
-  <!-- Loading Overlay: shows while fetching or processing data -->
+  <!-- Loading Overlay -->
   <div id="loading-overlay">
     <div class="spinner"></div>
     <div class="loading-text">Loading, please wait...</div>
   </div>
   
-  <!-- Main container with controls and visualization elements -->
+  <!-- Main container -->
   <div id="main-container" style="margin-top: 60px;">
     <h2>MalScape</h2>
-    <!-- File Upload and Download Button (for CSV file input/output) -->
+    <!-- Top controls -->
     <div id="topControls">
-      <!-- File Upload and Download Button (for CSV file input/output) -->
       <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         <label for="fileInput"><strong>Upload CSV File:</strong></label>
         <input type="file" id="fileInput" accept=".csv">
         <button id="downloadButton">Download Processed CSV File</button>
       </div>
-    
-      <!-- Heatmap & filter controls section -->
       <div class="control-group">
-        <!-- These controls let you choose how to order and filter the heatmap rows -->
         <label for="rowOrderSelect">Order Cells in Each Row By:</label>
         <select id="rowOrderSelect">
           <option value="descending">Descending (by value)</option>
@@ -326,54 +320,48 @@
     </div>
 
     <div id="sizeControls" style="display: none; margin-top: 16px;">
-    <label for="edgeWidthMin">Min Edge Width:</label>
-    <input type="number" id="edgeWidthMin" placeholder="e.g., 2" step="1" min="1">
-    <label for="edgeWidthMax">Max Edge Width:</label>
-    <input type="number" id="edgeWidthMax" placeholder="e.g., 12" step="1" min="1">
-    <label for="nodeSizeMin">Min Node Size:</label>
-    <input type="number" id="nodeSizeMin" placeholder="e.g., 15" step="1" min="1">
-    <label for="nodeSizeMax">Max Node Size:</label>
-    <input type="number" id="nodeSizeMax" placeholder="e.g., 50" step="1" min="1">
+      <label for="edgeWidthMin">Min Edge Width:</label>
+      <input type="number" id="edgeWidthMin" placeholder="e.g., 2" step="1" min="1">
+      <label for="edgeWidthMax">Max Edge Width:</label>
+      <input type="number" id="edgeWidthMax" placeholder="e.g., 12" step="1" min="1">
+      <label for="nodeSizeMin">Min Node Size:</label>
+      <input type="number" id="nodeSizeMin" placeholder="e.g., 15" step="1" min="1">
+      <label for="nodeSizeMax">Max Node Size:</label>
+      <input type="number" id="nodeSizeMax" placeholder="e.g., 50" step="1" min="1">
     </div>
 
-    <!-- Container where the heatmap visualization will be drawn -->
+    <!-- Heatmap container -->
     <div id="heatmap"></div>
-    <!-- Hidden button to load additional heatmap data -->
     <button id="loadMoreBtn">Load More</button>
-    <!-- Back to Heatmap button: lets you return from the network view -->
     <button id="backToHeatmap">Back to Heatmap</button>
-    <!-- Refresh cluster -->
     <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
-    <!-- Cytoscape network visualization container -->
     <div id="cy"></div>
 
-    <!-- Search bar to filter by Payload (client-side only) -->
+    <!-- Table search and container -->
     <div id="table-search-container" style="display:none; margin-bottom: 12px;">
       <label for="tableSearchInput"><strong>Search Payload:</strong></label>
       <input type="text" id="tableSearchInput" placeholder="Enter keyword..." style="padding: 6px 10px; width: 250px;">
     </div>
-
-    <!-- Table container for CSV data of the selected cluster -->
     <div id="table-container"></div>
-    <!-- Pagination controls for the CSV data table -->
     <div id="table-pagination">
       <span>Page <input type="number" id="currentPageInput" value="1" min="1" style="width:60px;"> of <span id="totalPages">?</span></span>
       <button id="goPageBtn">Go</button>
     </div>
   </div>
   
-  <!-- Legend container for network protocol colors -->
+  <!-- Legend container -->
   <div id="legend-container">
     <h3>Protocol Legend</h3>
     <table id="legend">
       <tr>
         <th>Protocol</th>
         <th>Color</th>
+        <th>Process %</th>
       </tr>
     </table>
   </div>
   
-  <!-- Edge Filter Panel: shows filtering options when an edge in the network is clicked -->
+  <!-- Edge Filter Panel -->
   <div id="edgeFilterPanel">
     <h4>Edge Filter</h4>
     <label for="edgeFilterSource">Source (partial ok):</label>
@@ -391,63 +379,162 @@
   </div>
   
   <script>
-    // Global Variables for protocol colors, Cytoscape instance, and cluster details
+    // Global Variables
     let protocolColorMap = {};
     let globalCy;
     let selectedEdges = new Set();
     let currentClusterID = null;
     const TABLE_PAGE_SIZE = 50;
     
-    // Function to show the loading overlay while data is being processed/fetched
+    window.selectedClusters = new Set();
+    window.usedHighlightHues = [];
+    
+    // Generates a non‑blue and non‑red unique color
+    function generateNonRedBlueUniqueColor() {
+      let attempts = 0;
+      while (attempts < 100) {
+        let hue = Math.floor(Math.random() * 360);
+        if ((hue >= 0 && hue <= 20) || (hue >= 200 && hue <= 260) || (hue >= 340 && hue <= 360)) {
+          attempts++;
+          continue;
+        }
+        const threshold = 50;
+        let isDistinct = window.usedHighlightHues.every(usedHue => {
+          let diff = Math.abs(hue - usedHue);
+          return diff >= threshold && (360 - diff) >= threshold;
+        });
+        if (isDistinct) {
+          window.usedHighlightHues.push(hue);
+          let color = `hsl(${hue}, 70%, 50%)`;
+          return { color, hue };
+        }
+        attempts++;
+      }
+      let fallbackHue = Math.floor(Math.random() * 360);
+      let fallbackColor = `hsl(${fallbackHue}, 70%, 50%)`;
+      window.usedHighlightHues.push(fallbackHue);
+      return { color: fallbackColor, hue: fallbackHue };
+    }
+    
+    function updateExploreButton() {
+      let exploreBtn = document.getElementById('exploreClustersBtn');
+      if (window.selectedClusters.size > 0) {
+        if (!exploreBtn) {
+          exploreBtn = document.createElement('button');
+          exploreBtn.id = 'exploreClustersBtn';
+          exploreBtn.textContent = 'Explore Selected Clusters Further';
+          exploreBtn.style.marginTop = "16px";
+          document.getElementById('main-container').appendChild(exploreBtn);
+          exploreBtn.addEventListener('click', exploreSelectedClusters);
+        }
+      } else {
+        if (exploreBtn) {
+          exploreBtn.remove();
+        }
+      }
+    }
+    
     function showLoading() {
       document.getElementById('loading-overlay').style.display = 'flex';
     }
-    // Function to hide the loading overlay
     function hideLoading() {
       document.getElementById('loading-overlay').style.display = 'none';
     }
     
-    // Update legend based on the data in window.globalData
+    // Update the legend from the backend
     function updateLegend() {
       const legendTable = document.getElementById('legend');
-      legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
-      if (window.globalData) {
-        let protocols = new Set();
-        window.globalData.forEach(d => {
-          if (d.Protocol) protocols.add(d.Protocol.trim());
-        });
-        Array.from(protocols).sort().forEach(protocol => {
-          if (!protocolColorMap[protocol]) {
-            // Assign a random color to each new protocol
-            protocolColorMap[protocol] = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');
+      legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th><th>Process %</th></tr>';
+      fetch("http://127.0.0.1:5000/protocol_percentages")
+        .then(response => response.json())
+        .then(percentages => {
+          if (window.globalData) {
+            let protocolsSet = new Set();
+            window.globalData.forEach(d => {
+              if(d.Protocol) protocolsSet.add(d.Protocol.trim());
+            });
+            let protocols = Array.from(protocolsSet).sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
+            protocols.forEach(protocol => {
+              if (!protocolColorMap[protocol]) {
+                protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215)
+                  .toString(16).padStart(6, '0');
+              }
+              let percentage = (percentages[protocol] !== undefined)
+                                ? percentages[protocol].toFixed(5) + '%'
+                                : '0%';
+              const row = document.createElement('tr');
+              row.innerHTML = `<td>${protocol}</td>
+                               <td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>
+                               <td>${percentage}</td>`;
+              legendTable.appendChild(row);
+            });
           }
-          const row = document.createElement('tr');
-          row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
-          legendTable.appendChild(row);
+        })
+        .catch(error => {
+          console.error("Error fetching protocol percentages:", error);
         });
-      }
     }
     
-    // Fetch aggregated heatmap data based on the selected filters and metrics
+    function exploreSelectedClusters() {
+      const clustersToExplore = Array.from(window.selectedClusters);
+      if (clustersToExplore.length === 0) return;
+      Promise.all(
+        clustersToExplore.map(clusterID =>
+          fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
+            .then(response => response.json())
+        )
+      )
+      .then(results => {
+        let combinedNodes = {};
+        let combinedEdges = {};
+        results.forEach(data => {
+          data.nodes.forEach(n => {
+            combinedNodes[n.data.id] = n;
+          });
+          data.edges.forEach(e => {
+            combinedEdges[e.data.id] = e;
+          });
+        });
+        const combinedData = {
+          nodes: Object.values(combinedNodes),
+          edges: Object.values(combinedEdges)
+        };
+        updateLegend(combinedData);
+        visualizeNetwork(combinedData);
+        d3.select("#heatmap").style("display", "none");
+        document.getElementById("backToHeatmap").style.display = "inline-block";
+        document.getElementById("refreshNetworkBtn").style.display = "inline-block";
+        document.getElementById("topControls").style.display = "none";
+        document.getElementById('table-search-container').style.display = "block";
+        document.getElementById('table-container').style.display = "block";
+        document.getElementById('sizeControls').style.display = "block";
+        currentClusterID = clustersToExplore[0];
+        createClusterTable(currentClusterID);
+      })
+      .catch(error => {
+        console.error("Error exploring selected clusters:", error);
+      });
+    }
+    
+    // Fetch aggregated heatmap data
     function updateHeatmap() {
-      showLoading(); // Show overlay while fetching
-      
+      showLoading();
       const metrics = [
         { label: "Count", value: "count" },
+        { label: "Unique IPs", value: "Unique IPs" },
+        { label: "Unique Sources", value: "Unique Sources" },
+        { label: "Unique Destinations", value: "Unique Destinations" },
         { label: "Packet Length", value: "Length" },
         { label: "Payload Length", value: "Len" },
+        { label: "Payload Size Variance", value: "Payload Size Variance" },
+        { label: "Packets per Second", value: "Packets per Second" },
+        { label: "Total Data Sent", value: "Total Data Sent" },
         { label: "% SYN packets", value: "% SYN packets" },
         { label: "% RST packets", value: "% RST packets" },
         { label: "% ACK packets", value: "% ACK packets" },
-        { label: "% PSH packets", value: "% PSH packets" },
-        { label: "Unique Destinations", value: "Unique Destinations" },
-        { label: "Unique Sources", value: "Unique Sources" },
-        { label: "Payload Size Variance", value: "Payload Size Variance" },
-        { label: "Packets per Second", value: "Packets per Second" },
-        { label: "Total Data Sent", value: "Total Data Sent" }
-      ];
+        { label: "% PSH packets", value: "% PSH packets" }
+      ];  
 
-      // Base filter parameters from user inputs
       const filterParamsBase = {
         payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
         sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
@@ -463,7 +550,6 @@
         maxDestinationAmt: document.getElementById('maxDestinationAmtFilter').value
       };
 
-      // Send a separate request per metric and then combine results to draw the heatmap
       Promise.all(metrics.map(m => {
           const filterParams = Object.assign({}, filterParamsBase, { metric: m.value });
           return fetch("http://127.0.0.1:5000/filter_and_aggregate", {
@@ -476,7 +562,7 @@
         }))
         .then(results => {
           renderCombinedHeatmap(results);
-          hideLoading();  // Hide overlay once done
+          hideLoading();
         })
         .catch(error => {
           console.error("Error fetching aggregated data:", error);
@@ -484,31 +570,8 @@
         });
     }
     
-    // Update legend for cluster view: show only protocols present in the network data for this cluster
-function updateLegendForCluster(networkData) {
-  const legendTable = document.getElementById('legend');
-  legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th></tr>';
-  const protocolsSet = new Set();
-  if (networkData.edges) {
-    networkData.edges.forEach(edge => {
-      if (edge.data.Protocol) {
-        protocolsSet.add(edge.data.Protocol.trim());
-      }
-    });
-  }
-  Array.from(protocolsSet).sort().forEach(protocol => {
-    if (!protocolColorMap[protocol]) {
-      // Assign a new random color if not already assigned
-      protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-    }
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${protocol}</td><td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>`;
-    legendTable.appendChild(row);
-  });
-}
-
-
-    // Function to render the heatmap using D3 based on the aggregated data received
+    // Render heatmap based on aggregated data.
+    // Now, each pivot object is assumed to include a "clusterAnomaly" flag (set by the backend)
     function renderCombinedHeatmap(dataByMetric) {
       const orderOption = document.getElementById("rowOrderSelect").value || "descending";
       const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
@@ -516,11 +579,7 @@ function updateLegendForCluster(networkData) {
         metric,
         values: [...pivotData].sort(comparator).slice(0, 700)
       }));
-      
-      // Compute maximum number of columns among all metrics rows
       const maxCols = d3.max(heatmapData, r => r.values.length);
-      
-      // Set dimensions for each cell and overall heatmap layout
       const cellWidth = 2;
       const cellHeight = 15;
       const labelMargin = 150;
@@ -528,22 +587,14 @@ function updateLegendForCluster(networkData) {
       const numRows = heatmapData.length;
       const totalHeight = 20 + numRows * cellHeight + (numRows - 1) * verticalSpacing + 20;
       const width = labelMargin + maxCols * cellWidth + 40;
-      
-      // Clear any existing heatmap SVG so it can be redrawn
       d3.select("#heatmap").select("svg").remove();
       const svg = d3.select("#heatmap").append("svg")
                     .attr("width", width)
                     .attr("height", totalHeight);
       
-      // Reset any selected cluster if not already set
-      if (!window.selectedCluster) {
-        window.selectedCluster = null;
-      }
-      
-      // Loop over each metric row and draw the corresponding cells
+      // The anomaly flag is now assumed to be provided by the backend
       heatmapData.forEach((rowData, rowIndex) => {
         const rowY = 20 + rowIndex * (cellHeight + verticalSpacing);
-        // Draw row label to the left of the heatmap cells
         svg.append("text")
            .attr("x", labelMargin - 10)
            .attr("y", rowY + cellHeight / 2)
@@ -552,136 +603,125 @@ function updateLegendForCluster(networkData) {
            .attr("font-size", "12px")
            .attr("fill", "black")
            .text(rowData.metric);
-
-        // Create a color scale for the current row based on its maximum value
+  
         let rowMax = d3.max(rowData.values, d => d.value) || 1;
         const localColorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, rowMax]);
-
-        // Draw each cell (as a rect) in the row
+  
         rowData.values.forEach((cellData, colIndex) => {
           let cellX = labelMargin + colIndex * cellWidth;
+          let cellFillColor = localColorScale(cellData.value);
+          // Instead of computing anomaly state here from globalData,
+          // we directly use the provided cluster anomaly flag.
+          if (window.globalData) {
+          let records = window.globalData.filter(row => row.ClusterID == cellData.cluster);
+          if (records.some(r => r.Anomaly === 'anomaly')) {
+            cellData.clusterAnomaly = 'anomaly';
+          } else {
+            cellData.clusterAnomaly = 'normal';
+          }
+        }
+          if (cellData.clusterAnomaly === "anomaly") {
+            cellFillColor = "red";
+          }
           svg.append("rect")
              .attr("class", "cell")
-             .attr("data-cluster", cellData.cluster)  // Save cluster ID in the DOM element
-             .attr("data-original-fill", localColorScale(cellData.value)) // Remember original fill color
+             .attr("data-cluster", cellData.cluster)
+             .attr("data-original-fill", cellFillColor)
              .attr("x", cellX)
              .attr("y", rowY)
              .attr("width", cellWidth)
              .attr("height", cellHeight)
-             .attr("fill", localColorScale(cellData.value))
-             // Handle mouseover events to highlight the hovered cluster
+             .attr("fill", cellFillColor)
              .on("mouseover", function(event) {
-               if (!window.selectedCluster) {
-                 let hoveredCluster = cellData.cluster;
-                 d3.selectAll("rect.cell")
-                   .transition()
-                   .duration(200)
-                   .style("opacity", function() {
-                     return d3.select(this).attr("data-cluster") === hoveredCluster ? 1 : 0.2;
-                   });
-               }
                tooltip.style.display = "block";
                tooltip.innerHTML = `<strong>${rowData.metric}</strong><br>Cluster: ${cellData.cluster}<br>Value: ${cellData.value}`;
                tooltip.style.left = (event.pageX + 10) + "px";
                tooltip.style.top = (event.pageY + 10) + "px";
              })
-             // Reset opacity on mouseout if no cluster is fixed
              .on("mouseout", function() {
-               if (!window.selectedCluster) {
-                 d3.selectAll("rect.cell")
-                   .transition()
-                   .duration(200)
-                   .style("opacity", 1);
-               }
                tooltip.style.display = "none";
              })
-             // On click, fix the view on the selected cluster and add the "Explore Cluster Further" button
              .on("click", function(event) {
-               // Prevent the global click listener from firing
                event.stopPropagation();
-               let clickedCluster = cellData.cluster;
-               window.selectedCluster = clickedCluster;
-               
-               d3.selectAll("rect.cell")
-                 .transition()
-                 .duration(200)
-                 .style("opacity", function() {
-                   return d3.select(this).attr("data-cluster") === clickedCluster ? 1 : 0.2;
-                 })
-                 .style("fill", function() {
-                   let cell = d3.select(this);
-                   return cell.attr("data-cluster") === clickedCluster ? "#003366" : cell.attr("data-original-fill");
-                 });
-               
-               // Add or update the "Explore Cluster Further" button for the clicked cluster
-               if (d3.select("#exploreClusterBtn").empty()) {
-                 d3.select("#main-container")
-                   .append("button")
-                   .attr("id", "exploreClusterBtn")
-                   .text("Explore Cluster Further")
-                   .style("margin-left", "10px")
-                   .on("click", function() {
-                     showClusterNetwork(clickedCluster);
-                     document.getElementById('sizeControls').style.display = 'block';
-                   });
+               const cell = d3.select(this);
+               const clusterID = cell.attr("data-cluster");
+               const clusterCells = d3.selectAll("rect.cell")
+                                       .filter(function() {
+                                         return d3.select(this).attr("data-cluster") === clusterID;
+                                       });
+               const isSelected = clusterCells.classed("selected");
+               if (!isSelected) {
+                 const { color: randColor, hue: selectedHue } = generateNonRedBlueUniqueColor();
+                 clusterCells.classed("selected", true)
+                             .attr("data-selected-color", randColor)
+                             .attr("data-selected-hue", selectedHue)
+                             .transition()
+                             .duration(200)
+                             .style("fill", randColor);
+                 window.selectedClusters.add(clusterID);
                } else {
-                 d3.select("#exploreClusterBtn")
-                   .on("click", function() {
-                     showClusterNetwork(clickedCluster);
-                     document.getElementById('sizeControls').style.display = 'block';
-                   });
+                 clusterCells.classed("selected", false)
+                             .transition()
+                             .duration(200)
+                             .style("fill", function() {
+                               const cid = d3.select(this).attr("data-cluster");
+                               const originalFill = cellData.clusterAnomaly === "anomaly" ? "red" : d3.select(this).attr("data-original-fill");
+                               return originalFill;
+                             });
+                 window.selectedClusters.delete(clusterID);
+                 const firstCell = clusterCells.nodes()[0];
+                 if (firstCell) {
+                   const usedHue = d3.select(firstCell).attr("data-selected-hue");
+                   window.usedHighlightHues = window.usedHighlightHues.filter(h => h != usedHue);
+                 }
                }
+               updateExploreButton();
              });
         });
+        d3.select("#loadMoreBtn").style("display", "none");
       });
-      
-      // Hide the load more button if there was one showing
-      d3.select("#loadMoreBtn").style("display", "none");
     }
     
-    // Show the heatmap view and hide other panels (network/table)
     function showHeatmap() {
-  document.getElementById('cy').style.display = 'none';
-  document.getElementById('backToHeatmap').style.display = 'none';
-  document.getElementById('edgeFilterPanel').style.display = 'none';
-  document.getElementById('table-container').style.display = 'none';
-  document.getElementById('table-pagination').style.display = 'none';
-  document.getElementById('refreshNetworkBtn').style.display = 'none';
-  document.getElementById('sizeControls').style.display = 'none';
-  document.getElementById('table-search-container').style.display = "none";
-  document.getElementById('topControls').style.display = 'block'; // Show top controls
-  d3.select("#heatmap").style("display", "block");
-  updateLegend();
-  clearEdgeFilter();
-}
-document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
+      document.getElementById('cy').style.display = 'none';
+      document.getElementById('backToHeatmap').style.display = 'none';
+      document.getElementById('edgeFilterPanel').style.display = 'none';
+      document.getElementById('table-container').style.display = 'none';
+      document.getElementById('table-pagination').style.display = 'none';
+      document.getElementById('refreshNetworkBtn').style.display = 'none';
+      document.getElementById('sizeControls').style.display = 'none';
+      document.getElementById('table-search-container').style.display = "none";
+      document.getElementById('topControls').style.display = 'block';
+      d3.select("#heatmap").style("display", "block");
+      updateLegend();
+      clearEdgeFilter();
+    }
+    document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
     
-    // When a cluster is selected, fetch its network data from the server and show it
     function showClusterNetwork(clusterID) {
-  currentClusterID = clusterID;
-  fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
-    .then(response => response.json())
-    .then(data => {
-      if (data.nodes.length === 0 && data.edges.length === 0) {
-        alert("No network data for this cluster.");
-        return;
-      }
-      // Update legend with only the protocols present in this cluster
-      updateLegendForCluster(data);
-      
-      const elementsCombined = data.nodes.concat(data.edges);
-      visualizeNetwork(elementsCombined);
-      d3.select("#heatmap").style("display", "none");
-      document.getElementById('backToHeatmap').style.display = 'inline-block';
-      document.getElementById('refreshNetworkBtn').style.display = 'inline-block';
-      document.getElementById('topControls').style.display = 'none'; // Hide top controls
-      createClusterTable(clusterID);
-      document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    })
-    .catch(error => console.error("Error fetching network data:", error));
-}
+      currentClusterID = clusterID;
+      fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
+        .then(response => response.json())
+        .then(data => {
+          if (data.nodes.length === 0 && data.edges.length === 0) {
+            alert("No network data for this cluster.");
+            return;
+          }
+          updateLegend(data);
+          const elementsCombined = data.nodes.concat(data.edges);
+          visualizeNetwork(elementsCombined);
+          d3.select("#heatmap").style("display", "none");
+          document.getElementById("backToHeatmap").style.display = "inline-block";
+          document.getElementById("refreshNetworkBtn").style.display = "inline-block";
+          document.getElementById('table-search-container').hidden = false;
+          document.getElementById('sizeControls').hidden = false;
+          document.getElementById("topControls").style.display = "none";
+          createClusterTable(clusterID);
+          document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        })
+        .catch(error => console.error("Error fetching network data:", error));
+    }
     
-    // Load a page of cluster data table using pagination
     function loadClusterTablePage(clusterID, page) {
       fetch(`http://127.0.0.1:5000/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
       .then(response => response.text())
@@ -700,39 +740,36 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       .catch(error => console.error("Error fetching cluster table:", error));
     }
     
-    // Create the data table for the current cluster
     function createClusterTable(clusterID) {
       loadClusterTablePage(clusterID, 1);
       document.getElementById('table-container').style.display = "block";
       document.getElementById('table-search-container').style.display = "block";
     }
     
-    // Pagination button to navigate to a specified page
     document.getElementById('goPageBtn').addEventListener('click', function () {
-    let page = parseInt(document.getElementById('currentPageInput').value);
-    if (page >= 1) {
-      if (window.edgeFilterState) {
-        const { source, destination, protocol } = window.edgeFilterState;
-        fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
-          .then(res => res.text())
-          .then(html => {
-            const container = document.getElementById('table-container');
-            container.innerHTML = html;
-            const summaryElem = document.getElementById('table-summary');
-            if (summaryElem) {
-              const total = parseInt(summaryElem.dataset.total);
-              const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
-              document.getElementById('totalPages').textContent = totalPages;
-              document.getElementById('currentPageInput').value = page;
-            }
-          });
-      } else if (currentClusterID) {
-        loadClusterTablePage(currentClusterID, page);
+      let page = parseInt(document.getElementById('currentPageInput').value);
+      if (page >= 1) {
+        if (window.edgeFilterState) {
+          const { source, destination, protocol } = window.edgeFilterState;
+          fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+            .then(res => res.text())
+            .then(html => {
+              const container = document.getElementById('table-container');
+              container.innerHTML = html;
+              const summaryElem = document.getElementById('table-summary');
+              if (summaryElem) {
+                const total = parseInt(summaryElem.dataset.total);
+                const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+                document.getElementById('totalPages').textContent = totalPages;
+                document.getElementById('currentPageInput').value = page;
+              }
+            });
+        } else if (currentClusterID) {
+          loadClusterTablePage(currentClusterID, page);
+        }
       }
-    }
-  });
-
-    // Group nodes into directed components in the network using BFS
+    });
+    
     function groupDirectedComponents(cy) {
       let visited = new Set();
       let groupCount = 0;
@@ -755,7 +792,6 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       });
     }
     
-    // Position grouped network components in a tree layout
     function positionGroupedComponentsTree(cy) {
       let groupMap = {};
       cy.nodes().forEach(n => {
@@ -814,29 +850,21 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       });
     }
     
-    // Helper function to compute the clamped node size
     function getNodeSize(ele) {
       let minSize = parseFloat(document.getElementById('nodeSizeMin').value);
       let maxSize = parseFloat(document.getElementById('nodeSizeMax').value);
-
-      // Apply defaults only if both are missing
       if (isNaN(minSize) && isNaN(maxSize)) {
         minSize = 30;
         maxSize = 65;
       } else {
-        // If one is missing, use the other as a fallback
         if (isNaN(minSize)) minSize = maxSize;
         if (isNaN(maxSize)) maxSize = minSize;
       }
-
-      // Prevent accidental inversion
       if (maxSize < minSize) {
         const temp = maxSize;
         maxSize = minSize;
         minSize = temp;
       }
-
-      // Get min/max NodeWeight from all nodes
       let maxWeight = 0;
       let minWeight = Infinity;
       ele.cy().nodes().forEach(n => {
@@ -845,33 +873,25 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
         if (w < minWeight) minWeight = w;
       });
       if (!isFinite(minWeight)) minWeight = 0;
-
       const currentWeight = parseFloat(ele.data('NodeWeight')) || 0;
-
       if (maxWeight === minWeight) return minSize;
-
       const scaled = minSize + ((currentWeight - minWeight) / (maxWeight - minWeight)) * (maxSize - minSize);
       return Math.min(Math.max(scaled, minSize), maxSize);
     }
-
-
-    // Visualize the network using Cytoscape with our configured styles and layout
+    
     function visualizeNetwork(elements) {
       document.getElementById('cy').style.display = 'block';
       const cy = cytoscape({
         container: document.getElementById('cy'),
         elements: elements,
+        pixelRatio: 1,
         layout: { name: 'preset' },
         style: [
-                  {
+          {
             selector: 'node',
             style: {
-              'width': function(ele) {
-                return getNodeSize(ele);
-              },
-              'height': function(ele) {
-                return getNodeSize(ele);
-              },
+              'width': function(ele) { return getNodeSize(ele); },
+              'height': function(ele) { return getNodeSize(ele); },
               'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
               'border-width': 2,
               'border-color': '#333',
@@ -901,12 +921,8 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
               'curve-style': 'bezier',
               'control-point-step-size': 30,
               'width': 'data(normalizedWidth)',
-              'line-color': function(ele) {
-                return ele.data('edgeColor') || '#888';
-              },
-              'target-arrow-color': function(ele) {
-                return ele.data('edgeColor') || '#888';
-              },
+              'line-color': function(ele) { return ele.data('edgeColor') || '#888'; },
+              'target-arrow-color': function(ele) { return ele.data('edgeColor') || '#888'; },
               'opacity': 0.8
             }
           },
@@ -924,35 +940,29 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       
       globalCy = cy;
       
-      // Assign colors to edges based on protocol
-      // Avoids red since selected edges are red
       cy.edges().forEach(edge => {
         let protocol = edge.data('Protocol');
         let color = protocolColorMap[protocol] || '#888';
         if (/^#?f{2}0000$/i.test(color) || color.toLowerCase() === 'red') {
-          color = '#880000'; // dark red alternative, or just pick a safe one
+          color = '#880000';
         }
         edge.data('edgeColor', color);
       });
       
-      // Calculate normalized edge widths based on process count
       cy.edges().forEach(edge => {
-      let count = parseFloat(edge.data('processCount')) || 0;
-      const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
-      const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
-      const computedWeight = 2 + (count * 1);
-      const clamped = Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight);
+        let count = parseFloat(edge.data('processCount')) || 0;
+        const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
+        const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
+        const computedWeight = 2 + (count * 1);
+        const clamped = Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight);
+        edge.data('normalizedWeight', clamped);
+        edge.data('normalizedWidth', clamped);
+      });
       
-      edge.data('normalizedWeight', clamped);     // legacy (can remove later)
-      edge.data('normalizedWidth', clamped);      //  for rendering
-    });
-      
-      // Group components and position them in a tree layout
       groupDirectedComponents(cy);
       positionGroupedComponentsTree(cy);
       cy.fit(cy.elements(), 30);
       
-      // Define interactive events for nodes and edges with tooltip popups
       cy.on('mouseover', 'node,edge', (evt) => {
         let t = evt.target;
         let px = evt.originalEvent.pageX;
@@ -979,76 +989,63 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
         tooltip.style.display = 'none';
       });
       
-      // On edge click: support selecting edges (with shift for group selection)
       cy.on('click', 'edge', (evt) => {
-      const edge = evt.target;
-      const edgeId = edge.id();
-
-      // Toggle selection state
-      if (selectedEdges.has(edgeId)) {
-      selectedEdges.delete(edgeId);
-      edge.removeClass('selected');
-      edge.data('normalizedWidth', edge.data('originalWidth'));  //  restore width
-    } else {
-      selectedEdges.add(edgeId);
-      edge.data('originalWidth', edge.data('normalizedWidth'));  //  save current width
-      edge.data('normalizedWidth', edge.data('normalizedWidth')); // lock width
-      edge.addClass('selected');
-    }
-
-      // Update the table based on all selected edges
-      const selectedEdgeData = Array.from(selectedEdges).map(id => {
-        const e = cy.getElementById(id);
-        return {
-          source: e.data('source'),
-          destination: e.data('target'),
-          protocol: e.data('Protocol')
-        };
-      });
-
-      if (selectedEdgeData.length === 0) {
-      // No selected edges: show full cluster table
-      if (currentClusterID) {
-        loadClusterTablePage(currentClusterID, 1);
-        document.getElementById('table-container').style.display = 'block';
-        document.getElementById('table-pagination').style.display = 'block';
-        window.edgeFilterState = null;
-      }
-      return;
-    }
-
-      // Build query string for selected edges
-      fetch("http://127.0.0.1:5000/get_multi_edge_table", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          edges: selectedEdgeData,
-          page: 1,
-          page_size: 50
-        })
-      })
-      .then(res => res.text())
-      .then(html => {
-        const container = document.getElementById('table-container');
-        container.innerHTML = html;
-        container.style.display = 'block';
-        document.getElementById('table-pagination').style.display = 'block';
-
-        const summaryElem = document.getElementById('table-summary');
-        if (summaryElem) {
-          const total = parseInt(summaryElem.dataset.total);
-          const totalPages = Math.ceil(total / 50);
-          document.getElementById('totalPages').textContent = totalPages;
-          document.getElementById('currentPageInput').value = 1;
+        const edge = evt.target;
+        const edgeId = edge.id();
+        if (selectedEdges.has(edgeId)) {
+          selectedEdges.delete(edgeId);
+          edge.removeClass('selected');
+          edge.data('normalizedWidth', edge.data('originalWidth'));
+        } else {
+          selectedEdges.add(edgeId);
+          edge.data('originalWidth', edge.data('normalizedWidth'));
+          edge.data('normalizedWidth', edge.data('normalizedWidth'));
+          edge.addClass('selected');
         }
-
-        // Save for pagination
-        window.edgeFilterState = selectedEdgeData;
+        const selectedEdgeData = Array.from(selectedEdges).map(id => {
+          const e = cy.getElementById(id);
+          return {
+            source: e.data('source'),
+            destination: e.data('target'),
+            protocol: e.data('Protocol')
+          };
+        });
+        if (selectedEdgeData.length === 0) {
+          if (currentClusterID) {
+            loadClusterTablePage(currentClusterID, 1);
+            document.getElementById('table-container').style.display = 'block';
+            document.getElementById('table-pagination').style.display = 'block';
+            window.edgeFilterState = null;
+          }
+          return;
+        }
+        fetch("http://127.0.0.1:5000/get_multi_edge_table", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            edges: selectedEdgeData,
+            page: 1,
+            page_size: 50
+          })
+        })
+        .then(res => res.text())
+        .then(html => {
+          const container = document.getElementById('table-container');
+          container.innerHTML = html;
+          container.style.display = 'block';
+          document.getElementById('table-pagination').style.display = 'block';
+          const summaryElem = document.getElementById('table-summary');
+          if (summaryElem) {
+            const total = parseInt(summaryElem.dataset.total);
+            const totalPages = Math.ceil(total / 50);
+            document.getElementById('totalPages').textContent = totalPages;
+            document.getElementById('currentPageInput').value = 1;
+          }
+          window.edgeFilterState = selectedEdgeData;
+        });
       });
-    });
     }
     
-    // Show the edge filter panel and prefill with the edge's data
     function showEdgeFilterPanel(edgeData) {
       document.getElementById('edgeFilterSource').value = edgeData.source || "";
       document.getElementById('edgeFilterDestination').value = edgeData.target || "";
@@ -1059,7 +1056,6 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       panel.style.display = 'block';
     }
     
-    // Clear any active edge filters and hide the panel
     function clearEdgeFilter() {
       if (!globalCy) return;
       globalCy.edges().forEach(e => e.show());
@@ -1071,7 +1067,6 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       document.getElementById('edgeFilterPanel').style.display = 'none';
     }
     
-    // Apply edge filter based on the inputs in the filter panel
     function applyEdgeFilter() {
       if (!globalCy) return;
       let fSource = document.getElementById('edgeFilterSource').value.trim().toLowerCase();
@@ -1118,11 +1113,9 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       });
     }
     
-    // Listeners for the edge filter apply and clear buttons
     document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
     document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
     
-    // Utility: parse a numeric expression like ">=1000" from user input
     function parseNumericExpression(value) {
       const match = value.match(/^(\>=|\<=|>|<)\s*(\d+(?:\.\d+)?)$/);
       if (match) {
@@ -1135,7 +1128,6 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       return null;
     }
     
-    // Handle CSV file upload: read file and send its content to the server for processing
     document.getElementById("fileInput").addEventListener("change", function(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -1168,24 +1160,20 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       reader.readAsText(file);
     });
     
-    // Download button just sends the browser to our download endpoint
     document.getElementById("downloadButton").addEventListener("click", function() {
       window.location.href = "http://127.0.0.1:5000/download_csv";
     });
 
-    // Cluster refresh button
     document.getElementById("refreshNetworkBtn").addEventListener("click", function() {
       if (currentClusterID && window.globalData) {
         showClusterNetwork(currentClusterID);
       }
     });
     
-    // Create a tooltip element that will be used for hover details on the heatmap and network
     const tooltip = document.createElement('div');
     tooltip.id = 'tooltip';
     document.body.appendChild(tooltip);
     
-    // Add keydown events on all the filter inputs so that pressing "Enter" triggers the heatmap update
     const filterIds = [
       'payloadSearch', 'sourceFilter', 'destinationFilter',
       'protocolFilter', 'entropyMinFilter', 'entropyMaxFilter',
@@ -1202,49 +1190,38 @@ document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
       });
     });
     
-    // GLOBAL CLICK LISTENER:
-    // When clicking anywhere that's not a cell, clear any selected cluster.
     document.addEventListener('click', function(event) {
-      // If the target does NOT have the "cell" class, clear the selection.
       if (!event.target.classList.contains('cell')) {
-        if (window.selectedCluster) {
-          window.selectedCluster = null;
-          d3.selectAll("rect.cell")
-            .transition()
-            .duration(200)
-            .style("opacity", 1)
-            .style("fill", function() {
-              return d3.select(this).attr("data-original-fill");
-            });
-          // Remove the Explore Cluster Further button if it exists.
-          d3.select("#exploreClusterBtn").remove();
-        }
+        d3.selectAll("rect.cell.selected")
+          .classed("selected", false)
+          .transition()
+          .duration(200)
+          .style("fill", function() {
+            return d3.select(this).attr("data-original-fill");
+          });
+        window.selectedClusters.clear();
+        window.usedHighlightHues = [];
+        d3.select("#exploreClustersBtn").remove();
       }
     });
-
-    // Payload search filter (only filters Payload column)
+    
     document.getElementById('tableSearchInput').addEventListener('input', function () {
       const query = this.value.trim().toLowerCase();
       const rows = document.querySelectorAll('#table-container table tbody tr');
       const headerCells = document.querySelectorAll('#table-container table thead th');
       let payloadIndex = -1;
-
-      // Find index of the Payload column
       headerCells.forEach((th, idx) => {
         if (th.textContent.trim().toLowerCase() === 'payload') {
           payloadIndex = idx;
         }
       });
-
-      if (payloadIndex === -1) return; // Do nothing if column not found
-
+      if (payloadIndex === -1) return;
       rows.forEach(row => {
         const cell = row.cells[payloadIndex];
         const text = cell ? cell.textContent.toLowerCase() : '';
         row.style.display = text.includes(query) ? '' : 'none';
       });
     });
-    
   </script> 
 </body>
 </html>
