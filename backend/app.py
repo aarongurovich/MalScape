@@ -11,6 +11,7 @@ from flask_cors import CORS
 import argparse
 import sys
 import logging
+import os
 
 # Set up logging so that we only see errors (keeps things quiet during normal use)
 logging.basicConfig(
@@ -32,12 +33,13 @@ internal_ranges = [(int(net.network_address), int(net.broadcast_address)) for ne
 def classify_ip_vector(ip):
     try:
         ip_int = int(ip_address(ip))
-    except:
+    except Exception:
         return "External"
     for rmin, rmax in internal_ranges:
         if rmin <= ip_int <= rmax:
             return "Internal"
     return "External"
+
 
 # Extract payload information using vectorized regex; returns a new DataFrame with parsed columns.
 def parse_payload_vectorized(payload_series):
@@ -70,13 +72,27 @@ def compute_clusters(df, resolution=2.5):
     partition = community_louvain.best_partition(G, weight='weight', resolution=resolution)
     return partition
 
+def load_anomaly_ips():
+    """
+    Load GroundTruth.csv and return a set of anomaly IPs (union of Source IP and Destination IP).
+    If the file is missing or there is an error, return an empty set.
+    """
+    anomaly_ips = set()
+    if os.path.exists("GroundTruth.csv"):
+        try:
+            gt_df = pd.read_csv("GroundTruth.csv", dtype=str)
+            # Extract union of Source IP and Destination IP from the ground truth file
+            anomaly_ips = set(gt_df["Source IP"]).union(set(gt_df["Destination IP"]))
+        except Exception as e:
+            logging.error(f"Error processing GroundTruth.csv: {e}")
+    return anomaly_ips
+
 # Compute the entropy of a given pandas Series using its value distribution
 def compute_entropy(series):
     counts = series.value_counts()
     p = counts / counts.sum()
     return -np.sum(p * np.log(p))
 
-# Process the CSV text input into a pandas DataFrame with various enhancements and computed columns
 def process_csv_to_df(csv_text):
     df = pd.read_csv(StringIO(csv_text), dtype=str)
     if not all(col in df.columns for col in ["Source", "Destination"]):
@@ -84,47 +100,47 @@ def process_csv_to_df(csv_text):
         logging.error(error_msg)
         raise ValueError(error_msg)
     
+    # If already processed (contains extra computed columns), return as is.
     processed_cols = ["Source", "Destination", "Payload", "SourcePort", "DestinationPort", "Flags", 
                       "Seq", "Ack", "Win", "Len", "TSval", "TSecr", 
                       "SourceClassification", "DestinationClassification", "ClusterID",
-                      "ConnectionID", "SeqDelta", "AckDelta", "IsRetransmission", "TCPFlagCount",
-                      "InterArrivalTime", "BytesPerSecond", "IsLargePacket", "PayloadLength",
-                      "BurstID", "IsSuspiciousAck", "ClusterEntropy"]
+                      "ConnectionID", "BurstID", "IsSuspiciousAck", "ClusterEntropy", "Anomaly"]
     if all(col in df.columns for col in processed_cols):
         return df
 
-    # Rename Info column to Payload if needed
+    # Rename column if needed
     if "Info" in df.columns:
         df.rename(columns={"Info": "Payload"}, inplace=True)
     
-    # Process the Payload column to fix missing values and extract details
+    # Process the Payload column if present
     if "Payload" in df.columns:
         df["Payload"] = df["Payload"].fillna("").str.replace(',', '/', regex=False)
         extracted = parse_payload_vectorized(df["Payload"])
         df = pd.concat([df, extracted], axis=1)
         
-        # Compute new flag-based columns based on the Flags string
+        # Compute flag-based columns if Flags exists
         if "Flags" in df.columns:
             df["IsSYN"] = df["Flags"].apply(lambda x: 1 if "SYN" in x else 0)
             df["IsRST"] = df["Flags"].apply(lambda x: 1 if "RST" in x else 0)
             df["IsACK"] = df["Flags"].apply(lambda x: 1 if "ACK" in x else 0)
             df["IsPSH"] = df["Flags"].apply(lambda x: 1 if "PSH" in x else 0)
     
-    # Compute a normalized NodeWeight based on the connection counts
+    # Compute normalized NodeWeight based on connection counts
     connection_counts = df.groupby(["Source", "Destination"])["Source"].transform("count")
     if connection_counts.max() != connection_counts.min():
         node_weights = (connection_counts - connection_counts.min()) / (connection_counts.max() - connection_counts.min())
     else:
         node_weights = pd.Series(1.0, index=connection_counts.index)
     df["NodeWeight"] = node_weights
-    # Always compute classification for both Source and Destination IPs
+    
+    # Classify IPs as internal or external
     df["SourceClassification"] = df["Source"].apply(classify_ip_vector)
     df["DestinationClassification"] = df["Destination"].apply(classify_ip_vector)
     
-    # Create a composite ConnectionID for unique identification
+    # Create a composite ConnectionID
     df["ConnectionID"] = df["Source"] + ":" + df["SourcePort"].fillna("N/A") + "-" + df["Destination"] + ":" + df["DestinationPort"].fillna("N/A")
     
-    # Convert the Time column to a datetime format with milliseconds
+    # Convert Time to datetime and perform numeric conversions
     try:
         df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
     except Exception as e:
@@ -132,7 +148,8 @@ def process_csv_to_df(csv_text):
     df["Length"] = pd.to_numeric(df["Length"], errors='coerce')
     for col in ["Seq", "Ack", "Win", "Len", "TSval", "TSecr"]:
         df[col] = pd.to_numeric(df[col], errors='coerce')
-    # Compute the time difference between packets for each connection
+    
+    # Compute time differences and derived features
     df["InterArrivalTime"] = df.groupby("ConnectionID")["Time"].diff().dt.total_seconds()
     df["BytesPerSecond"] = df["Length"] / df["InterArrivalTime"]
     df["BytesPerSecond"] = df["BytesPerSecond"].replace([np.inf, -np.inf], np.nan)
@@ -143,11 +160,11 @@ def process_csv_to_df(csv_text):
     df["IsSuspiciousAck"] = df.apply(lambda row: True if pd.notnull(row["PrevSeq"]) and row["Ack"] < row["PrevSeq"] else False, axis=1)
     df.drop(columns=["PrevSeq"], inplace=True)
     
-    # Compute clusters using the graph-based clustering method
+    # Compute clusters using Louvain community detection (kept for network graphing purposes)
     node_cluster = compute_clusters(df, resolution=2.5)
     df["ClusterID"] = df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
     
-    # Calculate average entropy per cluster using Protocol, SourcePort, and DestinationPort
+    # Calculate average entropy per cluster based on Protocol, SourcePort, and DestinationPort
     cluster_entropy = {}
     for cluster, group in df.groupby("ClusterID"):
         ent_protocol = compute_entropy(group["Protocol"]) if "Protocol" in group.columns else 0
@@ -156,29 +173,39 @@ def process_csv_to_df(csv_text):
         cluster_entropy[cluster] = (ent_protocol + ent_srcport + ent_dstport) / 3
     df["ClusterEntropy"] = df["ClusterID"].map(cluster_entropy)
     
+    # --- Anomaly Detection based on GroundTruth.csv ---
+    # Check if GroundTruth.csv exists in the same folder.
+    if os.path.exists("GroundTruth.csv"):
+        try:
+            gt_df = pd.read_csv("GroundTruth.csv", dtype=str)
+            # Expecting GroundTruth.csv to have "Source IP" and "Destination IP" columns.
+            anomaly_ips = set(gt_df["Source IP"]).union(set(gt_df["Destination IP"]))
+        except Exception as e:
+            logging.error(f"Error processing GroundTruth.csv: {e}")
+            anomaly_ips = set()
+        # --- Anomaly Detection based on GroundTruth.csv ---
+        anomaly_ips = load_anomaly_ips()
+        df["Anomaly"] = df.apply(
+            lambda row: "anomaly" if (row["Source"] in anomaly_ips or row["Destination"] in anomaly_ips) else "normal",
+            axis=1
+)
+        # For backward compatibility, mirror the anomaly flag.
+        df["ClusterAnomaly"] = df["Anomaly"]
+    else:
+        df["Anomaly"] = "normal"
+    # For backward compatibility, mirror the anomaly flag.
+    df["ClusterAnomaly"] = df["Anomaly"]
+    
     return df
 
-def convert_nan_to_none(obj):
-    """
-    Recursively converts any np.nan (or float('nan')) found in dicts or lists to None.
-    """
-    if isinstance(obj, dict):
-        return {k: convert_nan_to_none(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_nan_to_none(item) for item in obj]
-    elif isinstance(obj, float) and np.isnan(obj):
-        return None
-    else:
-        return obj
-    
-
-# Convert the processed DataFrame back to CSV text for output
 def process_csv(csv_text):
     df = process_csv_to_df(csv_text)
     out = StringIO()
     df.to_csv(out, index=False, quoting=csv.QUOTE_MINIMAL)
     return out.getvalue()
 
+# -------------------------------
+# Flask endpoints and additional routes
 app = Flask(__name__)
 CORS(app)  # Enable CORS so that requests from our web app can be processed
 
@@ -220,7 +247,7 @@ def filter_and_aggregate():
         df = df[df["Source"].str.lower().str.contains(sourceFilter, na=False)]
     if destinationFilter:
         df = df[df["Destination"].str.lower().str.contains(destinationFilter, na=False)]
-    if protocolFilter:
+    if protocolFilter and "Protocol" in df.columns:
         df = df[df["Protocol"].str.lower().str.contains(protocolFilter, na=False)]
     df["ClusterEntropy"] = pd.to_numeric(df["ClusterEntropy"], errors='coerce')
     df = df[(df["ClusterEntropy"] >= entropyMin) & (df["ClusterEntropy"] <= entropyMax)]
@@ -250,6 +277,10 @@ def filter_and_aggregate():
         agg = df.groupby("ClusterID")["Destination"].nunique()
     elif metric == "Unique Sources":
         agg = df.groupby("ClusterID")["Source"].nunique()
+    elif metric == "Unique IPs":
+        agg = df.groupby("ClusterID").apply(
+            lambda g: len(set(g["Source"]).union(set(g["Destination"])))
+        )
     elif metric == "Payload Size Variance":
         df["PayloadLength"] = pd.to_numeric(df["PayloadLength"], errors="coerce").fillna(0)
         agg = df.groupby("ClusterID")["PayloadLength"].var(ddof=0)
@@ -271,7 +302,6 @@ def filter_and_aggregate():
     unique_sources = df.groupby("ClusterID")["Source"].nunique()
     unique_destinations = df.groupby("ClusterID")["Destination"].nunique()
 
-    # Only include clusters that meet our min/max unique source/destination criteria
     filtered_pivot = []
     for cluster, value in agg.items():
         src_count = unique_sources.get(cluster, 0)
@@ -292,24 +322,19 @@ def cluster_network():
         return jsonify({"nodes": [], "edges": []})
     
     cluster_id_param = request.args.get("cluster_id")
-    # Filter the global data to only include rows with the matching cluster ID
     df_cluster = global_df[global_df["ClusterID"] == str(cluster_id_param)]
     
     nodes = {}
     edges = {}
-    # Build nodes and edges for the network graph from the filtered data
     for idx, row in df_cluster.iterrows():
         source = str(row.get("Source", "")).strip()
         destination = str(row.get("Destination", "")).strip()
         protocol = str(row.get("Protocol", "")).strip()
-        # Skip if any required field is missing
         if not source or not destination or not protocol:
             continue
-        # Ensure classification is set; compute if not already in the row
         let_source_class = row.get("SourceClassification") or classify_ip_vector(source)
         let_destination_class = row.get("DestinationClassification") or classify_ip_vector(destination)
         
-        # Create node entry for the source
         if source not in nodes:
             nodes[source] = {
                 "data": {
@@ -319,7 +344,6 @@ def cluster_network():
                     "NodeWeight": row.get("NodeWeight", 0)
                 }
             }
-        # Create node entry for the destination
         if destination not in nodes:
             nodes[destination] = {
                 "data": {
@@ -349,11 +373,10 @@ def cluster_network():
         edges[edge_key]["data"]["EdgeWeight"] += length
         edges[edge_key]["data"]["processCount"] += 1
 
-    # Prepare the data and convert NaN values before sending the JSON response
     network_data = {"nodes": list(nodes.values()), "edges": list(edges.values())}
     return jsonify(convert_nan_to_none(network_data))
 
-# Endpoint to return rows of a cluster in JSON format (used for pagination)
+# Endpoint to return rows of a cluster in JSON format (for pagination)
 @app.route('/get_cluster_rows', methods=['GET'])
 def get_cluster_rows():
     global global_df
@@ -370,12 +393,10 @@ def get_cluster_rows():
     except Exception as e:
         logging.error(f"Error parsing page_size: {e}")
         page_size = 50
-    # Filter by cluster and prepare the subset of rows for the current page
     df_cluster = global_df[global_df["ClusterID"] == str(cluster_id)]
     total = len(df_cluster)
     start = (page - 1) * page_size
     end = start + page_size
-    # Replace NaN with None so that JSON is valid
     rows = df_cluster.iloc[start:end].replace({np.nan: None}).to_dict(orient="records")
     return jsonify({"rows": rows, "total": total})
 
@@ -397,18 +418,15 @@ def get_cluster_table():
         logging.error(f"Error parsing page_size: {e}")
         page_size = 50
 
-    # Filter data for the selected cluster
     df_cluster = global_df[global_df["ClusterID"] == str(cluster_id)]
     total = len(df_cluster)
     start = (page - 1) * page_size
     end = start + page_size
-    # Replace NaN with None so they appear as empty cells in HTML
     rows = df_cluster.iloc[start:end].replace({np.nan: None}).to_dict(orient="records")
     
     if not rows:
         return "<p>No rows found for this cluster.</p>"
     
-    # Use the first row's keys to form table headers
     columns = list(rows[0].keys())
     html = "<table style='width:100%; border-collapse: collapse; border:1px solid #ddd;'>"
     html += "<thead><tr>"
@@ -426,7 +444,8 @@ def get_cluster_table():
     html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
     return html
 
-# Endpoint to process CSV data: parses, processes, and stores in global_df
+# Endpoint to process CSV data: parses, processes, and stores in global_df.
+# GroundTruth.csv is automatically read from the same folder.
 @app.route('/process_csv', methods=['POST'])
 def process_csv_endpoint():
     global global_df
@@ -457,6 +476,25 @@ def download_csv():
 @app.route('/')
 def index():
     return send_from_directory('static', 'index.html')
+
+@app.route('/protocol_percentages', methods=['GET'])
+def protocol_percentages():
+    global global_df
+    if global_df is None:
+        return jsonify({})
+    df = global_df.copy()
+    df['Protocol'] = df['Protocol'].fillna('').str.strip()
+    
+    if 'processCount' in df.columns:
+        df['processCount'] = pd.to_numeric(df['processCount'], errors='coerce').fillna(1)
+        protocol_counts = df.groupby('Protocol')['processCount'].sum()
+    else:
+        protocol_counts = df.groupby('Protocol').size()
+        
+    total = protocol_counts.sum()
+    percentages = {proto: round(count / total * 100, 5)
+                   for proto, count in protocol_counts.items() if proto}
+    return jsonify(percentages)
 
 @app.route('/get_edge_table', methods=['GET'])
 def get_edge_table():
@@ -564,6 +602,19 @@ def get_multi_edge_table():
     html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
     return html
 
+def convert_nan_to_none(obj):
+    """
+    Recursively converts any np.nan found in dicts or lists to None.
+    """
+    if isinstance(obj, dict):
+        return {k: convert_nan_to_none(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_nan_to_none(item) for item in obj]
+    elif isinstance(obj, float) and np.isnan(obj):
+        return None
+    else:
+        return obj
+
 # Main CLI function to process a CSV file from the command line and save the output
 def main_cli():
     parser = argparse.ArgumentParser(description="Process CSV files for network traffic analysis.")
@@ -589,7 +640,6 @@ def main_cli():
         logging.error(f"Error saving output file: {e}")
         sys.exit(1)
 
-# When this script is executed, either run the CLI or launch the server
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] != "runserver":
         main_cli()
