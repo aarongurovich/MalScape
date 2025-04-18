@@ -616,31 +616,13 @@ def get_processed_csv():
 
 @app.route('/hierarchical_clusters', methods=['GET'])
 def hierarchical_clusters():
-    """
-    Build a dendrogram over your clusters. Re-runs Louvain clustering
-    using a user-provided resolution value (default = 2.5).
-    Then performs hierarchical clustering on:
-      1) total packet count
-      2) average ClusterEntropy
-    """
     global global_df
     if global_df is None:
         return jsonify({})
 
-    # 1. Read optional resolution param for Louvain clustering
     resolution = float(request.args.get("resolution", 2.5))
-
-    # 2. Recompute Louvain clusters with this resolution
     node_cluster = compute_clusters(global_df, resolution=resolution)
     global_df["ClusterID"] = global_df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
-
-    # 3. Aggregate stats per cluster
-    representatives = (
-        global_df
-        .groupby('ClusterID')["Source"]
-        .first()
-        .to_dict()
-    )
 
     stats = (
         global_df
@@ -648,53 +630,27 @@ def hierarchical_clusters():
         .agg(total_packets=('ClusterID', 'size'),
              avg_entropy=('ClusterEntropy', 'mean'))
         .reset_index()
+        .reset_index(drop=True)  # needed to match order with linkage matrix
     )
 
-    # Add representative label
-    stats["label"] = stats["ClusterID"].map(representatives)
+    stats["label"] = stats["ClusterID"]
 
-    # 4. Perform hierarchical clustering on [total_packets, avg_entropy]
     from scipy.cluster.hierarchy import linkage, to_tree
-    data = stats[['total_packets', 'avg_entropy']].to_numpy()
-    Z = linkage(data, method='average')
-
-    # 5. Convert tree to nested dict format
-    root, nodes = to_tree(Z, rd=True)
+    Z = linkage(stats[['total_packets', 'avg_entropy']].to_numpy(), method='average')
+    root, _ = to_tree(Z, rd=True)
 
     def node_to_dict(node):
-        def split_ip(ip):
-            return ip.split('.') if ip else []
-
-        def shorten_ip(ip, depth):
-            parts = split_ip(ip)
-            return '.'.join(parts[:depth]) + '.' if parts and depth < 4 else ip
-
         if node.is_leaf():
-            ip = str(stats.loc[node.id, 'label'])  # full IP for leaves
+            cluster_id = stats.loc[node.id, 'ClusterID']
             return {
-                "id": ip,
+                "id": f"Cluster {cluster_id}",
+                "cluster_id": cluster_id,
                 "dist": float(node.dist)
             }
-
-        left_node = node.get_left()
-        right_node = node.get_right()
-        left = node_to_dict(left_node)
-        right = node_to_dict(right_node)
-
-        base_ip = left["id"]
-        count = node.count
-
-        if count > 50:
-            short = shorten_ip(base_ip, 1)
-        elif count > 10:
-            short = shorten_ip(base_ip, 2)
-        elif count > 3:
-            short = shorten_ip(base_ip, 3)
-        else:
-            short = base_ip
-
+        left = node_to_dict(node.get_left())
+        right = node_to_dict(node.get_right())
         return {
-            "id": short,
+            "id": "",
             "dist": float(node.dist),
             "children": [left, right]
         }
