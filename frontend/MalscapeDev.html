@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" href="favicon.png" type="image/png">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>MalScape</title>
@@ -267,6 +268,87 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* ─── DENDROGRAM MODAL ────────────────────────────────────────────────── */
+    #dendrogramModalHeader {
+      width: 100%;
+      height: 32px;
+      background-color: #eee;
+      padding: 4px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+      border-bottom: 1px solid #ccc;
+      user-select: none;
+      position: relative;
+      box-sizing: border-box;
+    }
+
+    #dendrogramModalHeader button#closeDendrogram {
+      background: transparent;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: black;
+      padding: 0;
+      margin: 0;
+      line-height: 1;
+    }
+    #dendrogramModal {
+      display: none;
+      position: fixed;
+      top: 100px;
+      left: 100px;
+      width: 700px;
+      height: 500px;
+      background: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      z-index: 10000;
+      resize: both;
+      overflow: hidden;
+    }
+
+    #dendrogramModal .modal-content {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    #thresholdControls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100px;
+      padding: 0 12px 0 16px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+
+    #thresholdControls input[type="number"] {
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      padding: 4px;
+      font-size: 12px;
+      margin-top: 8px;
+      width: 60px;
+    }
+
+    #thresholdControls input[type="range"] {
+      appearance: slider-vertical;
+      -webkit-appearance: slider-vertical;
+      -moz-appearance: slider-vertical;
+      writing-mode: bt-lr;
+      width: 16px;                  /* thinner slider so it fits cleanly */
+      height: 80%;
+      margin: 0;
+      outline: none;               /* remove focus ring */
+      box-shadow: none;            /* also remove focus box-shadow */
+    }
   </style>
 </head>
 <body>
@@ -285,6 +367,9 @@
         <label for="fileInput"><strong>Upload CSV File:</strong></label>
         <input type="file" id="fileInput" accept=".csv">
         <button id="downloadButton">Download Processed CSV File</button>
+
+        <!-- <button id="openDendrogramBtn">Show Dendrogram</button> -->
+
       </div>
       <div class="control-group">
         <label for="rowOrderSelect">Order Cells in Each Row By:</label>
@@ -316,6 +401,27 @@
         <input type="checkbox" id="isLargePacketFilter">
         <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
         <input type="checkbox" id="isSuspiciousAckFilter">
+      </div>
+    </div>
+
+    <!-- Inline Dendrogram Container -->
+    <div id="dendrogramCard" style="display: none; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px; border-radius: 12px; margin: 20px 0;">
+      <div id="inline-dendrogram-container" style="margin-bottom: 20px;">
+        <svg id="inlineDendrogramSvg" style="width: 100%; height: 100%; display: block;"></svg>
+        <div id="treeControls" style="margin-top: 10px; display: flex; align-items: center; gap: 12px;">
+          <label for="resolutionInput">Louvain Resolution:</label>
+          <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="default 2.5" style="margin-bottom: 0; vertical-align: middle;">
+          <button onclick="reclusterAndRedraw()">Apply</button>
+          <button onclick="resetInlineZoom()">Reset Zoom</button>
+          <!-- Tree Height Controls -->
+          <div style="display: flex; justify-content: center; align-items: center; gap: 16px;">
+            <button id="toggleTreeHeightBtn" onclick="toggleTreeHeight()">Double Tree Height</button>
+            <button onclick="showCustomHeightInput()" style="background: none; border: none; color: #007bff; cursor: pointer; font-size: 14px; text-decoration: underline; padding: 0; background-color: transparent;">
+              Click to enter custom
+            </button>
+          </div>                   
+        </div>
+        <div id="reclusterMessage" style="color: #a00; font-size: 13px; margin-top: 4px;"></div>
       </div>
     </div>
 
@@ -385,6 +491,10 @@
     let selectedEdges = new Set();
     let currentClusterID = null;
     const TABLE_PAGE_SIZE = 50;
+    let previousClusterCount = null;
+    let previousClusterHash = null;
+    let treeHeightExpanded = false;
+    let customTreeHeightActive = false;
     
     window.selectedClusters = new Set();
     window.usedHighlightHues = [];
@@ -442,33 +552,41 @@
     }
     
     // Update the legend from the backend
-    function updateLegend() {
+    function updateLegend(data) {
       const legendTable = document.getElementById('legend');
       legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th><th>Process %</th></tr>';
+
       fetch("http://127.0.0.1:5000/protocol_percentages")
         .then(response => response.json())
         .then(percentages => {
-          if (window.globalData) {
-            let protocolsSet = new Set();
-            window.globalData.forEach(d => {
-              if(d.Protocol) protocolsSet.add(d.Protocol.trim());
-            });
-            let protocols = Array.from(protocolsSet).sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
-            protocols.forEach(protocol => {
-              if (!protocolColorMap[protocol]) {
-                protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215)
-                  .toString(16).padStart(6, '0');
-              }
-              let percentage = (percentages[protocol] !== undefined)
-                                ? percentages[protocol].toFixed(5) + '%'
-                                : '0%';
-              const row = document.createElement('tr');
-              row.innerHTML = `<td>${protocol}</td>
-                               <td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>
-                               <td>${percentage}</td>`;
-              legendTable.appendChild(row);
-            });
+          let protocols = Object.keys(percentages);
+
+          let source = null;
+          if (data && Array.isArray(data.edges)) {
+            source = new Set(data.edges.map(e => e.data?.Protocol?.trim()).filter(Boolean));
+          } else if (window.globalData && window.globalData.length > 0) {
+            // Called after CSV load
+            source = new Set(window.globalData.map(d => d.Protocol?.trim()).filter(Boolean));
           }
+
+          if (source) {
+            protocols = protocols.filter(p => source.has(p));
+          }
+
+          protocols.sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
+
+          protocols.forEach(protocol => {
+            if (!protocolColorMap[protocol]) {
+              protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215)
+                .toString(16).padStart(6, '0');
+            }
+            const percentage = (percentages[protocol] ?? 0).toFixed(5) + '%';
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${protocol}</td>
+                            <td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>
+                            <td>${percentage}</td>`;
+            legendTable.appendChild(row);
+          });
         })
         .catch(error => {
           console.error("Error fetching protocol percentages:", error);
@@ -1146,6 +1264,7 @@
             window.globalData = d3.csvParse(processedText, d3.autoType);
             updateLegend();
             updateHeatmap();
+            loadInlineDendrogram();
           } catch (error) {
             console.error("Error parsing processed CSV:", error);
           } finally {
@@ -1222,6 +1341,423 @@
         row.style.display = text.includes(query) ? '' : 'none';
       });
     });
-  </script> 
+
+    // ─── DENDROGRAM UI & RENDERER ───────────────────────────────────────────
+    // Opens modal and pulls a D3‐hierarchy JSON from your backend
+    document.getElementById("openDendrogramBtn").addEventListener("click", () => {
+      fetch("http://127.0.0.1:5000/hierarchical_clusters")
+        .then(r => r.json())
+        .then(treeData => showDendrogram(treeData))
+        .catch(console.error);
+    });
+
+    // Hides modal (after DOM is loaded)
+    document.addEventListener("DOMContentLoaded", () => {
+      document
+        .getElementById("closeDendrogram")
+        .addEventListener("click", () => {
+          document.getElementById("dendrogramModal").style.display = "none";
+        });
+        const modal   = document.getElementById("dendrogramModal");
+        const header  = document.getElementById("dendrogramModalHeader");
+        const close   = document.getElementById("closeDendrogram");
+
+        let drag = false, offsetX = 0, offsetY = 0;
+
+        header.addEventListener("mousedown", e => {
+          drag    = true;
+          offsetX = e.clientX - modal.offsetLeft;
+          offsetY = e.clientY - modal.offsetTop;
+          document.body.style.userSelect = "none";
+        });
+
+        document.addEventListener("mousemove", e => {
+          if (!drag) return;
+          modal.style.left = (e.clientX - offsetX) + "px";
+          modal.style.top  = (e.clientY - offsetY) + "px";
+        });
+
+        document.addEventListener("mouseup", () => {
+          drag = false;
+          document.body.style.userSelect = "";
+        });
+
+        close.addEventListener("click", () => modal.style.display = "none");
+    });
+
+    function showDendrogram(data) {
+      const margin = { top: 40, right: 20, bottom: 40, left: 20 };
+      const svgH = 400;
+
+      // Build hierarchy and calculate width based on number of leaves
+      const root = d3.hierarchy(data)
+        .sum(d => d.children ? 0 : 1)
+        .sort((a, b) => (a.data.dist || 0) - (b.data.dist || 0));
+
+      const leaves = root.leaves();
+      const width = leaves.length * 25;
+      const height = svgH - margin.top - margin.bottom;
+
+      const cluster = d3.cluster().size([width, height]);
+      cluster(root);
+
+      const svg = d3.select("#dendrogramSvg")
+        .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${svgH}`)
+        .attr("preserveAspectRatio", "xMidYMin slice")
+        .attr("width", "100%")
+        .attr("height", "100%");
+      svg.selectAll("*").remove();
+
+      const g = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      // Links
+      g.selectAll(".link")
+        .data(root.links())
+        .enter().append("path")
+          .attr("class", "link")
+          .attr("d", d => `
+            M${d.source.x},${d.source.y}
+            V${(d.source.y + d.target.y) / 2}
+            H${d.target.x}
+            V${d.target.y}
+          `)
+          .attr("stroke", "#555")
+          .attr("fill", "none");
+
+      // Nodes
+      g.selectAll(".node")
+        .data(root.descendants())
+        .enter().append("circle")
+          .attr("class", "node")
+          .attr("cx", d => d.x)
+          .attr("cy", d => d.y)
+          .attr("r", 4)
+          .attr("fill", d => d.children ? "#555" : "#999");
+
+      // Labels (horizontal for top levels, vertical for deeper)
+      g.selectAll(".nodelabel")
+        .data(root.descendants())
+        .enter().append("text")
+          .attr("class", "nodelabel")
+          .attr("font-size", "9px")
+          .attr("fill", "#333")
+          .attr("text-anchor", d => {
+            if (d.depth <= 1) return "start";
+            if (!d.children) return "end";
+            return "start";
+          })
+          .attr("transform", d => {
+            if (d.depth <= 1) {
+              return `translate(${d.x + 6}, ${d.y - 2})`;
+            } else if (!d.children) {
+              return `translate(${d.x}, ${d.y + 6}) rotate(-90)`;
+            } else {
+              return `translate(${d.x + 12}, ${d.y}) rotate(-90)`;
+            }
+          })
+          .text(d => d.data.id || "");
+
+      // Red threshold line
+      const line = g.append("line")
+        .attr("id", "thresholdLine")
+        .attr("x1", 0)
+        .attr("x2", width)
+        .attr("y1", 0)
+        .attr("y2", 0)
+        .attr("stroke", "red")
+        .attr("stroke-dasharray", "4 2");
+
+      function updateLine(t) {
+        const y = (1 - t) * height;
+        line.attr("y1", y).attr("y2", y);
+        updateHeatmap(t);
+      }
+
+      const slider = d3.select("#thresholdRange");
+      const numIn  = d3.select("#thresholdNumber");
+
+      slider.on("input", function() {
+        const t = +this.value;
+        numIn.property("value", t.toFixed(2));
+        updateLine(t);
+      });
+
+      numIn.on("input", function() {
+        let t = +this.value;
+        if (isNaN(t)) t = 0;
+        t = Math.max(0, Math.min(1, t));
+        slider.property("value", t);
+        updateLine(t);
+      });
+
+      updateLine(+slider.property("value"));
+      document.getElementById("dendrogramModal").style.display = "block";
+    }
+
+    function renderInlineDendrogram(treeData) {
+      const svg = d3.select("#inlineDendrogramSvg");
+      svg.selectAll("*").remove();
+
+      const width = +svg.attr("width");
+      const height = +svg.attr("height");
+      const g = svg.append("g").attr("transform", "translate(40,0)");
+
+      const root = d3.hierarchy(treeData);
+      const treeLayout = d3.cluster().size([height, width - 160]);
+      treeLayout(root);
+
+      const link = g.selectAll(".link")
+        .data(root.links())
+        .join("path")
+        .attr("class", "link")
+        .attr("fill", "none")
+        .attr("stroke", "#ccc")
+        .attr("stroke-width", 2)
+        .attr("d", d3.linkHorizontal()
+          .x(d => d.y)
+          .y(d => d.x));
+
+      const node = g.selectAll(".node")
+        .data(root.descendants())
+        .join("g")
+        .attr("class", "node")
+        .attr("transform", d => `translate(${d.y},${d.x})`);
+
+      node.append("circle")
+        .attr("r", 4)
+        .attr("fill", d => d.children ? "#555" : "#999");
+
+      node.append("text")
+        .attr("dy", 3)
+        .attr("x", d => d.children ? -8 : 8)
+        .style("text-anchor", d => d.children ? "end" : "start")
+        .text(d => d.data.name || "");
+    }
+
+    function showInlineDendrogram(data, svgH = 400) {
+      const margin = { top: 40, right: 20, bottom: 40, left: 20 };
+
+      const root = d3.hierarchy(data)
+        .sum(d => d.children ? 0 : 1)
+        .sort((a, b) => (a.data.dist || 0) - (b.data.dist || 0));
+
+      const leaves = root.leaves();
+      const width = leaves.length * 25;
+      const height = svgH - margin.top - margin.bottom;
+
+      const cluster = d3.cluster().size([width, height]);
+      cluster(root);
+
+      const svg = d3.select("#inlineDendrogramSvg")
+        .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${svgH}`)
+        .attr("preserveAspectRatio", "xMidYMin meet")
+        .attr("width", "100%")
+        .attr("height", "100%");
+      svg.selectAll("*").remove();
+
+      const containerG = svg.append("g"); // for zoom
+      const g = containerG.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const zoom = d3.zoom()
+        .scaleExtent([0.5, 10])
+        .on("zoom", function(event) {
+          containerG.attr("transform", event.transform);
+        });
+      window.inlineZoom = d3.zoom()
+        .scaleExtent([0.5, 10])
+        .on("zoom", function(event) {
+          containerG.attr("transform", event.transform);
+        });
+
+      svg.call(window.inlineZoom);
+      svg.call(zoom);
+
+      // Draw edges
+      g.selectAll(".link")
+        .data(root.links())
+        .enter().append("path")
+          .attr("class", "link")
+          .attr("d", d => `
+            M${d.source.x},${d.source.y}
+            V${(d.source.y + d.target.y) / 2}
+            H${d.target.x}
+            V${d.target.y}
+          `)
+          .attr("stroke", "#555")
+          .attr("fill", "none");
+
+      // Draw nodes
+      g.selectAll(".node")
+        .data(root.descendants())
+        .enter().append("circle")
+          .attr("class", "node")
+          .attr("cx", d => d.x)
+          .attr("cy", d => d.y)
+          .attr("r", 4)
+          .attr("fill", d => d.children ? "#555" : "#999");
+
+      // Draw labels
+      g.selectAll(".nodelabel")
+        .data(root.descendants())
+        .enter().append("text")
+          .attr("class", "nodelabel")
+          .attr("font-size", "9px")
+          .attr("fill", "#333")
+          .attr("text-anchor", d => {
+            if (d.depth <= 1) return "start";
+            if (!d.children) return "end";
+            return "start";
+          })
+          .attr("transform", d => {
+            if (d.depth <= 1) {
+              return `translate(${d.x + 6}, ${d.y - 2})`;
+            } else if (!d.children) {
+              return `translate(${d.x}, ${d.y + 6}) rotate(-90)`;
+            } else {
+              return `translate(${d.x + 12}, ${d.y}) rotate(-90)`;
+            }
+          })
+          .text(d => d.data.id || "");
+          document.getElementById("treeControls").style.display = "flex";
+          document.getElementById("dendrogramCard").style.display = "block";
+          window.lastTreeData = data;
+    }
+
+    function loadInlineDendrogram() {
+      fetch("http://127.0.0.1:5000/hierarchical_clusters")
+        .then(r => r.json())
+        .then(data => {
+          showInlineDendrogram(data);
+        })
+        .catch(err => console.error("Dendrogram load error:", err));
+    }
+
+    function reclusterAndRedraw() {
+      const resolution = parseFloat(document.getElementById('resolutionInput').value);
+      if (!(resolution > 0)) {
+        alert("Please enter a valid resolution > 0.");
+        return;
+      }
+
+      fetch(`http://127.0.0.1:5000/hierarchical_clusters?resolution=${resolution}`)
+        .then(r => r.json())
+        .then(treeData => {
+          // Count leaves
+          let count = 0;
+          (function countLeaves(node) {
+            if (!node.children) count++;
+            else node.children.forEach(countLeaves);
+          })(treeData);
+
+          const currentHash = JSON.stringify(treeData); // structural hash
+          const changed = (
+            previousClusterCount === null ||
+            count !== previousClusterCount ||
+            currentHash !== previousClusterHash
+          );
+
+          previousClusterCount = count;
+          previousClusterHash = currentHash;
+
+          const msg = document.getElementById("reclusterMessage");
+          msg.textContent = changed ? "" : "No change — try a different resolution.";
+
+          if (!changed) return;
+
+          showInlineDendrogram(treeData);
+          resetInlineZoom();
+
+          return fetch("http://127.0.0.1:5000/get_processed_csv");
+        })
+        .then(r => r ? r.text() : null)
+        .then(text => {
+          if (!text) return;
+          window.globalData = d3.csvParse(text, d3.autoType);
+          updateLegend();
+          updateHeatmap();
+        })
+        .catch(err => {
+          console.error("Error:", err);
+          alert("Failed to recluster or update view.");
+        });
+    }
+
+    function toggleTreeHeight() {
+      if (customTreeHeightActive) {
+        // Reset from custom height to default
+        customTreeHeightActive = false;
+        treeHeightExpanded = false;
+        if (window.lastTreeData) {
+          showInlineDendrogram(window.lastTreeData, 400);
+          document.getElementById("toggleTreeHeightBtn").textContent = "Double Tree Height";
+        }
+        return;
+      }
+
+      treeHeightExpanded = !treeHeightExpanded;
+      const newHeight = treeHeightExpanded ? 800 : 400;
+
+      if (window.lastTreeData) {
+        showInlineDendrogram(window.lastTreeData, newHeight);
+      }
+
+      document.getElementById("toggleTreeHeightBtn").textContent =
+        treeHeightExpanded ? "Collapse Tree Height" : "Double Tree Height";
+    }
+
+    function showCustomHeightInput() {
+      const custom = prompt("Enter desired tree height (e.g. 500):", "600");
+      const val = parseInt(custom);
+      if (!isNaN(val) && val > 0 && window.lastTreeData) {
+        customTreeHeightActive = true;
+        showInlineDendrogram(window.lastTreeData, val);
+        document.getElementById("toggleTreeHeightBtn").textContent = "Reset Tree Height";
+      }
+    }
+
+    function resetInlineZoom() {
+      const svg = d3.select("#inlineDendrogramSvg");
+      if (window.inlineZoom) {
+        svg.transition().duration(400)
+          .call(window.inlineZoom.transform, d3.zoomIdentity);
+      }
+    }
+  </script>
+  <!-- ─── DENDROGRAM MODAL ────────────────────────────────────────────────── -->
+  <div id="dendrogramModal" style="display:none; top:100px; left:100px; width:700px; height:500px; background:#fff; border:1px solid #ccc; box-shadow:0 0 10px rgba(0,0,0,0.3); z-index:10000; resize:both; overflow:hidden; position:fixed;">
+  
+    <!-- Header for dragging -->
+    <div id="dendrogramModalHeader">
+      <span>Cluster Tree</span>
+      <button id="closeDendrogram">&times;</button>
+    </div>    
+  
+    <!-- Modal body -->
+    <div class="modal-content">
+      <svg id="dendrogramSvg" style="flex:1; width:100%; height:100%;"></svg>
+      <div id="thresholdControls" style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:80px; padding-left:16px; background:#fff;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+          <label for="thresholdNumber">Cutoff:</label>
+          <input
+            type="number"
+            id="thresholdNumber"
+            min="0" max="1" step="0.01"
+            value="0.50"
+            style="width:60px;"
+          >
+        </div>
+        <input
+          type="range"
+          orient="vertical"
+          id="thresholdRange"
+          min="0" max="1" step="0.01"
+          value="0.50"
+          style="writing-mode:bt-lr; height:80%;"
+        >
+      </div>
+    </div>
+  </div>
 </body>
 </html>
