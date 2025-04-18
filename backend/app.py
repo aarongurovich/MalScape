@@ -12,6 +12,8 @@ import argparse
 import sys
 import logging
 import os
+from scipy.cluster.hierarchy import linkage, to_tree
+from flask import jsonify
 
 # Set up logging so that we only see errors (keeps things quiet during normal use)
 logging.basicConfig(
@@ -601,6 +603,103 @@ def get_multi_edge_table():
     html += "</tbody></table>"
     html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
     return html
+
+@app.route('/get_processed_csv', methods=['GET'])
+def get_processed_csv():
+    global global_df
+    if global_df is None:
+        return "No data", 404
+    csv_io = StringIO()
+    global_df.to_csv(csv_io, index=False)
+    csv_io.seek(0)
+    return Response(csv_io.getvalue(), mimetype='text/plain')
+
+@app.route('/hierarchical_clusters', methods=['GET'])
+def hierarchical_clusters():
+    """
+    Build a dendrogram over your clusters. Re-runs Louvain clustering
+    using a user-provided resolution value (default = 2.5).
+    Then performs hierarchical clustering on:
+      1) total packet count
+      2) average ClusterEntropy
+    """
+    global global_df
+    if global_df is None:
+        return jsonify({})
+
+    # 1. Read optional resolution param for Louvain clustering
+    resolution = float(request.args.get("resolution", 2.5))
+
+    # 2. Recompute Louvain clusters with this resolution
+    node_cluster = compute_clusters(global_df, resolution=resolution)
+    global_df["ClusterID"] = global_df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
+
+    # 3. Aggregate stats per cluster
+    representatives = (
+        global_df
+        .groupby('ClusterID')["Source"]
+        .first()
+        .to_dict()
+    )
+
+    stats = (
+        global_df
+        .groupby('ClusterID')
+        .agg(total_packets=('ClusterID', 'size'),
+             avg_entropy=('ClusterEntropy', 'mean'))
+        .reset_index()
+    )
+
+    # Add representative label
+    stats["label"] = stats["ClusterID"].map(representatives)
+
+    # 4. Perform hierarchical clustering on [total_packets, avg_entropy]
+    from scipy.cluster.hierarchy import linkage, to_tree
+    data = stats[['total_packets', 'avg_entropy']].to_numpy()
+    Z = linkage(data, method='average')
+
+    # 5. Convert tree to nested dict format
+    root, nodes = to_tree(Z, rd=True)
+
+    def node_to_dict(node):
+        def split_ip(ip):
+            return ip.split('.') if ip else []
+
+        def shorten_ip(ip, depth):
+            parts = split_ip(ip)
+            return '.'.join(parts[:depth]) + '.' if parts and depth < 4 else ip
+
+        if node.is_leaf():
+            ip = str(stats.loc[node.id, 'label'])  # full IP for leaves
+            return {
+                "id": ip,
+                "dist": float(node.dist)
+            }
+
+        left_node = node.get_left()
+        right_node = node.get_right()
+        left = node_to_dict(left_node)
+        right = node_to_dict(right_node)
+
+        base_ip = left["id"]
+        count = node.count
+
+        if count > 50:
+            short = shorten_ip(base_ip, 1)
+        elif count > 10:
+            short = shorten_ip(base_ip, 2)
+        elif count > 3:
+            short = shorten_ip(base_ip, 3)
+        else:
+            short = base_ip
+
+        return {
+            "id": short,
+            "dist": float(node.dist),
+            "children": [left, right]
+        }
+
+    return jsonify(node_to_dict(root))
 
 def convert_nan_to_none(obj):
     """
