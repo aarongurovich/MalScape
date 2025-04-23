@@ -1,450 +1,439 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="icon" href="favicon.png" type="image/png">
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>MalScape</title>
-  <!-- Including D3.js for data-driven visualizations and Cytoscape for network graphs -->
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-  <style>
-    /* General Styles: importing font and setting basic box-model properties */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    * { box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: 'Inter', sans-serif;
-      color: #333;
-      background-color: #f8f9fa;
-    }
-    /* Use a flex layout for the overall page */
-    body { display: flex; }
-    
-    /* Main container styles where our visualization and controls live */
-    #main-container {
-      flex: 1;
-      padding: 24px;
-      height: 100vh;
-      overflow-y: auto;
-    }
-    /* Set consistent width for node and edge size input fields */
-    #nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax {
-      width: 200px;
-    }
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>MalScape</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #333; background-color: #f8f9fa; overflow-x: hidden; }
+        body { display: flex; }
 
-    /* Legend container styles on the side */
-    #legend-container {
-      width: 220px;
-      background-color: #fff;
-      border-left: 1px solid #e9ecef;
-      padding: 16px 12px;
-      height: 100vh;
-      overflow-y: auto;
-      box-shadow: -4px 0 8px rgba(0,0,0,0.05);
-    }
-    
-    /* Header styles (h2 and h3) for section titles */
-    h2 {
-      color: #2c3e50;
-      margin-top: 0;
-      margin-bottom: 24px;
-      font-size: 28px;
-      font-weight: 600;
-      border-bottom: 2px solid #4299e1;
-      padding-bottom: 8px;
-      display: inline-block;
-    }
-    h3 {
-      color: #2c3e50;
-      font-size: 16px;
-      margin-top: 0;
-      margin-bottom: 12px;
-      font-weight: 600;
-    }
-    
-    /* Control group styling for various filters and controls */
-    .control-group {
-      margin-bottom: 20px;
-      padding: 16px;
-      background-color: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    
-    /* Input and label styling */
-    label {
-      display: inline-block;
-      margin-right: 8px;
-      font-weight: 500;
-      color: #4a5568;
-    }
-    input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] {
-      padding: 8px 12px;
-      border: 1px solid #cbd5e0;
-      border-radius: 4px;
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-      margin-right: 12px;
-      margin-bottom: 8px;
-      transition: border-color 0.2s;
-    }
-    input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus {
-      border-color: #4299e1;
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
-    }
-    
-    /* Button styling */
-    button {
-      background-color: #4299e1;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      margin-right: 8px;
-    }
-    button:hover { background-color: #3182ce; }
-    
-    /* Specific buttons hidden by default or with special colors */
-    #loadMoreBtn {
-      display: none;
-      margin-top: 16px;
-      background-color: #38a169;
-    }
-    #loadMoreBtn:hover { background-color: #2f855a; }
-    
-    /* Cytoscape network container style */
-    #cy {
-      width: 100%;
-      height: 600px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      margin-bottom: 24px;
-      background-color: #fff;
-      display: none;
-    }
+        #sidebar {
+            width: 0;
+            height: 100vh;
+            background-color: #f1f3f5;
+            border-right: 1px solid #dee2e6;
+            padding: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            transition: width 0.3s ease, padding 0.3s ease;
+            position: fixed;
+            top: 0;
+            left: 0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+        }
+        #sidebar.open {
+            width: 500px;
+            padding: 20px;
+        }
+        #sidebar-content {
+            opacity: 0;
+            transition: opacity 0.3s ease 0.1s;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #sidebar.open #sidebar-content {
+            opacity: 1;
+            overflow: visible;
+        }
+        #sidebar-cy {
+            width: 100%;
+            height: 40%;
+            min-height: 250px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background-color: #fff;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
 
-    /* Table container for CSV data, initially hidden */
-    #table-container {
-      margin-bottom: 24px;
-      border-radius: 8px;
-      background-color: #fff;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-      display: none;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    #table-container table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: auto;
-    }
-    #table-container th, #table-container td {
-      padding: 12px 15px;
-      border-bottom: 1px solid #e9ecef;
-      text-align: left;
-      white-space: nowrap;
-    }
-    
-    /* Pagination controls styling */
-    #table-pagination {
-      display: none;
-      margin-top: 8px;
-      text-align: center;
-    }
-    #table-pagination input {
-      width: 60px;
-      text-align: center;
-    }
-    
-    /* Tooltip styling for hover details */
-    #tooltip {
-      position: absolute;
-      display: none;
-      background: #fff;
-      border-radius: 4px;
-      padding: 8px 12px;
-      font-size: 13px;
-      color: #2d3748;
-      pointer-events: none;
-      z-index: 100;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      max-width: 300px;
-      line-height: 1.5;
-    }
-    
-    /* Styles for colored boxes used in the legend */
-    .color-box {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      vertical-align: middle;
-      margin-right: 4px;
-      border: 1px solid #ccc;
-    }
-    #legend {
-      font-size: 12px;
-      line-height: 1.4;
-    }
-    #legend th, #legend td {
-      padding: 4px 6px;
-    }
-    #backToHeatmap {
-      margin: 20px;
-      padding: 8px 16px;
-      font-size: 14px;
-      display: none;
-    }
-    
-    /* Edge Filter Panel styling */
-    #edgeFilterPanel {
-      position: absolute;
-      top: 80px;
-      right: 40px;
-      width: 320px;
-      padding: 12px;
-      background-color: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      display: none;
-      z-index: 9999;
-    }
-    #edgeFilterPanel h4 {
-      margin-top: 0;
-      margin-bottom: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #2c3e50;
-    }
-    #edgeFilterPanel label {
-      display: block;
-      margin-top: 8px;
-      font-weight: 500;
-      color: #4a5568;
-    }
-    #edgeFilterPanel input {
-      margin-bottom: 8px;
-      width: 100%;
-    }
-    
-    /* Loading overlay styles */
-    #loading-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(255,255,255,0.8);
-      z-index: 3000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-    }
-    .spinner {
-      border: 8px solid #f3f3f3;
-      border-top: 8px solid #4299e1;
-      border-radius: 50%;
-      width: 60px;
-      height: 60px;
-      animation: spin 1s linear infinite;
-      margin-bottom: 16px;
-    }
-    .loading-text {
-      font-size: 18px;
-      color: #333;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
+        #sidebar-toggle {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            z-index: 1200;
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            padding: 15px 8px;
+            border-radius: 0 6px 6px 0;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+            transition: background-color 0.2s ease, left 0.3s ease;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+        #sidebar-toggle:hover {
+            background-color: #3182ce;
+        }
 
-    /* ─── DENDROGRAM MODAL ────────────────────────────────────────────────── */
-    #dendrogramModalHeader {
-      width: 100%;
-      height: 32px;
-      background-color: #eee;
-      padding: 4px 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: bold;
-      border-bottom: 1px solid #ccc;
-      user-select: none;
-      position: relative;
-      box-sizing: border-box;
-    }
+        #main-container {
+            flex: 1;
+            padding: 24px;
+            height: 100vh;
+            overflow-y: auto;
+            transition: margin-left 0.3s ease;
+            margin-left: 0; /* Keep existing margin-left */
+            padding-left: 40px; /* Keep existing padding-left */
+            margin-right: 230px; /* ADDED: Legend width (220px) + buffer (10px) */
+        }
 
-    #dendrogramModalHeader button#closeDendrogram {
-      background: transparent;
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-      color: black;
-      padding: 0;
-      margin: 0;
-      line-height: 1;
-    }
-    #dendrogramModal {
-      display: none;
-      position: fixed;
-      top: 100px;
-      left: 100px;
-      width: 700px;
-      height: 500px;
-      background: #fff;
-      border: 1px solid #ccc;
-      box-shadow: 0 0 10px rgba(0,0,0,0.3);
-      z-index: 10000;
-      resize: both;
-      overflow: hidden;
-    }
+        #nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax { width: 200px; }
+        #legend-container { width: 220px; background-color: #fff; border-left: 1px solid #e9ecef; padding: 16px 12px; height: 100vh; overflow-y: auto; box-shadow: -4px 0 8px rgba(0,0,0,0.05); position: fixed; right: 0; top: 0; z-index: 1000; }
+        h2 { color: #2c3e50; margin-top: 0; margin-bottom: 24px; font-size: 28px; font-weight: 600; border-bottom: 2px solid #4299e1; padding-bottom: 8px; display: inline-block; }
+        h3 { color: #2c3e50; font-size: 16px; margin-top: 0; margin-bottom: 12px; font-weight: 600; }
+        #sidebar h3 { font-size: 18px; margin-bottom: 10px; flex-shrink: 0; }
 
-    #dendrogramModal .modal-content {
-      display: flex;
-      height: 100%;
-      width: 100%;
-      padding: 20px;
-      box-sizing: border-box;
-    }
+        .control-group { margin-bottom: 20px; padding: 16px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .sidebar-control {
+            padding: 8px 0;
+            margin-bottom: 5px;
+            background: none;
+            box-shadow: none;
+            border-radius: 0;
+        }
+        .sidebar-control label {
+            font-size: 13px;
+            margin-right: 5px;
+        }
 
-    #thresholdControls {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      width: 100px;
-      padding: 0 12px 0 16px;
-      background: #fff;
-      box-sizing: border-box;
-    }
+        label { display: inline-block; margin-right: 8px; font-weight: 500; color: #4a5568; }
+        input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; margin-right: 12px; margin-bottom: 8px; transition: border-color 0.2s; }
+        input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus { border-color: #4299e1; outline: none; box-shadow: 0 0 0 3px rgba(66,153,225,0.15); }
+        button { background-color: #4299e1; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; margin-right: 8px; }
+        button:hover { background-color: #3182ce; }
+        #loadMoreBtn { display: none; margin-top: 16px; background-color: #38a169; }
+        #loadMoreBtn:hover { background-color: #2f855a; }
+        #cy { width: 100%; height: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 24px; margin-bottom: 24px; background-color: #fff; display: none; }
 
-    #thresholdControls input[type="number"] {
-      border: 1px solid #cbd5e0;
-      border-radius: 4px;
-      padding: 4px;
-      font-size: 12px;
-      margin-top: 8px;
-      width: 60px;
-    }
+        #table-container { margin-top: 24px; margin-bottom: 24px; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: none; max-height: 300px; overflow-y: auto; }
+        #table-container table { width: 100%; border-collapse: collapse; table-layout: auto; }
+        #table-container th, #table-container td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; text-align: left; white-space: nowrap; }
+        #table-pagination { display: none; margin-top: 8px; text-align: center; }
+        #table-pagination input { width: 60px; text-align: center; }
 
-    #thresholdControls input[type="range"] {
-      appearance: slider-vertical;
-      -webkit-appearance: slider-vertical;
-      -moz-appearance: slider-vertical;
-      writing-mode: bt-lr;
-      width: 16px;                  /* thinner slider so it fits cleanly */
-      height: 80%;
-      margin: 0;
-      outline: none;               /* remove focus ring */
-      box-shadow: none;            /* also remove focus box-shadow */
-    }
-  </style>
+        #tooltip { position: absolute; display: none; background: rgba(255, 255, 255, 0.95); border-radius: 4px; padding: 8px 12px; font-size: 13px; color: #2d3748; pointer-events: none; z-index: 2000; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px; line-height: 1.5; border: 1px solid #dee2e6; }
+        .color-box { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; border: 1px solid #ccc; }
+        #legend { font-size: 12px; line-height: 1.4; table-layout: fixed; width: 100%;}
+        #legend th, #legend td { padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+        #legend td:first-child, #legend th:first-child { width: 45%; }
+        #legend td:nth-child(2), #legend th:nth-child(2) { width: 25%; }
+        #legend td:last-child, #legend th:last-child { width: 30%; text-align: right;}
+        #backToHeatmap { margin: 20px 0; padding: 8px 16px; font-size: 14px; display: none; }
+        #edgeFilterPanel { position: absolute; top: 80px; right: 260px; width: 320px; padding: 12px; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: none; z-index: 999; }
+        #edgeFilterPanel h4 { margin-top: 0; margin-bottom: 8px; font-size: 16px; font-weight: 600; color: #2c3e50; }
+        #edgeFilterPanel label { display: block; margin-top: 8px; font-weight: 500; color: #4a5568; }
+        #edgeFilterPanel input { margin-bottom: 8px; width: 100%; }
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        .spinner { border: 8px solid #f3f3f3; border-top: 8px solid #4299e1; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 16px; }
+        .loading-text { font-size: 18px; color: #333; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #resetSidebarBtn { background-color: #6c757d; margin-top: 5px; margin-bottom: 10px; width: 100%; flex-shrink: 0; }
+        #resetSidebarBtn:hover { background-color: #5a6268; }
+
+        #sidebar-table-container {
+            margin-top: 15px;
+            flex-grow: 1;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background-color: #fff;
+            display: none;
+        }
+        #sidebar-table-container table {
+            font-size: 11px;
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+        #sidebar-table-container th {
+            background-color: #f1f3f5;
+            padding: 8px 10px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        #sidebar-table-container td {
+            padding: 8px 10px;
+            white-space: normal;
+            word-break: break-word;
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: top;
+            line-height: 1.4;
+        }
+        #sidebar-table-container tr:last-child td { border-bottom: none; }
+        #sidebar-table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
+        #sidebar-table-container tbody tr:hover { background-color: #e9ecef; }
+
+        #sidebar-table-container th,
+        #sidebar-table-container td {
+          min-width: 150px;
+          word-break: break-word;
+        }
+        #sidebar-table-pagination {
+            text-align: center;
+            margin-top: 8px;
+            display: none;
+            flex-shrink: 0;
+        }
+        #sidebar-table-pagination button { padding: 4px 8px; font-size: 12px; }
+        #sidebar-table-pagination input { width: 45px; font-size: 12px; padding: 4px 6px; }
+
+        #loading-overlay .cancel-button {
+            margin-top: 20px; /* Space below the loading text */
+            padding: 8px 16px;
+            font-size: 14px;
+            background-color: #dc3545; /* Red color */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #loading-overlay .cancel-button:hover {
+            background-color: #c82333;
+        }
+
+        /* --- BEGIN ADDED Dendrogram CSS --- */
+        #dendrogramCard {
+            /* Styles copied from MalscapeDev - Copy.html */
+            display: none; /* Initially hidden */
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0; /* Added margin */
+            border: 1px solid #e2e8f0; /* Added subtle border */
+        }
+        #inline-dendrogram-container {
+            /* Styles copied from MalscapeDev - Copy.html */
+            margin-bottom: 10px; /* Reduced margin */
+            width: 100%;
+            height: 400px; /* Default height */
+            overflow: hidden; /* Needed for SVG zoom/pan */
+            border: 1px solid #dee2e6; /* Added border */
+            border-radius: 6px; /* Added radius */
+            position: relative; /* For positioning controls or overlays if needed */
+        }
+        #inlineDendrogramSvg {
+            /* Styles copied from MalscapeDev - Copy.html */
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab; /* Indicate draggable */
+        }
+        #inlineDendrogramSvg:active {
+            cursor: grabbing;
+        }
+        #treeControls {
+            /* Styles copied from MalscapeDev - Copy.html */
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+        #treeControls label {
+            margin-bottom: 0; /* Align with inputs */
+        }
+        #treeControls input[type="number"] {
+            /* Styles copied from MalscapeDev - Copy.html */
+            margin-bottom: 0;
+            vertical-align: middle;
+            width: 70px; /* Adjust width */
+            padding: 6px 8px; /* Adjust padding */
+        }
+        #treeControls button {
+            padding: 6px 12px; /* Adjust padding */
+        }
+        #reclusterMessage {
+            /* Styles copied from MalscapeDev - Copy.html */
+            color: #e53e3e; /* Use a red color */
+            font-size: 13px;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+        /* Adjustments for button groups */
+        .tree-height-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto; /* Push height controls to the right */
+        }
+        .tree-height-controls button {
+            background: none;
+            border: 1px solid #cbd5e0;
+            color: #4a5568;
+            padding: 4px 10px;
+        }
+        .tree-height-controls button:hover {
+            background-color: #edf2f7;
+            border-color: #a0aec0;
+        }
+        .custom-height-link {
+            background: none;
+            border: none;
+            color: #4299e1; /* Link color */
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: underline;
+            padding: 0;
+            margin-left: 5px;
+        }
+        .custom-height-link:hover {
+            color: #3182ce;
+        }
+            .show-tree-button {
+            padding: 6px 12px;
+            font-size: 14px;
+            background-color: #28a745; /* Green color */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .show-tree-button:hover {
+            background-color: #218838;
+        }
+
+        /* Style for the existing Hide Tree button */
+        .small-utility-button {
+            padding: 3px 8px;
+            font-size: 12px;
+            background-color: #6c757d; /* Grey color */
+            /* ... keep other existing styles for .small-utility-button ... */
+            border-radius: 4px;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .small-utility-button:hover {
+            background-color: #5a6268;
+        }
+        .node--leaf circle.highlighted {
+            fill: #ff7f0e; /* Orange color for highlight - Use specific color from map now */
+            r: 6; /* Slightly larger radius */
+        }
+        /* --- END ADDED Dendrogram CSS --- */
+    </style>
 </head>
 <body>
-  <!-- Loading Overlay -->
   <div id="loading-overlay">
     <div class="spinner"></div>
     <div class="loading-text">Loading, please wait...</div>
+    <button id="cancelLoadingBtn" class="cancel-button">Cancel</button>
   </div>
-  
-  <!-- Main container -->
-  <div id="main-container" style="margin-top: 60px;">
+
+  <button id="sidebar-toggle">&#9776;</button>
+
+  <div id="sidebar">
+      <div id="sidebar-content">
+          <h3>Cluster Visualization</h3>
+          <button id="resetSidebarBtn">Reset Node Selection</button>
+
+          <div class="control-group sidebar-control">
+              <label for="sidebarLayoutSelect">Layout:</label>
+              <select id="sidebarLayoutSelect" style="padding: 4px 8px; font-size: 12px; max-width: 150px;">
+                  <option value="cose" selected>Cose (Default)</option>
+                  <option value="breadthfirst">Hierarchical</option>
+                  <option value="circle">Circle</option>
+                  <option value="grid">Grid</option>
+                  <option value="concentric">Concentric</option>
+                  <option value="random">Random</option>
+              </select>
+          </div>
+
+          <div id="sidebar-cy-loading" style="display: none; text-align: center; margin-top: 5px; color: #6c757d;">Loading graph...</div>
+          <div id="sidebar-cy"></div>
+          <div id="sidebar-info" style="margin-top: 10px; font-size: 14px; text-align: center; flex-shrink: 0;">Click a cell on the heatmap to add its cluster. Click nodes or edges in the graph to highlight and filter the table below.</div>
+          <div id="sidebar-table-loading" style="display: none; text-align: center; margin-top: 20px; color: #6c757d;">Loading table...</div>
+          <div id="sidebar-table-container"></div>
+          <div id="sidebar-table-pagination">
+              <span>Page <input type="number" id="sidebarCurrentPageInput" value="1" min="1" style="width:45px;"> of <span id="sidebarTotalPages">?</span></span>
+              <button id="sidebarGoPageBtn">Go</button>
+          </div>
+      </div>
+  </div>
+
+  <div id="main-container">
     <h2>MalScape</h2>
-    <!-- Top controls -->
     <div id="topControls">
-      <div style="top: 16px; left: 16px; z-index: 1000; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <div style="margin-bottom: 16px; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         <label for="fileInput"><strong>Upload CSV File:</strong></label>
         <input type="file" id="fileInput" accept=".csv">
         <button id="downloadButton">Download Processed CSV File</button>
-
-        <!-- <button id="openDendrogramBtn">Show Dendrogram</button> -->
-
       </div>
       <div class="control-group">
-        <label for="rowOrderSelect">Order Cells in Each Row By:</label>
-        <select id="rowOrderSelect">
-          <option value="descending">Descending (by value)</option>
-          <option value="ascending">Ascending (by value)</option>
-        </select>
-        <label for="minSourceAmtFilter">Min Unique Sources:</label>
-        <input type="number" id="minSourceAmtFilter" placeholder="e.g., 1" step="1">
-        <label for="maxSourceAmtFilter">Max Unique Sources:</label>
-        <input type="number" id="maxSourceAmtFilter" placeholder="e.g., 100" step="1">
-        <label for="minDestinationAmtFilter">Min Unique Destinations:</label>
-        <input type="number" id="minDestinationAmtFilter" placeholder="e.g., 1" step="1">
-        <label for="maxDestinationAmtFilter">Max Unique Destinations:</label>
-        <input type="number" id="maxDestinationAmtFilter" placeholder="e.g., 100" step="1">
-        <label for="payloadSearch">Search Payload Content:</label>
-        <input type="text" id="payloadSearch" placeholder="Enter keyword">
-        <label for="sourceFilter">Source IP:</label>
-        <input type="text" id="sourceFilter" placeholder="e.g., 192.168.1.1">
-        <label for="destinationFilter">Destination IP:</label>
-        <input type="text" id="destinationFilter" placeholder="e.g., 172.16.0.1">
-        <label for="protocolFilter">Network Protocol:</label>
-        <input type="text" id="protocolFilter" placeholder="e.g., TCP">
-        <label for="entropyMinFilter">Min Cluster Variation:</label>
-        <input type="number" id="entropyMinFilter"  placeholder="e.g., 1.0" step="0.1">
-        <label for="entropyMaxFilter">Max Cluster Variation:</label>
-        <input type="number" id="entropyMaxFilter" placeholder="e.g., 3.0" step="0.1">
-        <label for="isLargePacketFilter">Show only large packets:</label>
+        <label for="rowOrderSelect">Order Cells By:</label>
+        <select id="rowOrderSelect"> <option value="descending">Descending</option> <option value="ascending">Ascending</option> </select>
+        <label for="minSourceAmtFilter">Min Src:</label>
+        <input type="number" id="minSourceAmtFilter" placeholder="1" step="1" style="width:60px;">
+        <label for="maxSourceAmtFilter">Max Src:</label>
+        <input type="number" id="maxSourceAmtFilter" placeholder="Inf" step="1" style="width:60px;">
+        <label for="minDestinationAmtFilter">Min Dst:</label>
+        <input type="number" id="minDestinationAmtFilter" placeholder="1" step="1" style="width:60px;">
+        <label for="maxDestinationAmtFilter">Max Dst:</label>
+        <input type="number" id="maxDestinationAmtFilter" placeholder="Inf" step="1" style="width:60px;">
+        <label for="payloadSearch">Payload:</label>
+        <input type="text" id="payloadSearch" placeholder="Keyword" style="width:100px;">
+        <label for="sourceFilter">Src IP:</label>
+        <input type="text" id="sourceFilter" placeholder="IP" style="width:100px;">
+        <label for="destinationFilter">Dst IP:</label>
+        <input type="text" id="destinationFilter" placeholder="IP" style="width:100px;">
+        <label for="protocolFilter">Proto:</label>
+        <input type="text" id="protocolFilter" placeholder="TCP" style="width:60px;">
+        <label for="entropyMinFilter">Min Ent:</label>
+        <input type="number" id="entropyMinFilter" placeholder="0.0" step="0.1" style="width:60px;">
+        <label for="entropyMaxFilter">Max Ent:</label>
+        <input type="number" id="entropyMaxFilter" placeholder="Inf" step="0.1" style="width:60px;">
+        <label for="isLargePacketFilter">Large Pkts:</label>
         <input type="checkbox" id="isLargePacketFilter">
-        <label for="isSuspiciousAckFilter">Show only suspicious ACKs:</label>
+        <label for="isSuspiciousAckFilter">Susp ACK:</label>
         <input type="checkbox" id="isSuspiciousAckFilter">
+        <button id="applyFiltersBtn" style="margin-left: 10px;">Apply Filters</button>
       </div>
     </div>
-
-    <!-- Inline Dendrogram Container -->
-    <div id="dendrogramCard" style="display: none; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px; border-radius: 12px; margin: 20px 0;">
-      <div id="inline-dendrogram-container" style="margin-bottom: 20px;">
-        <svg id="inlineDendrogramSvg" style="width: 100%; height: 100%; display: block;"></svg>
-        <div id="treeControls" style="margin-top: 10px; display: flex; align-items: center; gap: 12px;">
-          <label for="resolutionInput">Louvain Resolution:</label>
-          <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="default 2.5" style="margin-bottom: 0; vertical-align: middle;">
-          <button onclick="reclusterAndRedraw()">Apply</button>
-          <button onclick="resetInlineZoom()">Reset Zoom</button>
-          <!-- Tree Height Controls -->
-          <div style="display: flex; justify-content: center; align-items: center; gap: 16px;">
-            <button id="toggleTreeHeightBtn" onclick="toggleTreeHeight()">Double Tree Height</button>
-            <button onclick="showCustomHeightInput()" style="background: none; border: none; color: #007bff; cursor: pointer; font-size: 14px; text-decoration: underline; padding: 0; background-color: transparent;">
-              Click to enter custom
-            </button>
-          </div>                   
-        </div>
-        <div id="reclusterMessage" style="color: #a00; font-size: 13px; margin-top: 4px;"></div>
+    <button id="showTreeBtn" class="show-tree-button" style="display: none; margin-bottom: 15px;">Show Hierarchical Cluster Tree</button>
+    <div id="dendrogramCard">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3>Hierarchical Cluster Tree</h3>
+        <button id="hideTreeBtn" class="small-utility-button">Hide Tree</button>
+      </div>
+      <div id="inline-dendrogram-container">
+        <svg id="inlineDendrogramSvg"></svg>
+      </div>
+      <div id="treeControls">
+         <label for="resolutionInput">Louvain Resolution:</label>
+         <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="default 2.5">
+         <button onclick="reclusterAndRedraw()">Apply Resolution</button>
+         <button onclick="resetInlineZoom()">Reset Zoom</button>
+         <div class="tree-height-controls">
+           <button class="custom-height-link" onclick="showCustomHeightInput()">Set Custom Height</button>
+         </div>
+         <div id="reclusterMessage" style="width: 100%; margin-top: 5px;"></div>
       </div>
     </div>
-
-    <div id="sizeControls" style="display: none; margin-top: 16px;">
-      <label for="edgeWidthMin">Min Edge Width:</label>
-      <input type="number" id="edgeWidthMin" placeholder="e.g., 2" step="1" min="1">
-      <label for="edgeWidthMax">Max Edge Width:</label>
-      <input type="number" id="edgeWidthMax" placeholder="e.g., 12" step="1" min="1">
-      <label for="nodeSizeMin">Min Node Size:</label>
-      <input type="number" id="nodeSizeMin" placeholder="e.g., 15" step="1" min="1">
-      <label for="nodeSizeMax">Max Node Size:</label>
-      <input type="number" id="nodeSizeMax" placeholder="e.g., 50" step="1" min="1">
-    </div>
-
-    <!-- Heatmap container -->
     <div id="heatmap"></div>
-    <button id="loadMoreBtn">Load More</button>
-    <button id="backToHeatmap">Back to Heatmap</button>
-    <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
-    <div id="cy"></div>
-
-    <!-- Table search and container -->
-    <div id="table-search-container" style="display:none; margin-bottom: 12px;">
+    <div id="table-search-container" style="display:none; margin-bottom: 12px; margin-top: 24px;">
       <label for="tableSearchInput"><strong>Search Payload:</strong></label>
       <input type="text" id="tableSearchInput" placeholder="Enter keyword..." style="padding: 6px 10px; width: 250px;">
     </div>
@@ -453,1311 +442,1567 @@
       <span>Page <input type="number" id="currentPageInput" value="1" min="1" style="width:60px;"> of <span id="totalPages">?</span></span>
       <button id="goPageBtn">Go</button>
     </div>
+    <div style="margin-top: 20px;">
+        <button id="loadMoreBtn">Load More</button>
+        <button id="backToHeatmap">Back to Heatmap</button>
+        <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
+    </div>
+    <div id="sizeControls" style="display: none; margin-top: 16px;">
+      <label for="edgeWidthMin">Min Edge Width:</label>
+      <input type="number" id="edgeWidthMin" placeholder="1" step="0.1" min="0.1" value="1">
+      <label for="edgeWidthMax">Max Edge Width:</label>
+      <input type="number" id="edgeWidthMax" placeholder="10" step="0.1" min="0.1" value="10">
+      <label for="nodeSizeMin">Min Node Size:</label>
+      <input type="number" id="nodeSizeMin" placeholder="15" step="1" min="1" value="15">
+      <label for="nodeSizeMax">Max Node Size:</label>
+      <input type="number" id="nodeSizeMax" placeholder="60" step="1" min="1" value="60">
+    </div>
+    <div id="cy"></div>
   </div>
-  
-  <!-- Legend container -->
+
   <div id="legend-container">
     <h3>Protocol Legend</h3>
     <table id="legend">
-      <tr>
-        <th>Protocol</th>
-        <th>Color</th>
-        <th>Process %</th>
-      </tr>
+      <thead><tr><th>Protocol</th><th>Color</th><th>Process %</th></tr></thead>
+      <tbody></tbody>
     </table>
   </div>
-  
-  <!-- Edge Filter Panel -->
+
   <div id="edgeFilterPanel">
     <h4>Edge Filter</h4>
-    <label for="edgeFilterSource">Source (partial ok):</label>
-    <input type="text" id="edgeFilterSource">
-    <label for="edgeFilterDestination">Destination (partial ok):</label>
-    <input type="text" id="edgeFilterDestination">
-    <label for="edgeFilterProtocol">Protocol (partial ok):</label>
-    <input type="text" id="edgeFilterProtocol">
-    <label for="edgeFilterWeight">Edge Weight (e.g. >=1000):</label>
-    <input type="text" id="edgeFilterWeight" placeholder=">=1000">
-    <label for="edgeFilterProcessCount">Process Count (e.g. >5):</label>
-    <input type="text" id="edgeFilterProcessCount" placeholder=">=5">
-    <button id="applyEdgeFilterBtn">Filter Edges</button>
-    <button id="clearEdgeFilterBtn">Clear Filter</button>
+    <label for="edgeFilterSource">Source (partial ok):</label> <input type="text" id="edgeFilterSource">
+    <label for="edgeFilterDestination">Destination (partial ok):</label> <input type="text" id="edgeFilterDestination">
+    <label for="edgeFilterProtocol">Protocol (partial ok):</label> <input type="text" id="edgeFilterProtocol">
+    <label for="edgeFilterWeight">Edge Weight (e.g. >=1000):</label> <input type="text" id="edgeFilterWeight" placeholder=">=1000">
+    <label for="edgeFilterProcessCount">Process Count (e.g. >5):</label> <input type="text" id="edgeFilterProcessCount" placeholder=">=5">
+    <button id="applyEdgeFilterBtn">Filter Edges</button> <button id="clearEdgeFilterBtn">Clear Filter</button>
   </div>
-  
+
+  <div id="tooltip"></div>
+
   <script>
-    // Global Variables
+    const API_BASE_URL = 'http://127.0.0.1:5000';
+    const DEFAULT_UNKNOWN_COLOR = '#cccccc';
+    const SELECTED_EDGE_COLOR = '#ff0000'; // Red
+    const SELECTED_NODE_COLOR = '#ff0000'; // Red
+    const SELECTED_EDGE_WIDTH = 3.5;
+    const SELECTED_EDGE_ZINDEX = 999;
+    
+    let previousClusterCount = null; // dendrogram change detection
+    let previousClusterHash = null; // dendrogram change detection
+    let treeHeightExpanded = false; // endrogram height toggle
+    let customTreeHeightActive = false; // dendrogram custom height
+    window.lastTreeData = null; // store dendrogram data
+    window.inlineZoom = null; // store zoom behavior
+    let csvProcessingController = null; // Controller to abort CSV processing fetch
+    let initialTreeTransform = d3.zoomIdentity;
+
     let protocolColorMap = {};
-    let globalCy;
-    let selectedEdges = new Set();
-    let currentClusterID = null;
-    const TABLE_PAGE_SIZE = 50;
-    let previousClusterCount = null;
-    let previousClusterHash = null;
-    let treeHeightExpanded = false;
-    let customTreeHeightActive = false;
-    
-    window.selectedClusters = new Set();
-    window.usedHighlightHues = [];
-    
-    // Generates a non‑blue and non‑red unique color
-    function generateNonRedBlueUniqueColor() {
-      let attempts = 0;
-      while (attempts < 100) {
-        let hue = Math.floor(Math.random() * 360);
-        if ((hue >= 0 && hue <= 20) || (hue >= 200 && hue <= 260) || (hue >= 340 && hue <= 360)) {
-          attempts++;
-          continue;
+    let globalCy; // For main #cy element, if used
+    let sidebarCy; // For #sidebar-cy element
+    let currentClusterID = null; // Cluster ID shown in main table/graph
+    let currentSidebarTableClusterId = null; // Cluster ID shown in sidebar table (cluster mode)
+    const TABLE_PAGE_SIZE = 30;
+    const heatmapCellWidth = 2;
+    const heatmapCellHeight = 15;
+    let tooltip;
+    let clusterHighlightColors = new Map(); // Maps clusterID -> highlight color for heatmap/nodes
+    let addedSidebarClusters = new Set(); // Tracks clusterIDs added to sidebar graph
+    let selectedSidebarEdges = new Set(); // Tracks individually selected edges (edgeKey format)
+    let selectedNodeId = null; // Tracks ID of the currently selected node in sidebar graph
+    let sidebarTableMode = 'cluster'; // 'cluster' or 'edges'
+    let isSidebarOpen = false;
+    let sidebarWidth = 500;
+
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle');
+    const mainContainer = document.getElementById('main-container');
+    const resetSidebarBtn = document.getElementById('resetSidebarBtn');
+    const sidebarTableContainer = document.getElementById('sidebar-table-container');
+    const sidebarTablePagination = document.getElementById('sidebar-table-pagination');
+    const sidebarGoPageBtn = document.getElementById('sidebarGoPageBtn');
+
+    // --- Layout Options Definitions ---
+    const sidebarLayoutOptions = {
+        cose: {
+            name: 'cose', animate: true, animationDuration: 500, padding: 30,
+            idealEdgeLength: 100, nodeRepulsion: node => node.degree() * 15000,
+            edgeElasticity: edge => 100, gravity: 60, numIter: 1000,
+            initialTemp: 200, coolingFactor: 0.95, minTemp: 1.0, fit: true
+        },
+        breadthfirst: {
+            name: 'breadthfirst', directed: true, padding: 20, circle: false,
+            grid: false, spacingFactor: 1.4, avoidOverlap: true,
+            nodeDimensionsIncludeLabels: false, roots: undefined,
+            animate: true, animationDuration: 500, fit: true
+        },
+        circle: {
+            name: 'circle', padding: 25, avoidOverlap: true,
+            nodeDimensionsIncludeLabels: false, spacingFactor: 1.2, radius: undefined,
+            startAngle: 3/2 * Math.PI,
+            animate: true, animationDuration: 500, fit: true
+        },
+        grid: {
+            name: 'grid', padding: 25, avoidOverlap: true,
+            nodeDimensionsIncludeLabels: false, spacingFactor: 1,
+            rows: undefined, cols: undefined,
+            position: function( node ){},
+            animate: true, animationDuration: 500, fit: true
+        },
+        random: {
+            name: 'random', fit: true, padding: 30,
+            animate: true, animationDuration: 300
+        },
+        concentric: {
+            name: 'concentric', fit: true, padding: 30, startAngle: 3 / 2 * Math.PI,
+            sweep: undefined, clockwise: true, equidistant: false,
+            minNodeSpacing: 20, avoidOverlap: true, nodeDimensionsIncludeLabels: false,
+            concentric: function( node ){ return node.degree(); }, // Level based on degree
+            levelWidth: function( nodes ){ return nodes.maxDegree() / 4; }, // Dynamic level width
+            animate: true, animationDuration: 500
         }
-        const threshold = 50;
-        let isDistinct = window.usedHighlightHues.every(usedHue => {
-          let diff = Math.abs(hue - usedHue);
-          return diff >= threshold && (360 - diff) >= threshold;
-        });
-        if (isDistinct) {
-          window.usedHighlightHues.push(hue);
-          let color = `hsl(${hue}, 70%, 50%)`;
-          return { color, hue };
+    };
+
+    // --- Function to Apply Selected Layout ---
+    function applySidebarLayout() {
+        if (!sidebarCy) {
+            console.log("Sidebar graph not initialized yet.");
+            return;
         }
-        attempts++;
-      }
-      let fallbackHue = Math.floor(Math.random() * 360);
-      let fallbackColor = `hsl(${fallbackHue}, 70%, 50%)`;
-      window.usedHighlightHues.push(fallbackHue);
-      return { color: fallbackColor, hue: fallbackHue };
-    }
-    
-    function updateExploreButton() {
-      let exploreBtn = document.getElementById('exploreClustersBtn');
-      if (window.selectedClusters.size > 0) {
-        if (!exploreBtn) {
-          exploreBtn = document.createElement('button');
-          exploreBtn.id = 'exploreClustersBtn';
-          exploreBtn.textContent = 'Explore Selected Clusters Further';
-          exploreBtn.style.marginTop = "16px";
-          document.getElementById('main-container').appendChild(exploreBtn);
-          exploreBtn.addEventListener('click', exploreSelectedClusters);
+        const selectedLayoutName = document.getElementById('sidebarLayoutSelect').value;
+        const layoutConfig = sidebarLayoutOptions[selectedLayoutName];
+
+        if (!layoutConfig) {
+            console.error(`Layout configuration for '${selectedLayoutName}' not found.`);
+            return;
         }
-      } else {
-        if (exploreBtn) {
-          exploreBtn.remove();
-        }
-      }
+
+        console.log(`Applying sidebar layout: ${selectedLayoutName}`);
+        // Run the layout
+        let layout = sidebarCy.layout(layoutConfig);
+        layout.run();
+        // Optional: Refit after layout animation if needed (might depend on layout behavior)
+        // layout.one('layoutstop', () => {
+        //     if (sidebarCy) sidebarCy.fit(null, 30); // Fit with padding
+        // });
     }
-    
-    function showLoading() {
-      document.getElementById('loading-overlay').style.display = 'flex';
-    }
-    function hideLoading() {
-      document.getElementById('loading-overlay').style.display = 'none';
-    }
-    
-    // Update the legend from the backend
-    function updateLegend(data) {
-      const legendTable = document.getElementById('legend');
-      legendTable.innerHTML = '<tr><th>Protocol</th><th>Color</th><th>Process %</th></tr>';
 
-      fetch("http://127.0.0.1:5000/protocol_percentages")
-        .then(response => response.json())
-        .then(percentages => {
-          let protocols = Object.keys(percentages);
-
-          let source = null;
-          if (data && Array.isArray(data.edges)) {
-            source = new Set(data.edges.map(e => e.data?.Protocol?.trim()).filter(Boolean));
-          } else if (window.globalData && window.globalData.length > 0) {
-            // Called after CSV load
-            source = new Set(window.globalData.map(d => d.Protocol?.trim()).filter(Boolean));
-          }
-
-          if (source) {
-            protocols = protocols.filter(p => source.has(p));
-          }
-
-          protocols.sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
-
-          protocols.forEach(protocol => {
-            if (!protocolColorMap[protocol]) {
-              protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 16777215)
-                .toString(16).padStart(6, '0');
+    function toggleSidebar(forceOpen = null) {
+        const shouldBeOpen = forceOpen !== null ? forceOpen : !isSidebarOpen;
+        if (shouldBeOpen) {
+            if (!isSidebarOpen) {
+                sidebar.classList.add('open');
+                isSidebarOpen = true;
+                sidebarToggleBtn.innerHTML = '&times;';
+                sidebarToggleBtn.style.left = `${sidebarWidth}px`;
+                mainContainer.style.marginLeft = `${sidebarWidth}px`;
+                setTimeout(() => {
+                    if (sidebarCy) {
+                        sidebarCy.resize();
+                        // No need to fit here, layout application handles fitting
+                        // sidebarCy.fit(null, 50);
+                         applySidebarLayout(); // Re-apply layout on open might be desired
+                    }
+                }, 350);
             }
-            const percentage = (percentages[protocol] ?? 0).toFixed(5) + '%';
-            const row = document.createElement('tr');
-            row.innerHTML = `<td>${protocol}</td>
-                            <td><span class="color-box" style="background-color:${protocolColorMap[protocol]}"></span></td>
-                            <td>${percentage}</td>`;
-            legendTable.appendChild(row);
-          });
-        })
-        .catch(error => {
-          console.error("Error fetching protocol percentages:", error);
-        });
-    }
-    
-    function exploreSelectedClusters() {
-      const clustersToExplore = Array.from(window.selectedClusters);
-      if (clustersToExplore.length === 0) return;
-      Promise.all(
-        clustersToExplore.map(clusterID =>
-          fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
-            .then(response => response.json())
-        )
-      )
-      .then(results => {
-        let combinedNodes = {};
-        let combinedEdges = {};
-        results.forEach(data => {
-          data.nodes.forEach(n => {
-            combinedNodes[n.data.id] = n;
-          });
-          data.edges.forEach(e => {
-            combinedEdges[e.data.id] = e;
-          });
-        });
-        const combinedData = {
-          nodes: Object.values(combinedNodes),
-          edges: Object.values(combinedEdges)
-        };
-        updateLegend(combinedData);
-        visualizeNetwork(combinedData);
-        d3.select("#heatmap").style("display", "none");
-        document.getElementById("backToHeatmap").style.display = "inline-block";
-        document.getElementById("refreshNetworkBtn").style.display = "inline-block";
-        document.getElementById("topControls").style.display = "none";
-        document.getElementById('table-search-container').style.display = "block";
-        document.getElementById('table-container').style.display = "block";
-        document.getElementById('sizeControls').style.display = "block";
-        currentClusterID = clustersToExplore[0];
-        createClusterTable(currentClusterID);
-      })
-      .catch(error => {
-        console.error("Error exploring selected clusters:", error);
-      });
-    }
-    
-    // Fetch aggregated heatmap data
-    function updateHeatmap() {
-      showLoading();
-      const metrics = [
-        { label: "Count", value: "count" },
-        { label: "Unique IPs", value: "Unique IPs" },
-        { label: "Unique Sources", value: "Unique Sources" },
-        { label: "Unique Destinations", value: "Unique Destinations" },
-        { label: "Packet Length", value: "Length" },
-        { label: "Payload Length", value: "Len" },
-        { label: "Payload Size Variance", value: "Payload Size Variance" },
-        { label: "Packets per Second", value: "Packets per Second" },
-        { label: "Total Data Sent", value: "Total Data Sent" },
-        { label: "% SYN packets", value: "% SYN packets" },
-        { label: "% RST packets", value: "% RST packets" },
-        { label: "% ACK packets", value: "% ACK packets" },
-        { label: "% PSH packets", value: "% PSH packets" }
-      ];  
-
-      const filterParamsBase = {
-        payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
-        sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
-        destinationFilter: document.getElementById('destinationFilter').value.trim().toLowerCase(),
-        protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
-        entropyMin: document.getElementById('entropyMinFilter').value,
-        entropyMax: document.getElementById('entropyMaxFilter').value,
-        isLargePacketOnly: document.getElementById('isLargePacketFilter').checked,
-        isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
-        minSourceAmt: document.getElementById('minSourceAmtFilter').value,
-        maxSourceAmt: document.getElementById('maxSourceAmtFilter').value,
-        minDestinationAmt: document.getElementById('minDestinationAmtFilter').value,
-        maxDestinationAmt: document.getElementById('maxDestinationAmtFilter').value
-      };
-
-      Promise.all(metrics.map(m => {
-          const filterParams = Object.assign({}, filterParamsBase, { metric: m.value });
-          return fetch("http://127.0.0.1:5000/filter_and_aggregate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(filterParams)
-          })
-          .then(response => response.json())
-          .then(data => ({ metric: m.label, pivotData: data }));
-        }))
-        .then(results => {
-          renderCombinedHeatmap(results);
-          hideLoading();
-        })
-        .catch(error => {
-          console.error("Error fetching aggregated data:", error);
-          hideLoading();
-        });
-    }
-    
-    // Render heatmap based on aggregated data.
-    // Now, each pivot object is assumed to include a "clusterAnomaly" flag (set by the backend)
-    function renderCombinedHeatmap(dataByMetric) {
-      const orderOption = document.getElementById("rowOrderSelect").value || "descending";
-      const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
-      const heatmapData = dataByMetric.map(({ metric, pivotData }) => ({
-        metric,
-        values: [...pivotData].sort(comparator).slice(0, 700)
-      }));
-      const maxCols = d3.max(heatmapData, r => r.values.length);
-      const cellWidth = 2;
-      const cellHeight = 15;
-      const labelMargin = 150;
-      const verticalSpacing = 10;
-      const numRows = heatmapData.length;
-      const totalHeight = 20 + numRows * cellHeight + (numRows - 1) * verticalSpacing + 20;
-      const width = labelMargin + maxCols * cellWidth + 40;
-      d3.select("#heatmap").select("svg").remove();
-      const svg = d3.select("#heatmap").append("svg")
-                    .attr("width", width)
-                    .attr("height", totalHeight);
-      
-      // The anomaly flag is now assumed to be provided by the backend
-      heatmapData.forEach((rowData, rowIndex) => {
-        const rowY = 20 + rowIndex * (cellHeight + verticalSpacing);
-        svg.append("text")
-           .attr("x", labelMargin - 10)
-           .attr("y", rowY + cellHeight / 2)
-           .attr("text-anchor", "end")
-           .attr("alignment-baseline", "middle")
-           .attr("font-size", "12px")
-           .attr("fill", "black")
-           .text(rowData.metric);
-  
-        let rowMax = d3.max(rowData.values, d => d.value) || 1;
-        const localColorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, rowMax]);
-  
-        rowData.values.forEach((cellData, colIndex) => {
-          let cellX = labelMargin + colIndex * cellWidth;
-          let cellFillColor = localColorScale(cellData.value);
-          // Instead of computing anomaly state here from globalData,
-          // we directly use the provided cluster anomaly flag.
-          if (window.globalData) {
-          let records = window.globalData.filter(row => row.ClusterID == cellData.cluster);
-          if (records.some(r => r.Anomaly === 'anomaly')) {
-            cellData.clusterAnomaly = 'anomaly';
-          } else {
-            cellData.clusterAnomaly = 'normal';
-          }
+        } else {
+             if (isSidebarOpen) {
+                sidebar.classList.remove('open');
+                isSidebarOpen = false;
+                sidebarToggleBtn.innerHTML = '&#9776;';
+                sidebarToggleBtn.style.left = '0px';
+                mainContainer.style.marginLeft = '0px';
+            }
         }
-          if (cellData.clusterAnomaly === "anomaly") {
-            cellFillColor = "red";
-          }
-          svg.append("rect")
-             .attr("class", "cell")
-             .attr("data-cluster", cellData.cluster)
-             .attr("data-original-fill", cellFillColor)
-             .attr("x", cellX)
-             .attr("y", rowY)
-             .attr("width", cellWidth)
-             .attr("height", cellHeight)
-             .attr("fill", cellFillColor)
-             .on("mouseover", function(event) {
-               tooltip.style.display = "block";
-               tooltip.innerHTML = `<strong>${rowData.metric}</strong><br>Cluster: ${cellData.cluster}<br>Value: ${cellData.value}`;
-               tooltip.style.left = (event.pageX + 10) + "px";
-               tooltip.style.top = (event.pageY + 10) + "px";
-             })
-             .on("mouseout", function() {
-               tooltip.style.display = "none";
-             })
-             .on("click", function(event) {
-               event.stopPropagation();
-               const cell = d3.select(this);
-               const clusterID = cell.attr("data-cluster");
-               const clusterCells = d3.selectAll("rect.cell")
-                                       .filter(function() {
-                                         return d3.select(this).attr("data-cluster") === clusterID;
-                                       });
-               const isSelected = clusterCells.classed("selected");
-               if (!isSelected) {
-                 const { color: randColor, hue: selectedHue } = generateNonRedBlueUniqueColor();
-                 clusterCells.classed("selected", true)
-                             .attr("data-selected-color", randColor)
-                             .attr("data-selected-hue", selectedHue)
-                             .transition()
-                             .duration(200)
-                             .style("fill", randColor);
-                 window.selectedClusters.add(clusterID);
-               } else {
-                 clusterCells.classed("selected", false)
-                             .transition()
-                             .duration(200)
-                             .style("fill", function() {
-                               const cid = d3.select(this).attr("data-cluster");
-                               const originalFill = cellData.clusterAnomaly === "anomaly" ? "red" : d3.select(this).attr("data-original-fill");
-                               return originalFill;
-                             });
-                 window.selectedClusters.delete(clusterID);
-                 const firstCell = clusterCells.nodes()[0];
-                 if (firstCell) {
-                   const usedHue = d3.select(firstCell).attr("data-selected-hue");
-                   window.usedHighlightHues = window.usedHighlightHues.filter(h => h != usedHue);
-                 }
-               }
-               updateExploreButton();
-             });
-        });
-        d3.select("#loadMoreBtn").style("display", "none");
-      });
     }
-    
+
+    resetSidebarBtn.addEventListener('click', () => {
+        console.log("Resetting sidebar view and heatmap highlights.");
+        clearSidebarVisualization();
+        updateLegend();
+        updateHeatmap();
+        selectedNodeId = null;
+        document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
+    });
+
+    function showSidebarLoading(isLoadingGraph, isLoadingTable) {
+        document.getElementById('sidebar-cy-loading').style.display = isLoadingGraph ? 'block' : 'none';
+        document.getElementById('sidebar-table-loading').style.display = isLoadingTable ? 'block' : 'none';
+        const showInfo = !isLoadingGraph && !isLoadingTable && (!sidebarCy || sidebarCy.elements().length === 0) && selectedSidebarEdges.size === 0 && selectedNodeId === null;
+         document.getElementById('sidebar-info').style.display = showInfo ? 'block' : 'none';
+    }
+
+    function clearSidebarVisualization() {
+        if (sidebarCy) {
+            sidebarCy.destroy();
+            sidebarCy = null;
+        }
+        addedSidebarClusters.clear();
+        clusterHighlightColors.clear(); // Keep this if heatmap uses it
+        selectedSidebarEdges.clear();
+        selectedNodeId = null;
+        sidebarTableMode = 'cluster';
+        currentSidebarTableClusterId = null;
+        sidebarTableContainer.innerHTML = '';
+        sidebarTableContainer.style.display = 'none';
+        sidebarTablePagination.style.display = 'none';
+        document.getElementById('sidebar-cy').innerHTML = '';
+        document.getElementById('sidebar-info').innerHTML = 'Click a cell on the heatmap to add its cluster. Click nodes or edges in the graph to filter the table below.';
+        document.getElementById('sidebar-info').style.display = 'block';
+        document.getElementById('sidebar-cy-loading').style.display = 'none';
+        document.getElementById('sidebar-table-loading').style.display = 'none';
+        document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
+
+        console.log("Sidebar visualization, selections, and table cleared.");
+    }
+
+    function calculateEdgeWidth(processCount) {
+        const count = processCount || 1;
+        const minCount = 1;
+        const maxCount = 100;
+        const minWidth = 1;
+        const maxWidth = 10;
+        const range = (maxCount - minCount) || 1;
+        const width = minWidth + (maxWidth - minWidth) * ((count - minCount) / range);
+        return Math.max(minWidth, Math.min(width, maxWidth));
+    }
+
+    // Cytoscape Style Configuration (Borders Removed)
+    const CYTOSCAPE_STYLE = [
+        { selector: 'node', style: {
+            'background-color': '#888',
+            'label': 'data(label)',
+            'width': 'mapData(NodeWeight, 0, 1, 15, 60)',
+            'height': 'mapData(NodeWeight, 0, 1, 15, 60)',
+            'font-size': 10, 'color': '#000',
+            'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 4,
+            'border-width': 0, // No borders
+            'transition-property': 'background-color',
+            'transition-duration': '0.15s'
+        }},
+        { selector: 'edge', style: {
+            'line-color': DEFAULT_UNKNOWN_COLOR,
+            'target-arrow-color': DEFAULT_UNKNOWN_COLOR,
+            'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
+            'transition-property': 'line-color, target-arrow-color, width, z-index',
+            'transition-duration': '0.15s',
+            'z-index': 1
+        }}
+    ];
+
+    function generateUniqueHighlightColor() {
+        const MIN_HUE_DIFF = 30;
+        let attempts = 0;
+        const existingHues = Array.from(clusterHighlightColors.values()).map(hslString => {
+            const match = hslString.match(/hsl\((\d+),/);
+            return match ? parseInt(match[1], 10) : -1;
+        }).filter(h => h !== -1);
+
+        while (attempts < 100) {
+            let hue = Math.floor(Math.random() * 360);
+            if ((hue >= 0 && hue <= 25) || (hue >= 335 && hue <= 360) || (hue >= 195 && hue <= 265)) {
+                attempts++;
+                continue;
+            }
+            let isDistinct = existingHues.every(existingHue => {
+                let diff = Math.abs(hue - existingHue);
+                return diff >= MIN_HUE_DIFF && (360 - diff) >= MIN_HUE_DIFF;
+            });
+            if (isDistinct) {
+                const newColor = `hsl(${hue}, 85%, 60%)`;
+                console.log(`Generated distinct color: ${newColor} (Hue: ${hue})`);
+                return newColor;
+            }
+            attempts++;
+        }
+        console.warn("Could not find highly distinct color, using fallback random hue.");
+        let fallbackHue;
+        do {
+             fallbackHue = Math.floor(Math.random() * 360);
+        } while ((fallbackHue >= 0 && fallbackHue <= 25) || (fallbackHue >= 335 && fallbackHue <= 360) || (fallbackHue >= 195 && fallbackHue <= 265));
+        return `hsl(${fallbackHue}, 85%, 60%)`;
+    }
+
+    function deselectCurrentNode() {
+        if (selectedNodeId && sidebarCy) {
+            const node = sidebarCy.getElementById(selectedNodeId);
+            if (node && node.length > 0) {
+                const originalColor = node.scratch('_originalColor');
+                if (originalColor) {
+                    node.style('background-color', originalColor);
+                } else {
+                    const clusterID = node.data('clusterID');
+                    const clusterColor = clusterHighlightColors.get(clusterID) || '#888';
+                    node.style('background-color', clusterColor);
+                    console.warn(`Missing scratch color for node ${selectedNodeId}, reverted using cluster/default color.`);
+                }
+                node.connectedEdges().forEach(edge => {
+                    const originalEdgeColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                    const originalEdgeWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                    edge.style({
+                        'line-color': originalEdgeColor,
+                        'target-arrow-color': originalEdgeColor,
+                        'width': originalEdgeWidth,
+                        'z-index': 1
+                    });
+                });
+                 console.log(`Node ${selectedNodeId} and its edges deselected.`);
+            } else {
+                 console.warn(`Attempted to deselect node ${selectedNodeId}, but it was not found.`);
+            }
+            selectedNodeId = null;
+        }
+        selectedSidebarEdges.clear();
+    }
+
+    function visualizeClusterInSidebar(clusterID, nodeColor) {
+        if (addedSidebarClusters.has(clusterID)) {
+             console.log(`Cluster ${clusterID} is already visualized.`);
+             if (sidebarCy) {
+                 sidebarCy.nodes(`[clusterID = "${clusterID}"]`).animate({ style: { 'opacity': 0.5 } }, { duration: 200 }).animate({ style: { 'opacity': 1 } }, { duration: 200 });
+             }
+             if (currentSidebarTableClusterId !== clusterID || sidebarTableMode !== 'cluster') {
+                 loadSidebarClusterTable(clusterID, 1);
+             }
+             deselectCurrentNode();
+             return;
+        }
+
+        toggleSidebar(true);
+        showSidebarLoading(true, false);
+        document.getElementById('sidebar-info').innerHTML = `Loading network for Cluster ${clusterID}...`;
+        document.getElementById('sidebar-info').style.display = 'block';
+
+        fetch(`${API_BASE_URL}/cluster_network?cluster_id=${clusterID}`)
+             .then(response => { if (!response.ok) throw new Error(`Network error (${response.status})`); return response.json(); })
+             .then(data => {
+                 showSidebarLoading(false, false);
+
+                 if (!data || (!data.nodes || data.nodes.length === 0)) {
+                     console.log(`No network data for Cluster ${clusterID}.`);
+                     if (!sidebarCy) {
+                         sidebarCy = cytoscape({ container: document.getElementById('sidebar-cy'), style: CYTOSCAPE_STYLE });
+                         bindSidebarGraphEvents();
+                     }
+                     addedSidebarClusters.add(clusterID);
+                     loadSidebarClusterTable(clusterID, 1);
+                     updateLegend(sidebarCy?.edges());
+                     deselectCurrentNode();
+                     return;
+                 }
+
+                 const nodesToAdd = data.nodes.map(node => ({
+                     group: 'nodes',
+                     data: { ...node.data, clusterID: clusterID },
+                     style: { ...(node.style || {}), 'background-color': nodeColor },
+                     scratch: { _originalColor: nodeColor }
+                 }));
+
+                 const edgesToAdd = data.edges.map(edge => {
+                     const protocol = edge.data.Protocol || 'Unknown';
+                     if (!protocolColorMap[protocol]) {
+                         protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                     }
+                     const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                     const originalWidth = calculateEdgeWidth(edge.data.processCount);
+                     return {
+                         group: 'edges',
+                         data: { ...edge.data, clusterID: clusterID },
+                         style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor, 'width': originalWidth },
+                         scratch: { _protocolColor: edgeColor, _originalWidth: originalWidth }
+                     };
+                 });
+
+                 if (!sidebarCy) {
+                     sidebarCy = cytoscape({
+                         container: document.getElementById('sidebar-cy'),
+                         elements: { nodes: nodesToAdd, edges: edgesToAdd },
+                         style: CYTOSCAPE_STYLE
+                     });
+                     bindSidebarGraphEvents();
+                     applySidebarLayout(); // Apply selected layout on creation
+                 } else {
+                     sidebarCy.add(nodesToAdd.concat(edgesToAdd));
+                     applySidebarLayout(); // Apply selected layout after adding elements
+                 }
+
+                 addedSidebarClusters.add(clusterID);
+                 document.getElementById('sidebar-info').style.display = 'none';
+                 updateLegend(sidebarCy.edges());
+                 loadSidebarClusterTable(clusterID, 1);
+                 deselectCurrentNode();
+
+             })
+             .catch(error => {
+                 console.error(`Error visualizing cluster ${clusterID} in sidebar:`, error);
+                 showSidebarLoading(false, false);
+                 document.getElementById('sidebar-info').innerHTML = `Error loading graph data for Cluster ${clusterID}.`;
+                 document.getElementById('sidebar-info').style.display = 'block';
+                 loadSidebarClusterTable(clusterID, 1);
+                 deselectCurrentNode();
+             });
+    }
+
+    function bindSidebarGraphEvents() {
+        if (!sidebarCy) return;
+
+        sidebarCy.removeListener('mouseover'); // Keep mouseover/mouseout for tooltips
+        sidebarCy.removeListener('mouseout');
+        sidebarCy.removeListener('click');    // Remove previous click/tap listeners
+        sidebarCy.removeListener('tap');
+
+        sidebarCy.on('mouseover', 'node', (event) => { /* ... tooltip logic ... */ });
+        sidebarCy.on('mouseover', 'edge', (event) => { /* ... tooltip logic ... */ });
+        sidebarCy.on('mouseout', 'node, edge', () => { tooltip.style("display", "none"); });
+
+        // --- Modified Click/Tap Handlers ---
+        sidebarCy.on('click', 'edge', (event) => {
+            if (selectedNodeId) {
+                console.log("Node selection active, ignoring individual edge click.");
+                return;
+            }
+            const edge = event.target;
+            const source = edge.data('source');
+            const target = edge.data('target');
+            const protocol = edge.data('Protocol');
+            const edgeKey = `${source}|${target}|${protocol}`;
+
+            if (selectedSidebarEdges.has(edgeKey)) {
+                selectedSidebarEdges.delete(edgeKey);
+                // Reset style... (keep existing style reset)
+                const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+            } else {
+                selectedSidebarEdges.add(edgeKey);
+                // Apply selected style... (keep existing style apply)
+                edge.style({ 'line-color': SELECTED_EDGE_COLOR, 'target-arrow-color': SELECTED_EDGE_COLOR, 'width': SELECTED_EDGE_WIDTH, 'z-index': SELECTED_EDGE_ZINDEX });
+            }
+            updateSidebarTableForSelectedEdges(); // This will now also update tree highlights
+        });
+
+        sidebarCy.on('click', 'node', (event) => {
+            const clickedNode = event.target;
+            const clickedNodeId = clickedNode.id();
+
+            if (selectedSidebarEdges.size > 0) {
+                // Clear individual edge selections visually and logically
+                sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
+                    .forEach(edge => {
+                        const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                        const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                        edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                    });
+                selectedSidebarEdges.clear();
+            }
+
+            if (selectedNodeId === clickedNodeId) {
+                // Deselecting the currently selected node
+                deselectCurrentNode(); // Resets node/edge styles
+                // updateSidebarTableForSelectedEdges will handle table and tree highlight clearing
+            } else {
+                // Selecting a new node
+                deselectCurrentNode(); // Deselect previous first
+                if (!clickedNode.scratch('_originalColor')) {
+                    clickedNode.scratch('_originalColor', clickedNode.style('background-color'));
+                }
+                // Apply selected style... (keep existing style apply)
+                clickedNode.style('background-color', SELECTED_NODE_COLOR);
+                clickedNode.connectedEdges().forEach(edge => {
+                    edge.style({ 'line-color': SELECTED_EDGE_COLOR, 'target-arrow-color': SELECTED_EDGE_COLOR, 'width': SELECTED_EDGE_WIDTH, 'z-index': SELECTED_EDGE_ZINDEX });
+                });
+                selectedNodeId = clickedNodeId;
+                console.log(`Node ${selectedNodeId} and its edges selected.`);
+                // updateSidebarTableForSelectedEdges will handle table and tree highlight update
+            }
+            updateSidebarTableForSelectedEdges(); // Update table and tree highlights based on selection state
+            document.getElementById('sidebar-info').style.display = 'none';
+        });
+
+        sidebarCy.on('tap', function(event){
+            if (event.target === sidebarCy) { // Tapped on background
+                let selectionCleared = false;
+                if(selectedNodeId){
+                    deselectCurrentNode(); // Resets node/edge styles
+                    selectionCleared = true;
+                } else if (selectedSidebarEdges.size > 0) {
+                    // Clear visual selection for edges
+                    sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
+                        .forEach(edge => {
+                            const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                            const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                            edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                        });
+                    selectedSidebarEdges.clear();
+                    selectionCleared = true;
+                }
+
+                if (selectionCleared) {
+                    updateSidebarTableForSelectedEdges(); // Update table (to cluster default) and clear tree highlights
+                }
+            }
+        });
+    }
+
+    function updateSidebarTableForSelectedEdges() {
+        // NOTE: clusterIdsToHighlight Set is removed
+
+        if (selectedNodeId && sidebarCy) {
+            // --- Node Selection Logic ---
+            const node = sidebarCy.getElementById(selectedNodeId);
+            if (node && node.length > 0) {
+                // Get connected edges data WITHOUT collecting cluster IDs for tree highlighting
+                const connectedEdgeData = node.connectedEdges().map(edge => {
+                    return { source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') };
+                });
+
+                if (connectedEdgeData.length > 0) {
+                    loadSidebarMultiEdgeTable(connectedEdgeData, 1); // Load table for connected edges
+                } else {
+                    sidebarTableContainer.innerHTML = '<p style="padding:10px; text-align:center; color:#6c757d;">Selected node has no connections.</p>';
+                    sidebarTableContainer.style.display = 'block';
+                    sidebarTablePagination.style.display = 'none';
+                }
+                document.getElementById('sidebar-info').style.display = 'none';
+            } else {
+                selectedNodeId = null; // Node not found, reset state
+                // Fall through to edge/default logic
+            }
+            // --- End Node Selection Logic ---
+        }
+
+        if (!selectedNodeId && selectedSidebarEdges.size > 0) {
+            // --- Individual Edge Selection Logic ---
+            // Get edge list WITHOUT collecting cluster IDs for tree highlighting
+            const edgeList = Array.from(selectedSidebarEdges).map(key => {
+                const parts = key.split('|');
+                return { source: parts[0], destination: parts[1], protocol: parts[2] };
+            });
+            loadSidebarMultiEdgeTable(edgeList, 1); // Load table for selected edges
+            document.getElementById('sidebar-info').style.display = 'none';
+            // --- End Individual Edge Selection Logic ---
+        }
+
+        if (!selectedNodeId && selectedSidebarEdges.size === 0) {
+            // --- No Selection Logic ---
+            if (currentSidebarTableClusterId) {
+                // If a cluster was previously loaded (e.g., via heatmap click), show its table
+                loadSidebarClusterTable(currentSidebarTableClusterId, 1);
+                // No need to add this cluster ID for tree highlighting here
+            } else {
+                // Default state: Clear table, show info
+                sidebarTableContainer.innerHTML = '';
+                sidebarTableContainer.style.display = 'none';
+                sidebarTablePagination.style.display = 'none';
+                document.getElementById('sidebar-info').innerHTML = 'Click nodes or edges in the graph to filter the table below, or click a heatmap cell.';
+                document.getElementById('sidebar-info').style.display = 'block';
+            }
+        }
+    }
+
+    function loadSidebarMultiEdgeTable(edgeList, page) {
+        if (!edgeList || edgeList.length === 0) {
+             updateSidebarTableForSelectedEdges();
+             return;
+         }
+        sidebarTableMode = 'edges';
+        console.log(`Loading sidebar table for ${edgeList.length} edges, page ${page}`);
+        showSidebarLoading(false, true);
+        sidebarTableContainer.style.display = 'none';
+        sidebarTablePagination.style.display = 'none';
+        const payload = { edges: edgeList, page: page, page_size: TABLE_PAGE_SIZE };
+
+        fetch(`${API_BASE_URL}/get_multi_edge_table`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(response => response.ok ? response.text() : Promise.reject(`Failed multi-edge table page (${response.status})`))
+        .then(html => {
+            showSidebarLoading(false, false);
+            sidebarTableContainer.innerHTML = html;
+            sidebarTableContainer.style.display = 'block';
+            const summaryElem = sidebarTableContainer.querySelector('#table-summary');
+            if (summaryElem && summaryElem.dataset.total) {
+                const total = parseInt(summaryElem.dataset.total, 10);
+                 if (total > 0) {
+                    sidebarTablePagination.style.display = 'block';
+                    const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+                    document.getElementById('sidebarTotalPages').textContent = totalPages || 1;
+                    document.getElementById('sidebarCurrentPageInput').value = page;
+                    document.getElementById('sidebarCurrentPageInput').max = totalPages || 1;
+                 } else { sidebarTablePagination.style.display = 'none'; }
+            } else {
+                document.getElementById('sidebarTotalPages').textContent = '?';
+                document.getElementById('sidebarCurrentPageInput').value = page;
+                sidebarTablePagination.style.display = 'none';
+                console.warn("No table summary total found in multi-edge sidebar table response.");
+            }
+             sidebarTableContainer.scrollTop = 0;
+        })
+        .catch(error => {
+            console.error("Error fetching multi-edge sidebar table:", error);
+            showSidebarLoading(false, false);
+            sidebarTableContainer.innerHTML = `<p style="color: red; padding: 10px;">Error loading table data for selected edges.</p>`;
+            sidebarTableContainer.style.display = 'block';
+            sidebarTablePagination.style.display = 'none';
+        });
+    }
+
+    function applyAllHeatmapHighlights() {
+        d3.selectAll('rect.cell').each(function() {
+            const cell = d3.select(this);
+            const originalColor = cell.attr("data-original-fill");
+            if (originalColor) { cell.attr("fill", originalColor); }
+        });
+        clusterHighlightColors.forEach((color, clusterId) => {
+            d3.selectAll('rect.cell[data-cluster="' + clusterId + '"]').attr('fill', color);
+        });
+     }
+
+    function renderCombinedHeatmap(dataByMetric) {
+        const orderOption = document.getElementById("rowOrderSelect").value || "descending";
+        const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
+        const maxCellsPerRow = 700; // Keep limiting max cells fetched/processed if desired
+        const heatmapData = dataByMetric.map(({ metric, pivotData }) => ({ metric, values: [...pivotData].sort(comparator).slice(0, maxCellsPerRow) }));
+
+        const heatmapDiv = d3.select("#heatmap");
+        heatmapDiv.select("svg").remove(); // Clear previous heatmap
+
+        if (heatmapData.length === 0 || heatmapData[0].values.length === 0) {
+            heatmapDiv.html('<p style="text-align: center; padding: 20px; color: #6c757d;">No heatmap data to display based on current filters.</p>');
+            return; // Don't render if no data
+        }
+
+        // --- Dynamic Cell Width Calculation ---
+        const minCellWidth = 2; // User requested minimum
+        const maxCellWidth = 10; // User requested maximum
+        const heatmapCellHeight = 15; // Keep height fixed
+        const labelMargin = 150;
+        const rightPadding = 40; // Existing padding right of cells
+        const verticalSpace = 10;
+
+        // Get available width within the heatmap container
+        const heatmapContainerWidth = document.getElementById('heatmap').clientWidth;
+        const availableWidthForCells = Math.max(0, heatmapContainerWidth - labelMargin - rightPadding);
+
+        // Find max number of columns needed across all metrics
+        const maxCols = d3.max(heatmapData, r => r.values.length) || 1;
+
+        // Calculate ideal width per cell based on available space
+        let calculatedCellWidth = availableWidthForCells / maxCols;
+
+        // Clamp the calculated width between min and max
+        const finalCellWidth = Math.max(minCellWidth, Math.min(calculatedCellWidth, maxCellWidth));
+        console.log(`Heatmap cell width calculated: Ideal=${calculatedCellWidth.toFixed(2)}, Final=${finalCellWidth.toFixed(2)} based on container ${heatmapContainerWidth}px and ${maxCols} cols`);
+        // --- End Dynamic Cell Width Calculation ---
+
+        const numRows = heatmapData.length;
+        const totalHeight = 20 + numRows * heatmapCellHeight + (numRows - 1) * verticalSpace + 20;
+        // Calculate the actual SVG width needed based on the final cell width
+        const svgWidth = labelMargin + maxCols * finalCellWidth + rightPadding;
+
+        const svg = heatmapDiv.append("svg")
+                              .attr("width", svgWidth) // Use dynamically calculated width
+                              .attr("height", totalHeight);
+
+        heatmapData.forEach((rowData, rowIndex) => {
+            const rowY = 20 + rowIndex * (heatmapCellHeight + verticalSpace);
+            svg.append("text").attr("x", labelMargin - 10).attr("y", rowY + heatmapCellHeight / 2).attr("text-anchor", "end").attr("alignment-baseline", "middle").attr("font-size", "12px").attr("fill", "black").text(rowData.metric);
+
+            const numericValues = rowData.values.map(d => typeof d.value === 'number' ? d.value : 0).filter(v => !isNaN(v));
+            const rowMax = numericValues.length > 0 ? d3.max(numericValues) : 1;
+            const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, rowMax === 0 ? 1 : rowMax]);
+
+            rowData.values.forEach((cellData, colIndex) => {
+                // Use the dynamically calculated finalCellWidth for positioning and size
+                const cellX = labelMargin + colIndex * finalCellWidth;
+                const numericValue = typeof cellData.value === 'number' && !isNaN(cellData.value) ? cellData.value : 0;
+                const originalFillColor = cellData.clusterAnomaly === 'anomaly' ? 'red' : colorScale(numericValue);
+                const initialHighlightColor = clusterHighlightColors.get(cellData.cluster);
+                const initialFill = initialHighlightColor || originalFillColor;
+
+                svg.append("rect")
+                  .attr("class", "cell").attr("data-cluster", cellData.cluster)
+                  .attr("data-clusteranomaly", cellData.clusterAnomaly).attr("data-metric", rowData.metric)
+                  .attr("data-value", cellData.value).attr("data-original-fill", originalFillColor)
+                  .attr("x", cellX)
+                  .attr("y", rowY)
+                  .attr("width", finalCellWidth) // Use finalCellWidth
+                  .attr("height", heatmapCellHeight)
+                  .attr("fill", initialFill)
+                  .style("cursor", "pointer")
+                  .on("mouseover", function (event) {
+                      const d = d3.select(this);
+                      tooltip.style("display", "block")
+                              .html(`<strong>${d.attr("data-metric")}</strong><br>Cluster: ${d.attr("data-cluster")}<br>Value: ${d.attr("data-value")}<br>Anomaly: ${d.attr("data-clusteranomaly")}`)
+                              .style("left", (event.pageX + 10) + "px").style("top", (event.pageY + 10) + "px");
+                  })
+                  .on("mouseout", () => tooltip.style("display", "none"))
+                  .on("click", function (event) {
+                      event.stopPropagation();
+                      const cell = d3.select(this);
+                      const clusterID = cell.attr("data-cluster");
+                      const originalColor = cell.attr("data-original-fill");
+
+                      let targetHighlightColor;
+
+                      if (clusterHighlightColors.has(clusterID)) {
+                          // DESELECT
+                          console.log(`Deselecting cluster ${clusterID} from heatmap.`);
+                          clusterHighlightColors.delete(clusterID);
+                          targetHighlightColor = originalColor;
+                      } else {
+                          // SELECT
+                          console.log(`Selecting cluster ${clusterID} on heatmap.`);
+                          targetHighlightColor = generateUniqueHighlightColor();
+                          clusterHighlightColors.set(clusterID, targetHighlightColor);
+                          visualizeClusterInSidebar(clusterID, targetHighlightColor);
+                      }
+
+                      d3.selectAll('rect.cell[data-cluster="' + clusterID + '"]')
+                        .transition().duration(100)
+                        .attr('fill', targetHighlightColor);
+
+                      highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+                  });
+            });
+        });
+    }
+
     function showHeatmap() {
-      document.getElementById('cy').style.display = 'none';
-      document.getElementById('backToHeatmap').style.display = 'none';
-      document.getElementById('edgeFilterPanel').style.display = 'none';
-      document.getElementById('table-container').style.display = 'none';
-      document.getElementById('table-pagination').style.display = 'none';
-      document.getElementById('refreshNetworkBtn').style.display = 'none';
-      document.getElementById('sizeControls').style.display = 'none';
-      document.getElementById('table-search-container').style.display = "none";
-      document.getElementById('topControls').style.display = 'block';
-      d3.select("#heatmap").style("display", "block");
-      updateLegend();
-      clearEdgeFilter();
+        if (globalCy) { globalCy.destroy(); globalCy = null; }
+        document.getElementById('cy').style.display = 'none';
+        document.getElementById('backToHeatmap').style.display = 'none';
+        document.getElementById('edgeFilterPanel').style.display = 'none';
+        document.getElementById('refreshNetworkBtn').style.display = 'none';
+        document.getElementById('sizeControls').style.display = 'none';
+        document.getElementById('table-container').style.display = 'none';
+        document.getElementById('table-pagination').style.display = 'none';
+        document.getElementById('table-search-container').style.display = "none";
+        document.getElementById('topControls').style.display = 'block';
+        d3.select("#heatmap").style("display", "block");
+        clearEdgeFilter();
+        clearSidebarVisualization();
+        updateLegend();
+        updateHeatmap();
+        toggleSidebar(false);
     }
     document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
-    
-    function showClusterNetwork(clusterID) {
-      currentClusterID = clusterID;
-      fetch("http://127.0.0.1:5000/cluster_network?cluster_id=" + clusterID)
-        .then(response => response.json())
-        .then(data => {
-          if (data.nodes.length === 0 && data.edges.length === 0) {
-            alert("No network data for this cluster.");
-            return;
-          }
-          updateLegend(data);
-          const elementsCombined = data.nodes.concat(data.edges);
-          visualizeNetwork(elementsCombined);
-          d3.select("#heatmap").style("display", "none");
-          document.getElementById("backToHeatmap").style.display = "inline-block";
-          document.getElementById("refreshNetworkBtn").style.display = "inline-block";
-          document.getElementById('table-search-container').hidden = false;
-          document.getElementById('sizeControls').hidden = false;
-          document.getElementById("topControls").style.display = "none";
-          createClusterTable(clusterID);
-          document.getElementById('cy').scrollIntoView({ behavior: 'smooth', block: 'center' });
-        })
-        .catch(error => console.error("Error fetching network data:", error));
-    }
-    
-    function loadClusterTablePage(clusterID, page) {
-      fetch(`http://127.0.0.1:5000/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
-      .then(response => response.text())
-      .then(html => {
-         const container = document.getElementById('table-container');
-         container.innerHTML = html;
-         document.getElementById('table-pagination').style.display = 'block';
-         const summaryElem = document.getElementById('table-summary');
-         if(summaryElem) {
-             const total = parseInt(summaryElem.dataset.total);
-             const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
-             document.getElementById('totalPages').textContent = totalPages;
-             document.getElementById('currentPageInput').value = page;
+
+    function showLoading() { document.getElementById('loading-overlay').style.display = 'flex'; }
+    function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
+
+    function updateLegend(cyEdges = null) {
+         const legendTableBody = d3.select('#legend tbody');
+         legendTableBody.html('');
+         let protocols = new Set();
+         let calculationPromise;
+         let totalCount = 0;
+
+         if (cyEdges && cyEdges.length > 0) {
+             document.querySelector('#legend-container h3').textContent = "Sidebar Protocols";
+             const counts = {};
+             cyEdges.forEach(edge => {
+                 const protocol = (edge.data('Protocol') || 'Unknown').trim(); if (!protocol) return;
+                 protocols.add(protocol);
+                 const count = edge.data('processCount') || 1;
+                 counts[protocol] = (counts[protocol] || 0) + count;
+                 totalCount += count;
+             });
+             totalCount = totalCount || 1;
+             const percentages = {};
+             Object.entries(counts).forEach(([p, c]) => { percentages[p] = (c / totalCount) * 100; });
+             calculationPromise = Promise.resolve(percentages);
+         } else {
+              document.querySelector('#legend-container h3').textContent = "Protocol Legend";
+             calculationPromise = fetch(`${API_BASE_URL}/protocol_percentages`).then(res => res.ok ? res.json() : Promise.reject('Failed global percentages')).catch(error => { console.error("Error fetching global protocol percentages:", error); return {}; });
          }
-      })
-      .catch(error => console.error("Error fetching cluster table:", error));
-    }
-    
+
+         calculationPromise.then(percentages => {
+             if (!cyEdges) { Object.keys(percentages).forEach(proto => { if(proto) protocols.add(proto); }); }
+             protocols.forEach(proto => { if (proto && !protocolColorMap[proto]) { protocolColorMap[proto] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0'); } });
+             if (!protocolColorMap['Unknown']) { protocolColorMap['Unknown'] = DEFAULT_UNKNOWN_COLOR; }
+
+             const sortedProtocols = Array.from(protocols).filter(p => p).sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
+             sortedProtocols.forEach(protocol => {
+                 const pct = percentages[protocol] || 0;
+                 const pctText = (pct > 0.01 ? pct.toFixed(2) : '<0.01') + '%';
+                 const color = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                 legendTableBody.append('tr').html(`<td>${protocol}</td><td><span class="color-box" style="background-color:${color}"></span></td><td>${pctText}</td>`);
+             });
+
+             if (sidebarCy) {
+                 sidebarCy.edges().forEach(edge => {
+                     const protocol = edge.data('Protocol') || 'Unknown';
+                     const newColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                     const nodeIsSelected = selectedNodeId && (edge.source().id() === selectedNodeId || edge.target().id() === selectedNodeId);
+                     const edgeIsSelected = selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`);
+                     if (!nodeIsSelected && !edgeIsSelected) { edge.style({'line-color': newColor, 'target-arrow-color': newColor}); }
+                     edge.scratch('_protocolColor', newColor); // Update scratch always
+                 });
+             }
+         });
+     }
+
+    function updateHeatmap() {
+         showLoading();
+         const metrics = [
+             { label: "Count", value: "count" }, { label: "Unique IPs", value: "Unique IPs" },
+             { label: "Unique Sources", value: "Unique Sources" }, { label: "Unique Destinations", value: "Unique Destinations" },
+             { label: "Packet Length", value: "Length" }, { label: "Payload Length", value: "Len" },
+             { label: "Payload Size Variance", value: "Payload Size Variance" }, { label: "Packets per Second", value: "Packets per Second" },
+             { label: "Total Data Sent", value: "Total Data Sent" }, { label: "% SYN packets", value: "% SYN packets" },
+             { label: "% RST packets", value: "% RST packets" }, { label: "% ACK packets", value: "% ACK packets" },
+             { label: "% PSH packets", value: "% PSH packets" }
+         ];
+         const filterParamsBase = {
+             payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
+             sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
+             destinationFilter: document.getElementById('destinationFilter').value.trim().toLowerCase(),
+             protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
+             entropyMin: document.getElementById('entropyMinFilter').value, entropyMax: document.getElementById('entropyMaxFilter').value,
+             isLargePacketOnly: document.getElementById('isLargePacketFilter').checked, isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
+             minSourceAmt: document.getElementById('minSourceAmtFilter').value, maxSourceAmt: document.getElementById('maxSourceAmtFilter').value,
+             minDestinationAmt: document.getElementById('minDestinationAmtFilter').value, maxDestinationAmt: document.getElementById('maxDestinationAmtFilter').value
+         };
+         Promise.all(metrics.map(m => {
+             const filterParams = { ...filterParamsBase, metric: m.value };
+             return fetch(`${API_BASE_URL}/filter_and_aggregate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(filterParams) })
+                 .then(response => response.ok ? response.json() : Promise.reject(`Failed ${m.label} (${response.status})`))
+                 .then(data => ({ metric: m.label, pivotData: data }))
+                 .catch(error => { console.error(`Error fetching ${m.label}:`, error); return { metric: m.label, pivotData: [], error: true }; });
+         }))
+         .then(results => { renderCombinedHeatmap(results.filter(r => !r.error)); hideLoading(); })
+         .catch(error => { console.error("Major error fetching heatmap data:", error); d3.select("#heatmap").html('<p style="color: red;">Error loading heatmap data.</p>'); hideLoading(); });
+         applyAllHeatmapHighlights();
+     }
+
+    function loadSidebarClusterTable(clusterID, page) {
+         if (!clusterID) return;
+         sidebarTableMode = 'cluster';
+         currentSidebarTableClusterId = clusterID;
+         console.log(`Loading sidebar table for Cluster ${clusterID}, page ${page}`);
+         showSidebarLoading(false, true);
+         sidebarTableContainer.style.display = 'none';
+         sidebarTablePagination.style.display = 'none';
+
+         fetch(`${API_BASE_URL}/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+             .then(response => response.ok ? response.text() : Promise.reject(`Failed cluster table page (${response.status})`))
+             .then(html => {
+                 showSidebarLoading(false, false);
+                 sidebarTableContainer.innerHTML = html;
+                 sidebarTableContainer.style.display = 'block';
+                 const summaryElem = sidebarTableContainer.querySelector('#table-summary');
+                 if (summaryElem && summaryElem.dataset.total) {
+                     const total = parseInt(summaryElem.dataset.total, 10);
+                      if (total > 0) {
+                         sidebarTablePagination.style.display = 'block';
+                         const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+                         document.getElementById('sidebarTotalPages').textContent = totalPages || 1;
+                         document.getElementById('sidebarCurrentPageInput').value = page;
+                         document.getElementById('sidebarCurrentPageInput').max = totalPages || 1;
+                      } else { sidebarTablePagination.style.display = 'none'; }
+                 } else {
+                     document.getElementById('sidebarTotalPages').textContent = '?';
+                     document.getElementById('sidebarCurrentPageInput').value = page;
+                     sidebarTablePagination.style.display = 'none';
+                     console.warn("No table summary total found in sidebar cluster table response.");
+                 }
+                  sidebarTableContainer.scrollTop = 0;
+             })
+             .catch(error => {
+                 console.error("Error fetching sidebar cluster table:", error);
+                 showSidebarLoading(false, false);
+                 sidebarTableContainer.innerHTML = `<p style="color: red; padding: 10px;">Error loading table data.</p>`;
+                 sidebarTableContainer.style.display = 'block';
+                 sidebarTablePagination.style.display = 'none';
+             });
+     }
+
+    sidebarGoPageBtn.addEventListener('click', function () {
+        let pageInput = document.getElementById('sidebarCurrentPageInput');
+        let page = parseInt(pageInput.value, 10);
+        const totalPagesStr = document.getElementById('sidebarTotalPages').textContent;
+        const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
+
+        if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity)) {
+             if (sidebarTableMode === 'cluster' && currentSidebarTableClusterId) {
+                 loadSidebarClusterTable(currentSidebarTableClusterId, page);
+             } else if (sidebarTableMode === 'edges') {
+                 let edgeList = [];
+                 if (selectedNodeId && sidebarCy) {
+                      const node = sidebarCy.getElementById(selectedNodeId);
+                      if (node && node.length > 0) { edgeList = node.connectedEdges().map(edge => ({ source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') })); }
+                 } else if (selectedSidebarEdges.size > 0) {
+                      edgeList = Array.from(selectedSidebarEdges).map(key => { const parts = key.split('|'); return { source: parts[0], destination: parts[1], protocol: parts[2] }; });
+                 }
+                 if (edgeList.length > 0) { loadSidebarMultiEdgeTable(edgeList, page); }
+                 else { console.warn("Sidebar pagination clicked in edge mode, but no edges identified as selected."); }
+             } else { console.warn("Sidebar pagination clicked but current table context is unclear."); }
+        } else { alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`); }
+    });
+
+    function loadClusterTablePage(clusterID, page) {
+         currentClusterID = clusterID;
+         fetch(`${API_BASE_URL}/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+             .then(response => response.ok ? response.text() : Promise.reject(`Failed main table page (${response.status})`))
+             .then(html => {
+                 const container = document.getElementById('table-container');
+                 container.innerHTML = html;
+                 container.style.display = 'block';
+                 document.getElementById('table-pagination').style.display = 'block';
+                 const summaryElem = container.querySelector('#table-summary');
+                 if (summaryElem && summaryElem.dataset.total) {
+                     const total = parseInt(summaryElem.dataset.total, 10);
+                     const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+                     document.getElementById('totalPages').textContent = totalPages || 1;
+                     document.getElementById('currentPageInput').value = page;
+                     document.getElementById('currentPageInput').max = totalPages || 1;
+                 } else {
+                     document.getElementById('totalPages').textContent = '?';
+                     document.getElementById('currentPageInput').value = page;
+                     console.warn("No table summary total in main table response.");
+                 }
+                 container.scrollTop = 0;
+             }).catch(error => {
+                 console.error("Error fetching main cluster table:", error);
+                 document.getElementById('table-container').innerHTML = `<p style="color: red; padding: 10px;">Error loading table data.</p>`;
+                 document.getElementById('table-container').style.display = 'block';
+                 document.getElementById('table-pagination').style.display = 'none';
+             });
+     }
+
     function createClusterTable(clusterID) {
-      loadClusterTablePage(clusterID, 1);
-      document.getElementById('table-container').style.display = "block";
-      document.getElementById('table-search-container').style.display = "block";
+        loadClusterTablePage(clusterID, 1);
+        document.getElementById('table-search-container').style.display = "block";
     }
-    
-    document.getElementById('goPageBtn').addEventListener('click', function () {
-      let page = parseInt(document.getElementById('currentPageInput').value);
-      if (page >= 1) {
-        if (window.edgeFilterState) {
-          const { source, destination, protocol } = window.edgeFilterState;
-          fetch(`http://127.0.0.1:5000/get_edge_table?source=${source}&destination=${destination}&protocol=${protocol}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
-            .then(res => res.text())
-            .then(html => {
-              const container = document.getElementById('table-container');
-              container.innerHTML = html;
-              const summaryElem = document.getElementById('table-summary');
-              if (summaryElem) {
-                const total = parseInt(summaryElem.dataset.total);
-                const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
-                document.getElementById('totalPages').textContent = totalPages;
-                document.getElementById('currentPageInput').value = page;
-              }
-            });
-        } else if (currentClusterID) {
-          loadClusterTablePage(currentClusterID, page);
-        }
-      }
-    });
-    
-    function groupDirectedComponents(cy) {
-      let visited = new Set();
-      let groupCount = 0;
-      function randomColor(){
-        return '#' + Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0');
-      }
-      cy.nodes().forEach(node => {
-        if (!visited.has(node.id())) {
-          groupCount++;
-          const color = randomColor();
-          let bfs = cy.elements().bfs({ roots: node, directed: true });
-          bfs.path.forEach(ele => {
-            if (ele.isNode()) {
-              visited.add(ele.id());
-              ele.data('groupID', groupCount);
-              ele.data('color', color);
-            }
-          });
-        }
-      });
-    }
-    
-    function positionGroupedComponentsTree(cy) {
-      let groupMap = {};
-      cy.nodes().forEach(n => {
-        let g = n.data('groupID') || 0;
-        if (!groupMap[g]) groupMap[g] = [];
-        groupMap[g].push(n);
-      });
-      let sortedGroups = Object.entries(groupMap).sort((a, b) => b[1].length - a[1].length);
-      let groupYOffset = 0;
-      const verticalSpacingBetweenGroups = 0;
-      const levelHeight = 130;
-      const siblingSpacing = 200;
-      sortedGroups.forEach(([groupID, nodes]) => {
-        let root = nodes.reduce((prev, curr) => {
-          return (!prev || (curr.data('timeIndex') < prev.data('timeIndex'))) ? curr : prev;
-        }, null);
-        if (!root) return;
-        let levels = {};
-        let visited = new Set();
-        let queue = [];
-        levels[root.id()] = 0;
-        visited.add(root.id());
-        queue.push(root);
-        while (queue.length > 0) {
-          let current = queue.shift();
-          let currentLevel = levels[current.id()];
-          current.outgoers('edge').forEach(edge => {
-            let target = edge.target();
-            if (target.data('groupID') == groupID && !visited.has(target.id())) {
-              levels[target.id()] = currentLevel + 1;
-              visited.add(target.id());
-              queue.push(target);
-            }
-          });
-        }
-        let levelNodes = {};
-        nodes.forEach(n => {
-          let lvl = levels[n.id()] !== undefined ? levels[n.id()] : 0;
-          if (!levelNodes[lvl]) levelNodes[lvl] = [];
-          levelNodes[lvl].push(n);
-        });
-        Object.keys(levelNodes).forEach(lvlKey => {
-          let lvl = parseInt(lvlKey);
-          let nodesAtLevel = levelNodes[lvl];
-          nodesAtLevel.sort((a, b) => (a.data('timeIndex') || 0) - (b.data('timeIndex') || 0));
-          let totalWidth = (nodesAtLevel.length - 1) * siblingSpacing;
-          let startX = -totalWidth / 2;
-          nodesAtLevel.forEach((n, idx) => {
-            let x = startX + idx * siblingSpacing;
-            let y = groupYOffset + lvl * levelHeight;
-            n.position({x: x, y: y});
-          });
-        });
-        let maxLevel = Math.max(...Object.keys(levelNodes).map(Number));
-        groupYOffset += (maxLevel + 1) * levelHeight + verticalSpacingBetweenGroups;
-      });
-    }
-    
-    function getNodeSize(ele) {
-      let minSize = parseFloat(document.getElementById('nodeSizeMin').value);
-      let maxSize = parseFloat(document.getElementById('nodeSizeMax').value);
-      if (isNaN(minSize) && isNaN(maxSize)) {
-        minSize = 30;
-        maxSize = 65;
-      } else {
-        if (isNaN(minSize)) minSize = maxSize;
-        if (isNaN(maxSize)) maxSize = minSize;
-      }
-      if (maxSize < minSize) {
-        const temp = maxSize;
-        maxSize = minSize;
-        minSize = temp;
-      }
-      let maxWeight = 0;
-      let minWeight = Infinity;
-      ele.cy().nodes().forEach(n => {
-        const w = parseFloat(n.data('NodeWeight')) || 0;
-        if (w > maxWeight) maxWeight = w;
-        if (w < minWeight) minWeight = w;
-      });
-      if (!isFinite(minWeight)) minWeight = 0;
-      const currentWeight = parseFloat(ele.data('NodeWeight')) || 0;
-      if (maxWeight === minWeight) return minSize;
-      const scaled = minSize + ((currentWeight - minWeight) / (maxWeight - minWeight)) * (maxSize - minSize);
-      return Math.min(Math.max(scaled, minSize), maxSize);
-    }
-    
+
     function visualizeNetwork(elements) {
-      document.getElementById('cy').style.display = 'block';
-      const cy = cytoscape({
-        container: document.getElementById('cy'),
-        elements: elements,
-        pixelRatio: 1,
-        layout: { name: 'preset' },
-        style: [
-          {
-            selector: 'node',
-            style: {
-              'width': function(ele) { return getNodeSize(ele); },
-              'height': function(ele) { return getNodeSize(ele); },
-              'background-color': 'mapData(NodeWeight, 0, 1, #d4f0d4, #006400)',
-              'border-width': 2,
-              'border-color': '#333',
-              'content': 'data(label)',
-              'font-size': 14,
-              'color': '#000',
-              'text-valign': 'center',
-              'text-halign': 'center',
-              'text-opacity': 1,
-              'text-outline-width': 2,
-              'text-outline-color': '#fff',
-              'shape': 'ellipse'
-            }
-          },
-          {
-            selector: 'node[Classification="Internal"]',
-            style: { 'shape': 'rectangle' }
-          },
-          {
-            selector: 'node[color]',
-            style: { 'background-color': 'data(color)' }
-          },
-          {
-            selector: 'edge',
-            style: {
-              'target-arrow-shape': 'triangle',
-              'curve-style': 'bezier',
-              'control-point-step-size': 30,
-              'width': 'data(normalizedWidth)',
-              'line-color': function(ele) { return ele.data('edgeColor') || '#888'; },
-              'target-arrow-color': function(ele) { return ele.data('edgeColor') || '#888'; },
-              'opacity': 0.8
-            }
-          },
-          {
-            selector: 'edge.selected',
-            style: {
-              'line-color': 'red',
-              'target-arrow-color': 'red',
-              'opacity': 1,
-              'z-index': 9999
-            }
-          }
-        ]
-      });
-      
-      globalCy = cy;
-      
-      cy.edges().forEach(edge => {
-        let protocol = edge.data('Protocol');
-        let color = protocolColorMap[protocol] || '#888';
-        if (/^#?f{2}0000$/i.test(color) || color.toLowerCase() === 'red') {
-          color = '#880000';
-        }
-        edge.data('edgeColor', color);
-      });
-      
-      cy.edges().forEach(edge => {
-        let count = parseFloat(edge.data('processCount')) || 0;
-        const maxNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 12, 2);
-        const minNormalizedWeight = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 2, 1);
-        const computedWeight = 2 + (count * 1);
-        const clamped = Math.min(Math.max(computedWeight, minNormalizedWeight), maxNormalizedWeight);
-        edge.data('normalizedWeight', clamped);
-        edge.data('normalizedWidth', clamped);
-      });
-      
-      groupDirectedComponents(cy);
-      positionGroupedComponentsTree(cy);
-      cy.fit(cy.elements(), 30);
-      
-      cy.on('mouseover', 'node,edge', (evt) => {
-        let t = evt.target;
-        let px = evt.originalEvent.pageX;
-        let py = evt.originalEvent.pageY;
-        tooltip.style.display = 'block';
-        tooltip.style.left = (px + 10) + 'px';
-        tooltip.style.top = (py + 10) + 'px';
-        if (t.isNode()) {
-          tooltip.innerHTML = `<strong>Node IP:</strong> ${t.id()}<br>
-                               <strong>Classification:</strong> ${t.data('Classification')}<br>
-                               <strong>Group:</strong> ${t.data('groupID') || 'N/A'}<br>`;
-        } else {
-          let processes = (t.data('processCount') !== undefined) ? t.data('processCount') : 0;
-          tooltip.innerHTML = `<strong>Edge:</strong><br>
-                               From: ${t.data('source')}<br>
-                               To: ${t.data('target')}<br>
-                               Protocol: ${t.data('Protocol')}<br>
-                               Processes: ${processes}<br>
-                               Weight: ${t.data('EdgeWeight')}`;
-        }
-      });
-      
-      cy.on('mouseout', 'node,edge', () => {
-        tooltip.style.display = 'none';
-      });
-      
-      cy.on('click', 'edge', (evt) => {
-        const edge = evt.target;
-        const edgeId = edge.id();
-        if (selectedEdges.has(edgeId)) {
-          selectedEdges.delete(edgeId);
-          edge.removeClass('selected');
-          edge.data('normalizedWidth', edge.data('originalWidth'));
-        } else {
-          selectedEdges.add(edgeId);
-          edge.data('originalWidth', edge.data('normalizedWidth'));
-          edge.data('normalizedWidth', edge.data('normalizedWidth'));
-          edge.addClass('selected');
-        }
-        const selectedEdgeData = Array.from(selectedEdges).map(id => {
-          const e = cy.getElementById(id);
-          return {
-            source: e.data('source'),
-            destination: e.data('target'),
-            protocol: e.data('Protocol')
-          };
-        });
-        if (selectedEdgeData.length === 0) {
-          if (currentClusterID) {
-            loadClusterTablePage(currentClusterID, 1);
-            document.getElementById('table-container').style.display = 'block';
-            document.getElementById('table-pagination').style.display = 'block';
-            window.edgeFilterState = null;
-          }
-          return;
-        }
-        fetch("http://127.0.0.1:5000/get_multi_edge_table", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            edges: selectedEdgeData,
-            page: 1,
-            page_size: 50
-          })
-        })
-        .then(res => res.text())
-        .then(html => {
-          const container = document.getElementById('table-container');
-          container.innerHTML = html;
-          container.style.display = 'block';
-          document.getElementById('table-pagination').style.display = 'block';
-          const summaryElem = document.getElementById('table-summary');
-          if (summaryElem) {
-            const total = parseInt(summaryElem.dataset.total);
-            const totalPages = Math.ceil(total / 50);
-            document.getElementById('totalPages').textContent = totalPages;
-            document.getElementById('currentPageInput').value = 1;
-          }
-          window.edgeFilterState = selectedEdgeData;
-        });
-      });
-    }
-    
-    function showEdgeFilterPanel(edgeData) {
-      document.getElementById('edgeFilterSource').value = edgeData.source || "";
-      document.getElementById('edgeFilterDestination').value = edgeData.target || "";
-      document.getElementById('edgeFilterProtocol').value = edgeData.Protocol || "";
-      document.getElementById('edgeFilterWeight').value = "";
-      document.getElementById('edgeFilterProcessCount').value = "";
-      const panel = document.getElementById('edgeFilterPanel');
-      panel.style.display = 'block';
-    }
-    
-    function clearEdgeFilter() {
-      if (!globalCy) return;
-      globalCy.edges().forEach(e => e.show());
-      document.getElementById('edgeFilterSource').value = "";
-      document.getElementById('edgeFilterDestination').value = "";
-      document.getElementById('edgeFilterProtocol').value = "";
-      document.getElementById('edgeFilterWeight').value = "";
-      document.getElementById('edgeFilterProcessCount').value = "";
-      document.getElementById('edgeFilterPanel').style.display = 'none';
-    }
-    
+         if (globalCy) { globalCy.destroy(); }
+         globalCy = cytoscape({ container: document.getElementById('cy'), elements: elements, style: CYTOSCAPE_STYLE, layout: { name: 'cose' } }); // Default layout for main graph
+         applySizeControls();
+     }
+
+    function applySizeControls() {
+         if (!globalCy) return;
+         const minNS = Math.max(parseFloat(document.getElementById('nodeSizeMin').value) || 15, 1);
+         const maxNS = Math.max(parseFloat(document.getElementById('nodeSizeMax').value) || 60, minNS + 1);
+         const minEW = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 1, 0.1);
+         const maxEW = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 10, minEW + 0.1);
+
+         globalCy.batch(() => {
+             globalCy.nodes().forEach(n => {
+                 const weight = n.data('NodeWeight') ?? 0.5;
+                 let size = minNS + (maxNS - minNS) * weight;
+                 size = Math.max(minNS, Math.min(size, maxNS));
+                 n.style({ 'width': size, 'height': size });
+             });
+             const counts = globalCy.edges().map(e => e.data('processCount') || 1);
+             if (counts.length > 0) {
+                 const minCount = Math.min(...counts);
+                 const maxCount = Math.max(...counts);
+                 const countRange = (maxCount - minCount) || 1;
+                 globalCy.edges().forEach(e => {
+                     const count = e.data('processCount') || 1;
+                     let width = minEW + (maxEW - minEW) * ((count - minCount) / countRange);
+                     width = Math.max(minEW, Math.min(width, maxEW));
+                     e.style('width', width);
+                 });
+             }
+         });
+     }
+
     function applyEdgeFilter() {
-      if (!globalCy) return;
-      let fSource = document.getElementById('edgeFilterSource').value.trim().toLowerCase();
-      let fDest = document.getElementById('edgeFilterDestination').value.trim().toLowerCase();
-      let fProto = document.getElementById('edgeFilterProtocol').value.trim().toLowerCase();
-      let fWeight = document.getElementById('edgeFilterWeight').value.trim();
-      let fProcessCount = document.getElementById('edgeFilterProcessCount').value.trim();
-      
-      globalCy.edges().forEach(e => {
-        let d = e.data();
-        let keep = true;
-        if (fSource && !d.source.toLowerCase().includes(fSource)) keep = false;
-        if (fDest && !d.target.toLowerCase().includes(fDest)) keep = false;
-        if (fProto && !d.Protocol.toLowerCase().includes(fProto)) keep = false;
-        if (fWeight) {
-          let parsed = parseNumericExpression(fWeight);
-          if (parsed) {
-            const edgeVal = d.EdgeWeight || 0;
-            switch (parsed.operator) {
-              case '>':  if (!(edgeVal > parsed.number))  keep = false; break;
-              case '>=': if (!(edgeVal >= parsed.number)) keep = false; break;
-              case '<':  if (!(edgeVal < parsed.number))  keep = false; break;
-              case '<=': if (!(edgeVal <= parsed.number)) keep = false; break;
-              case '==': if (edgeVal !== parsed.number)   keep = false; break;
-              default: break;
+         if (!globalCy) return;
+         const sourceFilter = document.getElementById('edgeFilterSource').value.toLowerCase();
+         const destFilter = document.getElementById('edgeFilterDestination').value.toLowerCase();
+         const protoFilter = document.getElementById('edgeFilterProtocol').value.toLowerCase();
+         const weightFilterStr = document.getElementById('edgeFilterWeight').value;
+         const countFilterStr = document.getElementById('edgeFilterProcessCount').value;
+
+         const parseFilter = (filterStr) => { const match = filterStr.match(/^([<>=!]+)?\s*(\d+(\.\d+)?)$/); if (match) { const operator = match[1] || '=='; const value = parseFloat(match[2]); return { operator, value }; } return null; };
+         const weightFilter = parseFilter(weightFilterStr);
+         const countFilter = parseFilter(countFilterStr);
+
+         globalCy.edges().forEach(edge => {
+             let show = true;
+             const data = edge.data();
+             if (sourceFilter && !data.source?.toLowerCase().includes(sourceFilter)) show = false;
+             if (destFilter && !data.target?.toLowerCase().includes(destFilter)) show = false;
+             if (protoFilter && !data.Protocol?.toLowerCase().includes(protoFilter)) show = false;
+             if (weightFilter) { const edgeWeight = data.EdgeWeight || 0; if (weightFilter.operator === '>=' && !(edgeWeight >= weightFilter.value)) show = false; else if (weightFilter.operator === '>' && !(edgeWeight > weightFilter.value)) show = false; else if (weightFilter.operator === '<=' && !(edgeWeight <= weightFilter.value)) show = false; else if (weightFilter.operator === '<' && !(edgeWeight < weightFilter.value)) show = false; else if (weightFilter.operator === '==' && !(edgeWeight == weightFilter.value)) show = false; else if (weightFilter.operator === '!=' && !(edgeWeight != weightFilter.value)) show = false; }
+             if (countFilter) { const processCount = data.processCount || 0; if (countFilter.operator === '>=' && !(processCount >= countFilter.value)) show = false; else if (countFilter.operator === '>' && !(processCount > countFilter.value)) show = false; else if (countFilter.operator === '<=' && !(processCount <= countFilter.value)) show = false; else if (countFilter.operator === '<' && !(processCount < countFilter.value)) show = false; else if (countFilter.operator === '==' && !(processCount == countFilter.value)) show = false; else if (countFilter.operator === '!=' && !(processCount != countFilter.value)) show = false; }
+             edge.style('display', show ? 'element' : 'none');
+         });
+     }
+
+    function resetHeatmapHighlights() {
+        console.log("Resetting heatmap cell highlights.");
+        d3.selectAll('rect.cell').each(function() {
+            const cell = d3.select(this);
+            const originalColor = cell.attr("data-original-fill"); // Read stored original color
+            if (originalColor) {
+                cell.transition().duration(100) // Optional quick transition
+                    .attr("fill", originalColor);
+            } else {
+                // Fallback if original color wasn't stored somehow
+                cell.style("fill", null); // Let CSS/default handle it
             }
-          }
+        });
+    }
+
+    function clearEdgeFilter() {
+         document.getElementById('edgeFilterSource').value = '';
+         document.getElementById('edgeFilterDestination').value = '';
+         document.getElementById('edgeFilterProtocol').value = '';
+         document.getElementById('edgeFilterWeight').value = '';
+         document.getElementById('edgeFilterProcessCount').value = '';
+         if(globalCy) { globalCy.edges().style('display', 'element'); }
+     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        tooltip = d3.select("#tooltip");
+        showHeatmap(); // Initial heatmap load attempt
+        updateLegend(); // Initial legend load attempt
+        loadInlineDendrogram(); // Initial tree load attempt
+
+        // --- Event Listener for Cancel Button ---
+        const cancelLoadingButton = document.getElementById('cancelLoadingBtn');
+        if (cancelLoadingButton) {
+            cancelLoadingButton.addEventListener('click', () => {
+                console.log("Cancel button clicked - Attempting to abort ongoing CSV processing.");
+                if (csvProcessingController) {
+                    csvProcessingController.abort(); // Signal abortion to fetch
+                    console.log("Abort signal sent to CSV processing fetch.");
+                } else {
+                    console.log("No active CSV processing fetch to abort.");
+                }
+                hideLoading(); // Hide overlay immediately
+            });
+        } else {
+            console.error("Cancel loading button not found.");
         }
-        if (fProcessCount) {
-          let parsedCount = parseNumericExpression(fProcessCount);
-          if (parsedCount) {
-            const countVal = d.processCount || 0;
-            switch (parsedCount.operator) {
-              case '>':  if (!(countVal > parsedCount.number))  keep = false; break;
-              case '>=': if (!(countVal >= parsedCount.number)) keep = false; break;
-              case '<':  if (!(countVal < parsedCount.number))  keep = false; break;
-              case '<=': if (!(countVal <= parsedCount.number)) keep = false; break;
-              case '==': if (countVal !== parsedCount.number)     keep = false; break;
-              default: break;
+        // --- END Added Listener ---
+
+        // --- Event Listeners for Hide/Show Buttons ---
+        const hideBtn = document.getElementById('hideTreeBtn');
+        const showBtn = document.getElementById('showTreeBtn');
+        if (hideBtn) { hideBtn.addEventListener('click', hideDendrogram); }
+        else { console.error("Hide Tree button not found."); }
+        if (showBtn) { showBtn.addEventListener('click', showDendrogram); }
+        else { console.error("Show Tree button not found."); }
+        // --- END Added Listeners ---
+
+
+        // --- Sidebar Layout Listener ---
+        document.getElementById('sidebarLayoutSelect').addEventListener('change', applySidebarLayout);
+        // --- Main Filter Listener ---
+        document.getElementById('applyFiltersBtn').addEventListener('click', updateHeatmap);
+        // --- Main Table Pagination Listener ---
+        document.getElementById('goPageBtn').addEventListener('click', function () { /* ... pagination logic from your file ... */ });
+        // --- Main Graph Size Control Listeners ---
+        document.getElementById('nodeSizeMin').addEventListener('input', applySizeControls);
+        document.getElementById('nodeSizeMax').addEventListener('input', applySizeControls);
+        document.getElementById('edgeWidthMin').addEventListener('input', applySizeControls);
+        document.getElementById('edgeWidthMax').addEventListener('input', applySizeControls);
+        // --- Edge Filter Panel Listeners ---
+        document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
+        document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
+
+        // --- File Input Listener (with AbortController) ---
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                // Abort previous processing if it exists
+                if (csvProcessingController) {
+                    console.log("Aborting previous CSV processing request...");
+                    csvProcessingController.abort();
+                }
+                // Create a new controller for this request
+                csvProcessingController = new AbortController();
+                const signal = csvProcessingController.signal;
+
+                showLoading();
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const csvText = e.target.result;
+                    fetch(`${API_BASE_URL}/process_csv`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ csv_text: csvText }),
+                        signal: signal // Pass the abort signal to fetch
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => {
+                                throw new Error(text || `Processing failed (${response.status})`)
+                            });
+                        }
+                        return response.text();
+                    })
+                    .then(confirmation => {
+                        console.log('CSV processed successfully:', confirmation);
+                        csvProcessingController = null; // Processing done, clear controller
+                        // Refresh views after processing
+                        updateHeatmap();
+                        updateLegend();
+                        loadInlineDendrogram();
+                        clearSidebarVisualization(); // Clear sidebar state
+                        toggleSidebar(false);
+                        hideLoading();
+                    })
+                    .catch(error => {
+                        if (error.name === 'AbortError') {
+                            console.log('Fetch aborted (CSV processing cancelled by user).');
+                        } else {
+                            console.error('Error processing file:', error);
+                            alert(`Error processing file: ${error.message}`);
+                            hideLoading();
+                        }
+                        csvProcessingController = null; // Clear controller on error/abort
+                    });
+                };
+                reader.onerror = function(e) {
+                    console.error("Error reading file:", e);
+                    alert("Error reading file.");
+                    hideLoading();
+                    csvProcessingController = null; // Clear controller on read error
+                };
+                reader.readAsText(file);
             }
-          }
-        }
-        if (keep) e.show(); else e.hide();
-      });
-    }
-    
-    document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
-    document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
-    
-    function parseNumericExpression(value) {
-      const match = value.match(/^(\>=|\<=|>|<)\s*(\d+(?:\.\d+)?)$/);
-      if (match) {
-        return { operator: match[1], number: parseFloat(match[2]) };
-      }
-      const justNum = parseFloat(value);
-      if (!isNaN(justNum) && value.trim() !== "") {
-        return { operator: '==', number: justNum };
-      }
-      return null;
-    }
-    
-    document.getElementById("fileInput").addEventListener("change", function(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        showLoading();
-        const csvText = e.target.result;
-        fetch("http://127.0.0.1:5000/process_csv", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ csv_text: csvText })
-        })
-        .then(response => response.text())
-        .then(processedText => {
-          try {
-            window.globalData = d3.csvParse(processedText, d3.autoType);
+            event.target.value = null; // Reset file input
+        });
+        // --- END File Input Listener ---
+
+        // --- Download Button Listener ---
+        document.getElementById('downloadButton').addEventListener('click', function() {
+            window.location.href = `${API_BASE_URL}/download_csv`;
+        });
+
+        // --- Sidebar Pagination Listener ---
+        sidebarGoPageBtn.addEventListener('click', function () {
+            let pageInput = document.getElementById('sidebarCurrentPageInput');
+            let page = parseInt(pageInput.value, 10);
+            const totalPagesStr = document.getElementById('sidebarTotalPages').textContent;
+            const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
+            if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity)) {
+                if (sidebarTableMode === 'cluster' && currentSidebarTableClusterId) {
+                    loadSidebarClusterTable(currentSidebarTableClusterId, page);
+                } else if (sidebarTableMode === 'edges') {
+                    let edgeList = [];
+                    if (selectedNodeId && sidebarCy) { const node = sidebarCy.getElementById(selectedNodeId); if (node && node.length > 0) { edgeList = node.connectedEdges().map(edge => ({ source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') })); } }
+                    else if (selectedSidebarEdges.size > 0) { edgeList = Array.from(selectedSidebarEdges).map(key => { const parts = key.split('|'); return { source: parts[0], destination: parts[1], protocol: parts[2] }; }); }
+                    if (edgeList.length > 0) { loadSidebarMultiEdgeTable(edgeList, page); }
+                    else { console.warn("Sidebar pagination clicked in edge mode, but no edges identified as selected."); }
+                } else { console.warn("Sidebar pagination clicked but current table context is unclear."); }
+            } else { alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`); }
+        });
+
+        // --- Sidebar Reset Listener ---
+        resetSidebarBtn.addEventListener('click', () => {
+            console.log("Resetting sidebar view and associated highlights.");
+            // 1. Clear sidebar graph, state variables, and the highlight color map
+            clearSidebarVisualization(); // This also clears clusterHighlightColors
+
+            // 2. Reset heatmap cell colors directly (avoids re-fetch/re-render)
+            resetHeatmapHighlights();
+
+            // 3. Clear highlights on the hierarchical tree <<<--- ADDED THIS CALL
+            highlightTreeClusters(); // Call with no args to clear tree highlights
+
+            // 4. Reset other sidebar elements
+            selectedNodeId = null; // Ensure node selection state is cleared
+            document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
+
+            // 5. Update legend to reflect global view
             updateLegend();
-            updateHeatmap();
-            loadInlineDendrogram();
-          } catch (error) {
-            console.error("Error parsing processed CSV:", error);
-          } finally {
-            hideLoading();
-          }
-        })
-        .catch(error => {
-          console.error("Error processing CSV on server:", error);
-          hideLoading();
-        });
-      };
-      reader.readAsText(file);
-    });
-    
-    document.getElementById("downloadButton").addEventListener("click", function() {
-      window.location.href = "http://127.0.0.1:5000/download_csv";
-    });
 
-    document.getElementById("refreshNetworkBtn").addEventListener("click", function() {
-      if (currentClusterID && window.globalData) {
-        showClusterNetwork(currentClusterID);
-      }
-    });
-    
-    const tooltip = document.createElement('div');
-    tooltip.id = 'tooltip';
-    document.body.appendChild(tooltip);
-    
-    const filterIds = [
-      'payloadSearch', 'sourceFilter', 'destinationFilter',
-      'protocolFilter', 'entropyMinFilter', 'entropyMaxFilter',
-      'isLargePacketFilter', 'isSuspiciousAckFilter', 'rowOrderSelect',
-      'minSourceAmtFilter', 'maxSourceAmtFilter', 'minDestinationAmtFilter', 'maxDestinationAmtFilter'
-    ];
-    
-    filterIds.forEach(id => {
-      const el = document.getElementById(id);
-      el.addEventListener('keydown', function (event) {
-        if (event.key === "Enter") {
-          updateHeatmap();
-        }
-      });
-    });
-    
-    document.addEventListener('click', function(event) {
-      if (!event.target.classList.contains('cell')) {
-        d3.selectAll("rect.cell.selected")
-          .classed("selected", false)
-          .transition()
-          .duration(200)
-          .style("fill", function() {
-            return d3.select(this).attr("data-original-fill");
-          });
-        window.selectedClusters.clear();
-        window.usedHighlightHues = [];
-        d3.select("#exploreClustersBtn").remove();
-      }
-    });
-    
-    document.getElementById('tableSearchInput').addEventListener('input', function () {
-      const query = this.value.trim().toLowerCase();
-      const rows = document.querySelectorAll('#table-container table tbody tr');
-      const headerCells = document.querySelectorAll('#table-container table thead th');
-      let payloadIndex = -1;
-      headerCells.forEach((th, idx) => {
-        if (th.textContent.trim().toLowerCase() === 'payload') {
-          payloadIndex = idx;
-        }
-      });
-      if (payloadIndex === -1) return;
-      rows.forEach(row => {
-        const cell = row.cells[payloadIndex];
-        const text = cell ? cell.textContent.toLowerCase() : '';
-        row.style.display = text.includes(query) ? '' : 'none';
-      });
-    });
-
-    // ─── DENDROGRAM UI & RENDERER ───────────────────────────────────────────
-    // Opens modal and pulls a D3‐hierarchy JSON from your backend
-    document.getElementById("openDendrogramBtn").addEventListener("click", () => {
-      fetch("http://127.0.0.1:5000/hierarchical_clusters")
-        .then(r => r.json())
-        .then(treeData => showDendrogram(treeData))
-        .catch(console.error);
-    });
-
-    // Hides modal (after DOM is loaded)
-    document.addEventListener("DOMContentLoaded", () => {
-      document
-        .getElementById("closeDendrogram")
-        .addEventListener("click", () => {
-          document.getElementById("dendrogramModal").style.display = "none";
-        });
-        const modal   = document.getElementById("dendrogramModal");
-        const header  = document.getElementById("dendrogramModalHeader");
-        const close   = document.getElementById("closeDendrogram");
-
-        let drag = false, offsetX = 0, offsetY = 0;
-
-        header.addEventListener("mousedown", e => {
-          drag    = true;
-          offsetX = e.clientX - modal.offsetLeft;
-          offsetY = e.clientY - modal.offsetTop;
-          document.body.style.userSelect = "none";
+            console.log("Sidebar reset complete.");
+            // NOTE: updateHeatmap() call REMOVED for efficiency
         });
 
-        document.addEventListener("mousemove", e => {
-          if (!drag) return;
-          modal.style.left = (e.clientX - offsetX) + "px";
-          modal.style.top  = (e.clientY - offsetY) + "px";
-        });
+        // --- Sidebar Toggle Listener ---
+        sidebarToggleBtn.addEventListener('click', () => toggleSidebar());
 
-        document.addEventListener("mouseup", () => {
-          drag = false;
-          document.body.style.userSelect = "";
-        });
-
-        close.addEventListener("click", () => modal.style.display = "none");
     });
 
-    function showDendrogram(data) {
-      const margin = { top: 40, right: 20, bottom: 40, left: 20 };
-      const svgH = 400;
-
-      // Build hierarchy and calculate width based on number of leaves
-      const root = d3.hierarchy(data)
-        .sum(d => d.children ? 0 : 1)
-        .sort((a, b) => (a.data.dist || 0) - (b.data.dist || 0));
-
-      const leaves = root.leaves();
-      const width = leaves.length * 25;
-      const height = svgH - margin.top - margin.bottom;
-
-      const cluster = d3.cluster().size([width, height]);
-      cluster(root);
-
-      const svg = d3.select("#dendrogramSvg")
-        .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${svgH}`)
-        .attr("preserveAspectRatio", "xMidYMin slice")
-        .attr("width", "100%")
-        .attr("height", "100%");
-      svg.selectAll("*").remove();
-
-      const g = svg.append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
-
-      // Links
-      g.selectAll(".link")
-        .data(root.links())
-        .enter().append("path")
-          .attr("class", "link")
-          .attr("d", d => `
-            M${d.source.x},${d.source.y}
-            V${(d.source.y + d.target.y) / 2}
-            H${d.target.x}
-            V${d.target.y}
-          `)
-          .attr("stroke", "#555")
-          .attr("fill", "none");
-
-      // Nodes
-      g.selectAll(".node")
-        .data(root.descendants())
-        .enter().append("circle")
-          .attr("class", "node")
-          .attr("cx", d => d.x)
-          .attr("cy", d => d.y)
-          .attr("r", 4)
-          .attr("fill", d => d.children ? "#555" : "#999");
-
-      // Labels (horizontal for top levels, vertical for deeper)
-      g.selectAll(".nodelabel")
-        .data(root.descendants())
-        .enter().append("text")
-          .attr("class", "nodelabel")
-          .attr("font-size", "9px")
-          .attr("fill", "#333")
-          .attr("text-anchor", d => {
-            if (d.depth <= 1) return "start";
-            if (!d.children) return "end";
-            return "start";
-          })
-          .attr("transform", d => {
-            if (d.depth <= 1) {
-              return `translate(${d.x + 6}, ${d.y - 2})`;
-            } else if (!d.children) {
-              return `translate(${d.x}, ${d.y + 6}) rotate(-90)`;
-            } else {
-              return `translate(${d.x + 12}, ${d.y}) rotate(-90)`;
-            }
-          })
-          .text(d => d.data.id || "");
-
-      // Red threshold line
-      const line = g.append("line")
-        .attr("id", "thresholdLine")
-        .attr("x1", 0)
-        .attr("x2", width)
-        .attr("y1", 0)
-        .attr("y2", 0)
-        .attr("stroke", "red")
-        .attr("stroke-dasharray", "4 2");
-
-      function updateLine(t) {
-        const y = (1 - t) * height;
-        line.attr("y1", y).attr("y2", y);
-        updateHeatmap(t);
-      }
-
-      const slider = d3.select("#thresholdRange");
-      const numIn  = d3.select("#thresholdNumber");
-
-      slider.on("input", function() {
-        const t = +this.value;
-        numIn.property("value", t.toFixed(2));
-        updateLine(t);
-      });
-
-      numIn.on("input", function() {
-        let t = +this.value;
-        if (isNaN(t)) t = 0;
-        t = Math.max(0, Math.min(1, t));
-        slider.property("value", t);
-        updateLine(t);
-      });
-
-      updateLine(+slider.property("value"));
-      document.getElementById("dendrogramModal").style.display = "block";
-    }
-
-    function renderInlineDendrogram(treeData) {
-      const svg = d3.select("#inlineDendrogramSvg");
-      svg.selectAll("*").remove();
-
-      const width = +svg.attr("width");
-      const height = +svg.attr("height");
-      const g = svg.append("g").attr("transform", "translate(40,0)");
-
-      const root = d3.hierarchy(treeData);
-      const treeLayout = d3.cluster().size([height, width - 160]);
-      treeLayout(root);
-
-      const link = g.selectAll(".link")
-        .data(root.links())
-        .join("path")
-        .attr("class", "link")
-        .attr("fill", "none")
-        .attr("stroke", "#ccc")
-        .attr("stroke-width", 2)
-        .attr("d", d3.linkHorizontal()
-          .x(d => d.y)
-          .y(d => d.x));
-
-      const node = g.selectAll(".node")
-        .data(root.descendants())
-        .join("g")
-        .attr("class", "node")
-        .attr("transform", d => `translate(${d.y},${d.x})`);
-
-      node.append("circle")
-        .attr("r", 4)
-        .attr("fill", d => d.children ? "#555" : "#999");
-
-      node.append("text")
-        .attr("dy", 3)
-        .attr("x", d => d.children ? -8 : 8)
-        .style("text-anchor", d => d.children ? "end" : "start")
-        .text(d => d.data.name || "");
-    }
-
+    // --- BEGIN Dendrogram JS Functions ---
     function showInlineDendrogram(data, svgH = 400) {
-      const margin = { top: 40, right: 20, bottom: 40, left: 20 };
+        document.getElementById('dendrogramCard').style.display = 'block';
+        document.getElementById('showTreeBtn').style.display = 'none';
 
-      const root = d3.hierarchy(data)
-        .sum(d => d.children ? 0 : 1)
-        .sort((a, b) => (a.data.dist || 0) - (b.data.dist || 0));
+        const containerDiv = document.getElementById("inline-dendrogram-container");
+        containerDiv.style.height = `${svgH}px`;
 
-      const leaves = root.leaves();
-      const width = leaves.length * 25;
-      const height = svgH - margin.top - margin.bottom;
+        const svg = d3.select("#inlineDendrogramSvg");
+        svg.selectAll("*").remove();
 
-      const cluster = d3.cluster().size([width, height]);
-      cluster(root);
+        if (!data || data.id === undefined || data.dist === undefined) {
+            console.error("Invalid or empty tree data received:", data);
+            svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+              .text("No hierarchical data available or error loading.");
+            document.getElementById("treeControls").style.display = "none";
+            return;
+        }
 
-      const svg = d3.select("#inlineDendrogramSvg")
-        .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${svgH}`)
-        .attr("preserveAspectRatio", "xMidYMin meet")
-        .attr("width", "100%")
-        .attr("height", "100%");
-      svg.selectAll("*").remove();
+        const margin = { top: 30, right: 30, bottom: 120, left: 30 };
+        const containerWidth = containerDiv.clientWidth || 600;
+        const height = Math.max(200, svgH - margin.top - margin.bottom);
 
-      const containerG = svg.append("g"); // for zoom
-      const g = containerG.append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+        const root = d3.hierarchy(data)
+            .sum(d => d.children ? 0 : 1)
+            .sort((a, b) => (a.data.dist || 0) - (b.data.dist || 0));
 
-      const zoom = d3.zoom()
-        .scaleExtent([0.5, 10])
-        .on("zoom", function(event) {
-          containerG.attr("transform", event.transform);
-        });
-      window.inlineZoom = d3.zoom()
-        .scaleExtent([0.5, 10])
-        .on("zoom", function(event) {
-          containerG.attr("transform", event.transform);
-        });
+        const numLeaves = root.leaves().length;
+        const minLeafSpacing = 14; // Min horizontal pixels per leaf
+        const requiredWidth = numLeaves * minLeafSpacing;
+        const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
+        const layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
 
-      svg.call(window.inlineZoom);
-      svg.call(zoom);
+        const clusterLayout = d3.cluster().size([layoutWidth, height]);
+        clusterLayout(root);
 
-      // Draw edges
-      g.selectAll(".link")
-        .data(root.links())
-        .enter().append("path")
-          .attr("class", "link")
-          .attr("d", d => `
-            M${d.source.x},${d.source.y}
-            V${(d.source.y + d.target.y) / 2}
-            H${d.target.x}
-            V${d.target.y}
-          `)
-          .attr("stroke", "#555")
-          .attr("fill", "none");
+        const viewBoxWidth = layoutWidth + margin.left + margin.right;
+        const viewBoxHeight = height + margin.top + margin.bottom;
+        svg.attr("viewBox", `0 0 ${viewBoxWidth} ${viewBoxHeight}`)
+          .attr("preserveAspectRatio", "xMidYMid meet");
 
-      // Draw nodes
-      g.selectAll(".node")
-        .data(root.descendants())
-        .enter().append("circle")
-          .attr("class", "node")
-          .attr("cx", d => d.x)
-          .attr("cy", d => d.y)
-          .attr("r", 4)
-          .attr("fill", d => d.children ? "#555" : "#999");
+        const svgContent = svg.append("g"); // Content group
 
-      // Draw labels
-      g.selectAll(".nodelabel")
-        .data(root.descendants())
-        .enter().append("text")
-          .attr("class", "nodelabel")
-          .attr("font-size", "9px")
-          .attr("fill", "#333")
-          .attr("text-anchor", d => {
-            if (d.depth <= 1) return "start";
-            if (!d.children) return "end";
-            return "start";
-          })
-          .attr("transform", d => {
-            if (d.depth <= 1) {
-              return `translate(${d.x + 6}, ${d.y - 2})`;
-            } else if (!d.children) {
-              return `translate(${d.x}, ${d.y + 6}) rotate(-90)`;
-            } else {
-              return `translate(${d.x + 12}, ${d.y}) rotate(-90)`;
+        // Draw Links first
+        svgContent.selectAll(".link")
+            .data(root.links())
+            .join("path")
+            .attr("class", "link")
+            .attr("d", d => `M${d.source.x},${d.source.y}V${(d.source.y + d.target.y) / 2}H${d.target.x}V${d.target.y}`)
+            .attr("fill", "none").attr("stroke", "#ccc").attr("stroke-width", 1.5);
+
+        // Draw Node groups
+        const node = svgContent.selectAll(".node")
+            .data(root.descendants())
+            .join("g")
+            .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf"))
+            .attr("transform", d => `translate(${d.x},${d.y})`);
+
+        // Draw Circles
+        node.append("circle").attr("r", 4).attr("fill", d => d.children ? "#555" : "#999");
+
+        // Draw Labels (with alignment adjustments)
+        node.append("text")
+            .attr("dy", "0.31em")
+            // Use user's preferred vertical offset for leaves
+            .attr("y", d => d.children ? -10 : 10)
+            // --- Alignment Change for Leaves ---
+            .attr("text-anchor", d => d.children ? "middle" : "start") // Use "start" for leaves
+            .attr("font-size", "9px")
+            .attr("fill", "#333")
+            .text(d => d.data.id || "")
+            .filter(d => !d.children)
+            // Adjust translate slightly for "start" anchor and rotation
+            .attr("transform", "translate(4, 0) rotate(45)") // Use small x translate, no y translate here
+            .style("user-select", "none");
+        // --- End Alignment Change ---
+
+        // Calculate Centering and Initial Zoom (AFTER drawing)
+        let dx = margin.left;
+        let dy = margin.top;
+        let initialScale = 1;
+        try {
+            const bounds = svgContent.node().getBBox();
+            if (bounds.width > 0 && bounds.height > 0) {
+                // Center horizontally
+                dx = (containerWidth / initialScale - bounds.width) / 2 - bounds.x / initialScale + (margin.left / initialScale);
+                // Align vertically near top
+                dy = margin.top / initialScale;
             }
-          })
-          .text(d => d.data.id || "");
-          document.getElementById("treeControls").style.display = "flex";
-          document.getElementById("dendrogramCard").style.display = "block";
-          window.lastTreeData = data;
+        } catch (e) { console.error("Error calculating tree bounds:", e); }
+        initialTreeTransform = d3.zoomIdentity.translate(dx, dy).scale(initialScale);
+
+        // Setup and Apply Zoom
+        const zoomBehavior = d3.zoom()
+            .scaleExtent([0.05, 10])
+            .on("zoom", (event) => {
+                svgContent.attr("transform", event.transform);
+            });
+        window.inlineZoom = zoomBehavior;
+        svg.call(zoomBehavior)
+          .call(zoomBehavior.transform, initialTreeTransform)
+          .on("dblclick.zoom", () => {
+              svg.transition().duration(500).call(zoomBehavior.transform, initialTreeTransform);
+          });
+
+        document.getElementById("treeControls").style.display = "flex";
+        window.lastTreeData = data;
+        highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+    }
+
+    function highlightTreeClusters(selectedClusterIds = new Set()) {
+        const svgContent = d3.select("#inlineDendrogramSvg g");
+        if (svgContent.empty()) {
+            return; // Tree not rendered yet
+        }
+
+        const leafNodes = svgContent.selectAll(".node--leaf"); // Select the group containing circle and text
+        const leafCircles = leafNodes.select("circle");
+        const leafTexts = leafNodes.select("text");
+        const defaultTextColor = "#333"; // Default text color
+
+        // Reset all leaves first
+        leafCircles.classed("highlighted", false)
+                  .transition().duration(150)
+                  .attr("r", 4) // Default radius
+                  .style("fill", "#999") // Default leaf circle color
+                  .style("stroke", "none");
+
+        leafTexts.transition().duration(150)
+                .style("fill", defaultTextColor) // Reset text color
+                .style("font-weight", "normal"); // Reset font weight
+
+        // Apply highlights based on the provided set and stored colors
+        if (selectedClusterIds.size > 0) {
+            selectedClusterIds.forEach(clusterId => {
+                const stringClusterId = String(clusterId); // Ensure string comparison
+                // Get the correct highlight color from the global map
+                const highlightColor = clusterHighlightColors.get(stringClusterId);
+
+                if (highlightColor) { // Only highlight if found in the map
+                    // Find the matching leaf node(s)
+                    const matchedNodes = leafNodes.filter(function(d) {
+                        return d && d.data && String(d.data.cluster_id) === stringClusterId;
+                    });
+
+                    // Highlight the circle
+                    matchedNodes.select("circle")
+                        .classed("highlighted", true)
+                        .transition().duration(150)
+                        .attr("r", 6) // Highlighted radius
+                        .style("fill", highlightColor) // Use the specific highlight color from map
+                        .style("stroke", "none");
+
+                    // --- Modify Text Color ---
+                    try {
+                        // Parse the highlight color (assuming HSL format like "hsl(H, S%, L%)")
+                        let color = d3.hsl(highlightColor);
+
+                        // Lower saturation (e.g., reduce by 40%, ensure it's between 0 and 1)
+                        color.s = Math.max(0, Math.min(1, color.s * 0.6));
+
+                        // Optional: Slightly increase lightness for readability, especially if saturation is low
+                        if (color.s < 0.3) {
+                            color.l = Math.min(1, color.l + 0.1);
+                        }
+                        // Ensure lightness isn't too high (avoid white on white)
+                        color.l = Math.min(0.85, color.l);
+
+                        const textColor = color.toString(); // Convert back to string
+
+                        // Apply the modified color to the text
+                        matchedNodes.select("text")
+                            .transition().duration(150)
+                            .style("fill", textColor)
+                            .style("font-weight", "bold"); // Make text bold for emphasis
+
+                    } catch (e) {
+                        console.error("Could not parse highlight color for text:", highlightColor, e);
+                        // Fallback: Apply a default highlight color to text if parsing fails
+                        matchedNodes.select("text")
+                            .transition().duration(150)
+                            .style("fill", "#d95f02") // Fallback color (dark orange)
+                            .style("font-weight", "bold");
+                    }
+                    // --- End Text Color Modification ---
+
+                } else {
+                    console.warn(`Highlight color not found in map for cluster ${stringClusterId}`);
+                }
+            });
+        }
+    }
+
+    function hideDendrogram() {
+        const card = document.getElementById('dendrogramCard');
+        const showButton = document.getElementById('showTreeBtn');
+        card.style.display = 'none';
+        showButton.style.display = 'inline-block'; // Show the 'Show Tree' button
+        console.log("Dendrogram hidden.");
+    }
+
+    function showDendrogram() {
+        const card = document.getElementById('dendrogramCard');
+        const showButton = document.getElementById('showTreeBtn');
+        card.style.display = 'block';    // Show the card
+        showButton.style.display = 'none'; // Hide the 'Show Tree' button
+
+        // Optional: Reload or redraw if needed when shown
+        if (!window.lastTreeData) {
+            console.log("No tree data, loading...");
+            loadInlineDendrogram(); // Load data if it wasn't loaded before
+        } else {
+            console.log("Showing existing dendrogram.");
+            // You could potentially redraw or fit view here if desired
+            // showInlineDendrogram(window.lastTreeData, document.getElementById("inline-dendrogram-container").clientHeight);
+            // resetInlineZoom();
+        }
+    }
+    
+    // Optional Helper Function to fit view (Example)
+    function fitView() {
+        const svg = d3.select("#inlineDendrogramSvg");
+        const svgContent = svg.select("g"); // Assumes content is in the first 'g'
+        if (!svgContent.empty() && window.inlineZoom) {
+            const bounds = svgContent.node().getBBox();
+            const parent = svg.node();
+            const fullWidth = parent.clientWidth;
+            const fullHeight = parent.clientHeight;
+            const width = bounds.width;
+            const height = bounds.height;
+            const midX = bounds.x + width / 2;
+            const midY = bounds.y + height / 2;
+
+            if (width === 0 || height === 0) return; // Nothing to fit
+
+            const scale = 0.9 / Math.max(width / fullWidth, height / fullHeight);
+            const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+
+            svg.transition().duration(750).call(
+                window.inlineZoom.transform,
+                d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+            );
+        }
+    }
+
+    // Make sure the resetInlineZoom function still uses d3.zoomIdentity
+    function resetInlineZoom() {
+        const svg = d3.select("#inlineDendrogramSvg");
+        if (window.inlineZoom) {
+            // Reset zoom with a smooth transition TO THE STORED INITIAL CENTERED TRANSFORM
+            svg.transition().duration(500)
+                .call(window.inlineZoom.transform, initialTreeTransform);
+            console.log("Inline dendrogram zoom reset to initial view.");
+        } else {
+            console.warn("Cannot reset zoom, zoom behavior not initialized.");
+        }
     }
 
     function loadInlineDendrogram() {
-      fetch("http://127.0.0.1:5000/hierarchical_clusters")
-        .then(r => r.json())
-        .then(data => {
-          showInlineDendrogram(data);
-        })
-        .catch(err => console.error("Dendrogram load error:", err));
+      console.log("Attempting to load inline dendrogram data...");
+      fetch(`${API_BASE_URL}/hierarchical_clusters`) // Use API_BASE_URL
+          .then(response => {
+              if (!response.ok) {
+                  return response.text().then(text => { throw new Error(text || `HTTP error ${response.status}`) });
+              }
+              return response.json();
+            })
+          .then(data => {
+              console.log("Dendrogram data received:", data);
+              if (Object.keys(data).length === 0 || (data.error)) {
+                  console.error("Empty or error data received for dendrogram.");
+                  showInlineDendrogram(null); // Show error state
+              } else {
+                    showInlineDendrogram(data); // Render the tree
+              }
+          })
+          .catch(err => {
+              console.error("Failed to load or render inline dendrogram:", err);
+                showInlineDendrogram(null); // Show error state in the SVG
+          });
     }
+
 
     function reclusterAndRedraw() {
-      const resolution = parseFloat(document.getElementById('resolutionInput').value);
-      if (!(resolution > 0)) {
-        alert("Please enter a valid resolution > 0.");
-        return;
+      const resolutionInput = document.getElementById('resolutionInput');
+      const resolution = parseFloat(resolutionInput.value);
+      const messageDiv = document.getElementById('reclusterMessage');
+
+      if (isNaN(resolution) || resolution <= 0) {
+          messageDiv.textContent = "Please enter a valid resolution > 0.";
+          resolutionInput.focus();
+          return;
       }
 
-      fetch(`http://127.0.0.1:5000/hierarchical_clusters?resolution=${resolution}`)
-        .then(r => r.json())
-        .then(treeData => {
-          // Count leaves
-          let count = 0;
-          (function countLeaves(node) {
-            if (!node.children) count++;
-            else node.children.forEach(countLeaves);
-          })(treeData);
+      messageDiv.textContent = "Applying resolution and reclustering..."; // Loading message
+      console.log(`Requesting recluster with resolution: ${resolution}`);
 
-          const currentHash = JSON.stringify(treeData); // structural hash
-          const changed = (
-            previousClusterCount === null ||
-            count !== previousClusterCount ||
-            currentHash !== previousClusterHash
-          );
+      // Fetch new hierarchy data with the specified resolution
+      fetch(`${API_BASE_URL}/hierarchical_clusters?resolution=${resolution}`)
+          .then(response => {
+                if (!response.ok) { return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) }); }
+                return response.json();
+          })
+          .then(treeData => {
+                console.log("Reclustered tree data received:", treeData);
 
-          previousClusterCount = count;
-          previousClusterHash = currentHash;
+              // Check for structural changes to provide feedback
+                let currentLeafCount = 0;
+                (function countLeaves(node) {
+                    if (!node || typeof node !== 'object') return;
+                    if (!node.children || node.children.length === 0) currentLeafCount++;
+                    else node.children.forEach(countLeaves);
+                })(treeData);
 
-          const msg = document.getElementById("reclusterMessage");
-          msg.textContent = changed ? "" : "No change — try a different resolution.";
+                const currentHash = JSON.stringify(treeData); // Basic structural hash
 
-          if (!changed) return;
+                const structureChanged = (
+                    previousClusterCount === null ||
+                    currentLeafCount !== previousClusterCount ||
+                    currentHash !== previousClusterHash
+                );
 
-          showInlineDendrogram(treeData);
-          resetInlineZoom();
+                previousClusterCount = currentLeafCount; // Update state
+                previousClusterHash = currentHash;      // Update state
 
-          return fetch("http://127.0.0.1:5000/get_processed_csv");
-        })
-        .then(r => r ? r.text() : null)
-        .then(text => {
-          if (!text) return;
-          window.globalData = d3.csvParse(text, d3.autoType);
-          updateLegend();
-          updateHeatmap();
-        })
-        .catch(err => {
-          console.error("Error:", err);
-          alert("Failed to recluster or update view.");
-        });
-    }
+                if (structureChanged) {
+                    messageDiv.textContent = `Reclustering complete. ${currentLeafCount} leaf clusters found.`;
+                    showInlineDendrogram(treeData); // Redraw the dendrogram
+                    resetInlineZoom(); // Reset zoom after redraw
 
-    function toggleTreeHeight() {
-      if (customTreeHeightActive) {
-        // Reset from custom height to default
-        customTreeHeightActive = false;
-        treeHeightExpanded = false;
-        if (window.lastTreeData) {
-          showInlineDendrogram(window.lastTreeData, 400);
-          document.getElementById("toggleTreeHeightBtn").textContent = "Double Tree Height";
-        }
-        return;
-      }
+                    // --- IMPORTANT: Update the main heatmap view ---
+                    console.log("Updating heatmap after recluster...");
+                    updateHeatmap(); // This should use the updated cluster IDs from the backend
+                    updateLegend(); // Also update legend
+                    // --- End Heatmap Update ---
 
-      treeHeightExpanded = !treeHeightExpanded;
-      const newHeight = treeHeightExpanded ? 800 : 400;
-
-      if (window.lastTreeData) {
-        showInlineDendrogram(window.lastTreeData, newHeight);
-      }
-
-      document.getElementById("toggleTreeHeightBtn").textContent =
-        treeHeightExpanded ? "Collapse Tree Height" : "Double Tree Height";
+                } else {
+                    messageDiv.textContent = "No structural change in clusters. Try a different resolution.";
+                }
+          })
+          .catch(err => {
+              console.error("Error during recluster/redraw:", err);
+              messageDiv.textContent = `Error: ${err.message || "Failed to recluster."}`;
+          });
     }
 
     function showCustomHeightInput() {
-      const custom = prompt("Enter desired tree height (e.g. 500):", "600");
-      const val = parseInt(custom);
-      if (!isNaN(val) && val > 0 && window.lastTreeData) {
-        customTreeHeightActive = true;
-        showInlineDendrogram(window.lastTreeData, val);
-        document.getElementById("toggleTreeHeightBtn").textContent = "Reset Tree Height";
-      }
+        const currentHeight = document.getElementById("inline-dendrogram-container").clientHeight;
+        const customHeight = prompt(`Enter desired tree height in pixels (current: ${currentHeight}):`, `${currentHeight}`);
+        if (customHeight !== null) { // Check if user pressed cancel
+            const val = parseInt(customHeight, 10);
+            if (!isNaN(val) && val > 50 && val < 5000) { // Basic validation
+                if (window.lastTreeData) {
+                      customTreeHeightActive = true; // Mark as custom height
+                      showInlineDendrogram(window.lastTreeData, val);
+                      console.log(`Tree height set to custom value: ${val}px`);
+                } else {
+                      console.warn("Cannot set custom height, no tree data available.");
+                      document.getElementById("inline-dendrogram-container").style.height = `${val}px`;
+                }
+            } else {
+                alert("Invalid height entered. Please enter a number (e.g., 500).");
+            }
+        }
     }
+
 
     function resetInlineZoom() {
       const svg = d3.select("#inlineDendrogramSvg");
       if (window.inlineZoom) {
-        svg.transition().duration(400)
-          .call(window.inlineZoom.transform, d3.zoomIdentity);
+          // Reset zoom with a smooth transition
+          svg.transition().duration(500)
+              .call(window.inlineZoom.transform, d3.zoomIdentity);
+            console.log("Inline dendrogram zoom reset.");
+      } else {
+          console.warn("Cannot reset zoom, zoom behavior not initialized.");
       }
     }
+
+    // --- END Dendrogram JS Functions ---
   </script>
-  <!-- ─── DENDROGRAM MODAL ────────────────────────────────────────────────── -->
-  <div id="dendrogramModal" style="display:none; top:100px; left:100px; width:700px; height:500px; background:#fff; border:1px solid #ccc; box-shadow:0 0 10px rgba(0,0,0,0.3); z-index:10000; resize:both; overflow:hidden; position:fixed;">
-  
-    <!-- Header for dragging -->
-    <div id="dendrogramModalHeader">
-      <span>Cluster Tree</span>
-      <button id="closeDendrogram">&times;</button>
-    </div>    
-  
-    <!-- Modal body -->
-    <div class="modal-content">
-      <svg id="dendrogramSvg" style="flex:1; width:100%; height:100%;"></svg>
-      <div id="thresholdControls" style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:80px; padding-left:16px; background:#fff;">
-        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-          <label for="thresholdNumber">Cutoff:</label>
-          <input
-            type="number"
-            id="thresholdNumber"
-            min="0" max="1" step="0.01"
-            value="0.50"
-            style="width:60px;"
-          >
-        </div>
-        <input
-          type="range"
-          orient="vertical"
-          id="thresholdRange"
-          min="0" max="1" step="0.01"
-          value="0.50"
-          style="writing-mode:bt-lr; height:80%;"
-        >
-      </div>
-    </div>
-  </div>
 </body>
 </html>
