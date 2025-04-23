@@ -12,8 +12,6 @@ import argparse
 import sys
 import logging
 import os
-from scipy.cluster.hierarchy import linkage, to_tree
-from flask import jsonify
 
 # Set up logging so that we only see errors (keeps things quiet during normal use)
 logging.basicConfig(
@@ -23,7 +21,6 @@ logging.basicConfig(
 
 # Global variable to store our processed dataframe across endpoints
 global_df = None
-
 # Precompute internal subnets with their ranges to quickly classify IP addresses
 internal_subnets = [
     ip_network('172.28.0.0/16'),
@@ -74,20 +71,22 @@ def compute_clusters(df, resolution=2.5):
     partition = community_louvain.best_partition(G, weight='weight', resolution=resolution)
     return partition
 
-def load_anomaly_ips():
-    """
-    Load GroundTruth.csv and return a set of anomaly IPs (union of Source IP and Destination IP).
-    If the file is missing or there is an error, return an empty set.
-    """
-    anomaly_ips = set()
-    if os.path.exists("GroundTruth.csv"):
+def load_attack_pairs(path: str = r"backend\GroundTruth.csv") -> set:
+    """Returns a set of (src,dst) tuples for each attack row, both directions."""
+    pairs = set()
+    if os.path.exists(path):
         try:
-            gt_df = pd.read_csv("GroundTruth.csv", dtype=str)
-            # Extract union of Source IP and Destination IP from the ground truth file
-            anomaly_ips = set(gt_df["Source IP"]).union(set(gt_df["Destination IP"]))
+            gt = pd.read_csv(path, dtype=str)
+            for _, r in gt.iterrows():
+                s, d = r["Source IP"], r["Destination IP"]
+                pairs.add((s, d))
+                pairs.add((d, s))  # cover reverse traffic
         except Exception as e:
-            logging.error(f"Error processing GroundTruth.csv: {e}")
-    return anomaly_ips
+            logging.error(f"GroundTruth.csv read error: {e}")
+    return pairs
+
+attack_pairs_cache = load_attack_pairs()
+
 
 # Compute the entropy of a given pandas Series using its value distribution
 def compute_entropy(series):
@@ -175,28 +174,9 @@ def process_csv_to_df(csv_text):
         cluster_entropy[cluster] = (ent_protocol + ent_srcport + ent_dstport) / 3
     df["ClusterEntropy"] = df["ClusterID"].map(cluster_entropy)
     
-    # --- Anomaly Detection based on GroundTruth.csv ---
-    # Check if GroundTruth.csv exists in the same folder.
-    if os.path.exists("GroundTruth.csv"):
-        try:
-            gt_df = pd.read_csv("GroundTruth.csv", dtype=str)
-            # Expecting GroundTruth.csv to have "Source IP" and "Destination IP" columns.
-            anomaly_ips = set(gt_df["Source IP"]).union(set(gt_df["Destination IP"]))
-        except Exception as e:
-            logging.error(f"Error processing GroundTruth.csv: {e}")
-            anomaly_ips = set()
-        # --- Anomaly Detection based on GroundTruth.csv ---
-        anomaly_ips = load_anomaly_ips()
-        df["Anomaly"] = df.apply(
-            lambda row: "anomaly" if (row["Source"] in anomaly_ips or row["Destination"] in anomaly_ips) else "normal",
-            axis=1
-)
-        # For backward compatibility, mirror the anomaly flag.
-        df["ClusterAnomaly"] = df["Anomaly"]
-    else:
-        df["Anomaly"] = "normal"
-    # For backward compatibility, mirror the anomaly flag.
-    df["ClusterAnomaly"] = df["Anomaly"]
+    # ----  Anomaly flagging  ----
+    df["Anomaly"] = df.apply(lambda r: "anomaly" if (r["Source"], r["Destination"]) in attack_pairs_cache else "normal", axis=1)
+    df["ClusterAnomaly"] = df.groupby("ClusterID")["Anomaly"].transform(lambda s: "anomaly" if (s == "anomaly").any() else "normal")
     
     return df
 
@@ -217,31 +197,42 @@ def filter_and_aggregate():
     global global_df
     if global_df is None:
         return jsonify([])
+
+    # ----- new anomaly map construction -----
+    # for each ClusterID, record "anomaly" if any row in the full global_df had Anomaly=="anomaly"
+    anomaly_map = (
+        global_df
+        .groupby("ClusterID")["Anomaly"]
+        .apply(lambda s: "anomaly" if (s == "anomaly").any() else "normal")
+        .to_dict()
+    )
+    # -----------------------------------------
+
     data = request.get_json()
-    payloadKeyword = data.get("payloadKeyword", "").lower()
-    sourceFilter = data.get("sourceFilter", "").lower()
-    destinationFilter = data.get("destinationFilter", "").lower()
-    protocolFilter = data.get("protocolFilter", "").lower()
-    
+    payloadKeyword      = data.get("payloadKeyword", "").lower()
+    sourceFilter        = data.get("sourceFilter", "").lower()
+    destinationFilter   = data.get("destinationFilter", "").lower()
+    protocolFilter      = data.get("protocolFilter", "").lower()
+
     try:
         entropyMin = float(data.get("entropyMin", float('-inf')))
-    except Exception as e:
+    except:
         entropyMin = float('-inf')
     try:
         entropyMax = float(data.get("entropyMax", float('inf')))
-    except Exception as e:
+    except:
         entropyMax = float('inf')
-    isLargePacketOnly = data.get("isLargePacketOnly", False)
-    isRetransmissionOnly = data.get("isRetransmissionOnly", False)
-    isSuspiciousAckOnly = data.get("isSuspiciousAckOnly", False)
-    metric = data.get("metric", "count")
 
-    # New numeric filters for unique source/destination counts
-    min_source_amt = int(data["minSourceAmt"]) if data.get("minSourceAmt", "").strip() != "" else 0
-    max_source_amt = int(data["maxSourceAmt"]) if data.get("maxSourceAmt", "").strip() != "" else float('inf')
-    min_dest_amt = int(data["minDestinationAmt"]) if data.get("minDestinationAmt", "").strip() != "" else 0
-    max_dest_amt = int(data["maxDestinationAmt"]) if data.get("maxDestinationAmt", "").strip() != "" else float('inf')
-    
+    isLargePacketOnly    = data.get("isLargePacketOnly", False)
+    isRetransmissionOnly = data.get("isRetransmissionOnly", False)
+    isSuspiciousAckOnly  = data.get("isSuspiciousAckOnly", False)
+    metric               = data.get("metric", "count")
+
+    min_source_amt = int(data["minSourceAmt"])    if data.get("minSourceAmt","").strip()    != "" else 0
+    max_source_amt = int(data["maxSourceAmt"])    if data.get("maxSourceAmt","").strip()    != "" else float('inf')
+    min_dest_amt   = int(data["minDestinationAmt"]) if data.get("minDestinationAmt","").strip() != "" else 0
+    max_dest_amt   = int(data["maxDestinationAmt"]) if data.get("maxDestinationAmt","").strip() != "" else float('inf')
+
     df = global_df.copy()
     if payloadKeyword:
         df = df[df["Payload"].str.lower().str.contains(payloadKeyword, na=False)]
@@ -251,8 +242,10 @@ def filter_and_aggregate():
         df = df[df["Destination"].str.lower().str.contains(destinationFilter, na=False)]
     if protocolFilter and "Protocol" in df.columns:
         df = df[df["Protocol"].str.lower().str.contains(protocolFilter, na=False)]
+
     df["ClusterEntropy"] = pd.to_numeric(df["ClusterEntropy"], errors='coerce')
     df = df[(df["ClusterEntropy"] >= entropyMin) & (df["ClusterEntropy"] <= entropyMax)]
+
     if isLargePacketOnly:
         df = df[df["IsLargePacket"] == True]
     if isRetransmissionOnly:
@@ -299,9 +292,8 @@ def filter_and_aggregate():
     else:
         df[metric] = pd.to_numeric(df[metric], errors='coerce').fillna(0)
         agg = df.groupby("ClusterID")[metric].sum()
-    
-    # Get unique counts for Source and Destination per cluster
-    unique_sources = df.groupby("ClusterID")["Source"].nunique()
+
+    unique_sources      = df.groupby("ClusterID")["Source"].nunique()
     unique_destinations = df.groupby("ClusterID")["Destination"].nunique()
 
     filtered_pivot = []
@@ -312,9 +304,16 @@ def filter_and_aggregate():
             continue
         if dst_count < min_dest_amt or dst_count > max_dest_amt:
             continue
-        filtered_pivot.append({"cluster": cluster, "value": value})
-    
+
+        # ----- include anomaly flag for this cluster -----
+        filtered_pivot.append({
+            "cluster":         cluster,
+            "value":           value,
+            "clusterAnomaly":  anomaly_map.get(cluster, "normal")
+        })
+        # ---------------------------------------------------
     return jsonify(filtered_pivot)
+
 
 # Endpoint to return network data for a given cluster
 @app.route('/cluster_network', methods=['GET'])
@@ -603,103 +602,6 @@ def get_multi_edge_table():
     html += "</tbody></table>"
     html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
     return html
-
-@app.route('/get_processed_csv', methods=['GET'])
-def get_processed_csv():
-    global global_df
-    if global_df is None:
-        return "No data", 404
-    csv_io = StringIO()
-    global_df.to_csv(csv_io, index=False)
-    csv_io.seek(0)
-    return Response(csv_io.getvalue(), mimetype='text/plain')
-
-@app.route('/hierarchical_clusters', methods=['GET'])
-def hierarchical_clusters():
-    """
-    Build a dendrogram over your clusters. Re-runs Louvain clustering
-    using a user-provided resolution value (default = 2.5).
-    Then performs hierarchical clustering on:
-      1) total packet count
-      2) average ClusterEntropy
-    """
-    global global_df
-    if global_df is None:
-        return jsonify({})
-
-    # 1. Read optional resolution param for Louvain clustering
-    resolution = float(request.args.get("resolution", 2.5))
-
-    # 2. Recompute Louvain clusters with this resolution
-    node_cluster = compute_clusters(global_df, resolution=resolution)
-    global_df["ClusterID"] = global_df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
-
-    # 3. Aggregate stats per cluster
-    representatives = (
-        global_df
-        .groupby('ClusterID')["Source"]
-        .first()
-        .to_dict()
-    )
-
-    stats = (
-        global_df
-        .groupby('ClusterID')
-        .agg(total_packets=('ClusterID', 'size'),
-             avg_entropy=('ClusterEntropy', 'mean'))
-        .reset_index()
-    )
-
-    # Add representative label
-    stats["label"] = stats["ClusterID"].map(representatives)
-
-    # 4. Perform hierarchical clustering on [total_packets, avg_entropy]
-    from scipy.cluster.hierarchy import linkage, to_tree
-    data = stats[['total_packets', 'avg_entropy']].to_numpy()
-    Z = linkage(data, method='average')
-
-    # 5. Convert tree to nested dict format
-    root, nodes = to_tree(Z, rd=True)
-
-    def node_to_dict(node):
-        def split_ip(ip):
-            return ip.split('.') if ip else []
-
-        def shorten_ip(ip, depth):
-            parts = split_ip(ip)
-            return '.'.join(parts[:depth]) + '.' if parts and depth < 4 else ip
-
-        if node.is_leaf():
-            ip = str(stats.loc[node.id, 'label'])  # full IP for leaves
-            return {
-                "id": ip,
-                "dist": float(node.dist)
-            }
-
-        left_node = node.get_left()
-        right_node = node.get_right()
-        left = node_to_dict(left_node)
-        right = node_to_dict(right_node)
-
-        base_ip = left["id"]
-        count = node.count
-
-        if count > 50:
-            short = shorten_ip(base_ip, 1)
-        elif count > 10:
-            short = shorten_ip(base_ip, 2)
-        elif count > 3:
-            short = shorten_ip(base_ip, 3)
-        else:
-            short = base_ip
-
-        return {
-            "id": short,
-            "dist": float(node.dist),
-            "children": [left, right]
-        }
-
-    return jsonify(node_to_dict(root))
 
 def convert_nan_to_none(obj):
     """
