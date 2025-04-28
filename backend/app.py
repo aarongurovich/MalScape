@@ -14,6 +14,11 @@ import logging
 import os
 from scipy.cluster.hierarchy import linkage, to_tree
 
+global_df = None
+global_start_time = None
+global_end_time = None
+global_duration_seconds = None
+
 # Set up logging so that we only see errors (keeps things quiet during normal use)
 logging.basicConfig(
     level=logging.ERROR,
@@ -96,89 +101,152 @@ def compute_entropy(series):
     return -np.sum(p * np.log(p))
 
 def process_csv_to_df(csv_text):
+    """Processes raw CSV text into a pandas DataFrame with calculated features."""
     df = pd.read_csv(StringIO(csv_text), dtype=str)
     if not all(col in df.columns for col in ["Source", "Destination"]):
         error_msg = "Missing required column: Source or Destination"
         logging.error(error_msg)
         raise ValueError(error_msg)
-    
+
     # If already processed (contains extra computed columns), return as is.
-    processed_cols = ["Source", "Destination", "Payload", "SourcePort", "DestinationPort", "Flags", 
-                      "Seq", "Ack", "Win", "Len", "TSval", "TSecr", 
+    # NOTE: This check might need adjustment if columns change significantly
+    processed_cols = ["Source", "Destination", "Payload", "SourcePort", "DestinationPort", "Flags",
+                      "Seq", "Ack", "Win", "Len", "TSval", "TSecr",
                       "SourceClassification", "DestinationClassification", "ClusterID",
                       "ConnectionID", "BurstID", "IsSuspiciousAck", "ClusterEntropy", "Anomaly"]
     if all(col in df.columns for col in processed_cols):
+        # Still ensure Time is datetime if it exists and is not already
+        if "Time" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["Time"]):
+             try:
+                 df["Time"] = pd.to_datetime(df["Time"], errors='coerce')
+             except Exception as e:
+                 logging.warning(f"Could not parse Time column in already processed data: {e}")
         return df
 
     # Rename column if needed
     if "Info" in df.columns:
         df.rename(columns={"Info": "Payload"}, inplace=True)
-    
+
     # Process the Payload column if present
     if "Payload" in df.columns:
         df["Payload"] = df["Payload"].fillna("").str.replace(',', '/', regex=False)
-        extracted = parse_payload_vectorized(df["Payload"])
+        extracted = parse_payload_vectorized(df["Payload"]) # Assumes parse_payload_vectorized exists
         df = pd.concat([df, extracted], axis=1)
-        
+
         # Compute flag-based columns if Flags exists
         if "Flags" in df.columns:
-            df["IsSYN"] = df["Flags"].apply(lambda x: 1 if "SYN" in x else 0)
-            df["IsRST"] = df["Flags"].apply(lambda x: 1 if "RST" in x else 0)
-            df["IsACK"] = df["Flags"].apply(lambda x: 1 if "ACK" in x else 0)
-            df["IsPSH"] = df["Flags"].apply(lambda x: 1 if "PSH" in x else 0)
-    
+            flags_series = df["Flags"].astype(str) # Ensure string type
+            df["IsSYN"] = flags_series.str.contains("S", regex=False).astype(int) # More robust check
+            df["IsRST"] = flags_series.str.contains("R", regex=False).astype(int)
+            df["IsACK"] = flags_series.str.contains("A", regex=False).astype(int)
+            df["IsPSH"] = flags_series.str.contains("P", regex=False).astype(int)
+
     # Compute normalized NodeWeight based on connection counts
     connection_counts = df.groupby(["Source", "Destination"])["Source"].transform("count")
-    if connection_counts.max() != connection_counts.min():
-        node_weights = (connection_counts - connection_counts.min()) / (connection_counts.max() - connection_counts.min())
+    if not connection_counts.empty and connection_counts.max() != connection_counts.min():
+         # Handle potential NaN/Inf values before normalization
+         min_count = connection_counts.min()
+         max_count = connection_counts.max()
+         range_count = max_count - min_count
+         if range_count > 0: # Avoid division by zero
+             node_weights = (connection_counts - min_count) / range_count
+         else:
+             node_weights = pd.Series(0.5, index=connection_counts.index) # Assign default if range is zero
     else:
-        node_weights = pd.Series(1.0, index=connection_counts.index)
-    df["NodeWeight"] = node_weights
-    
+        # Assign default weight if no connections or all counts are the same
+        node_weights = pd.Series(0.5, index=df.index)
+    df["NodeWeight"] = node_weights.fillna(0.5) # Fill any remaining NaNs
+
     # Classify IPs as internal or external
-    df["SourceClassification"] = df["Source"].apply(classify_ip_vector)
+    df["SourceClassification"] = df["Source"].apply(classify_ip_vector) # Assumes classify_ip_vector exists
     df["DestinationClassification"] = df["Destination"].apply(classify_ip_vector)
-    
+
     # Create a composite ConnectionID
-    df["ConnectionID"] = df["Source"] + ":" + df["SourcePort"].fillna("N/A") + "-" + df["Destination"] + ":" + df["DestinationPort"].fillna("N/A")
-    
+    df["ConnectionID"] = (df["Source"].astype(str) + ":" + df["SourcePort"].fillna("N/A").astype(str) + "-" +
+                         df["Destination"].astype(str) + ":" + df["DestinationPort"].fillna("N/A").astype(str))
+
     # Convert Time to datetime and perform numeric conversions
-    try:
-        df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
-    except Exception as e:
-        logging.error(f"Error converting Time column to datetime: {e}")
+    if "Time" in df.columns:
+        try:
+            # Try ISO 8601 with microseconds first
+            df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
+        except ValueError:
+            try:
+                # Fallback to pandas default parser (more flexible but potentially slower)
+                df["Time"] = pd.to_datetime(df["Time"], errors='coerce')
+            except Exception as e:
+                logging.error(f"Error converting Time column to datetime: {e}")
+                df["Time"] = pd.NaT # Assign NaT if conversion fails
+    else:
+        df["Time"] = pd.NaT # Add Time column as NaT if it doesn't exist
+
+    # Convert other numeric columns
     df["Length"] = pd.to_numeric(df["Length"], errors='coerce')
     for col in ["Seq", "Ack", "Win", "Len", "TSval", "TSecr"]:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    # Compute time differences and derived features
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Compute time differences and derived features (handle potential NaT in Time)
     df["InterArrivalTime"] = df.groupby("ConnectionID")["Time"].diff().dt.total_seconds()
     df["BytesPerSecond"] = df["Length"] / df["InterArrivalTime"]
-    df["BytesPerSecond"] = df["BytesPerSecond"].replace([np.inf, -np.inf], np.nan)
+    # Replace infinite values resulting from division by zero (or near zero) InterArrivalTime
+    df["BytesPerSecond"] = df["BytesPerSecond"].replace([np.inf, -np.inf], np.nan).fillna(0) # Fill NaN BytesPerSecond with 0
     df["IsLargePacket"] = df["Length"] > 1000
-    df["PayloadLength"] = df["Len"]
+    df["PayloadLength"] = df["Len"] # Already converted to numeric
+
+    # Burst ID calculation (handle NaT in Time/InterArrivalTime)
+    # Fill NaNs in InterArrivalTime before comparison to avoid errors
     df["BurstID"] = df.groupby("ConnectionID")["InterArrivalTime"].transform(lambda x: (x.fillna(0) >= 0.01).cumsum())
-    df["PrevSeq"] = df.groupby("ConnectionID")["Seq"].shift(1)
-    df["IsSuspiciousAck"] = df.apply(lambda row: True if pd.notnull(row["PrevSeq"]) and row["Ack"] < row["PrevSeq"] else False, axis=1)
-    df.drop(columns=["PrevSeq"], inplace=True)
-    
-    # Compute clusters using Louvain community detection (kept for network graphing purposes)
-    node_cluster = compute_clusters(df, resolution=2.5)
+
+    # Suspicious ACK calculation (handle potential NaNs)
+    if "Seq" in df.columns and "Ack" in df.columns:
+        df["PrevSeq"] = df.groupby("ConnectionID")["Seq"].shift(1)
+        df["IsSuspiciousAck"] = df.apply(
+            lambda row: pd.notnull(row["Ack"]) and pd.notnull(row["PrevSeq"]) and row["Ack"] < row["PrevSeq"],
+            axis=1
+        )
+        df.drop(columns=["PrevSeq"], inplace=True)
+    else:
+        df["IsSuspiciousAck"] = False # Set to False if Seq/Ack not present
+
+    # Compute clusters using Louvain community detection
+    node_cluster = compute_clusters(df, resolution=2.5) # Assumes compute_clusters exists
+    # Ensure ClusterID is string and handle nodes not in partition
     df["ClusterID"] = df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
-    
+
     # Calculate average entropy per cluster based on Protocol, SourcePort, and DestinationPort
     cluster_entropy = {}
-    for cluster, group in df.groupby("ClusterID"):
-        ent_protocol = compute_entropy(group["Protocol"]) if "Protocol" in group.columns else 0
-        ent_srcport = compute_entropy(group["SourcePort"]) if "SourcePort" in group.columns else 0
-        ent_dstport = compute_entropy(group["DestinationPort"]) if "DestinationPort" in group.columns else 0
-        cluster_entropy[cluster] = (ent_protocol + ent_srcport + ent_dstport) / 3
-    df["ClusterEntropy"] = df["ClusterID"].map(cluster_entropy)
-    
-    # ----  Anomaly flagging  ----
-    df["Anomaly"] = df.apply(lambda r: "anomaly" if (r["Source"], r["Destination"]) in attack_pairs_cache else "normal", axis=1)
-    df["ClusterAnomaly"] = df.groupby("ClusterID")["Anomaly"].transform(lambda s: "anomaly" if (s == "anomaly").any() else "normal")
-    
+    if not df.empty: # Check if DataFrame is not empty before grouping
+        for cluster, group in df.groupby("ClusterID"):
+            ent_protocol = 0
+            ent_srcport = 0
+            ent_dstport = 0
+            # Check for column existence and non-empty group before calculating entropy
+            if "Protocol" in group.columns and not group["Protocol"].dropna().empty:
+                ent_protocol = compute_entropy(group["Protocol"].dropna())
+            if "SourcePort" in group.columns and not group["SourcePort"].dropna().empty:
+                ent_srcport = compute_entropy(group["SourcePort"].dropna())
+            if "DestinationPort" in group.columns and not group["DestinationPort"].dropna().empty:
+                ent_dstport = compute_entropy(group["DestinationPort"].dropna())
+            # Average the non-zero entropies
+            valid_entropies = [e for e in [ent_protocol, ent_srcport, ent_dstport] if e > 0]
+            cluster_entropy[cluster] = np.mean(valid_entropies) if valid_entropies else 0
+
+    df["ClusterEntropy"] = df["ClusterID"].map(cluster_entropy).fillna(0) # Fill NaN entropy with 0
+
+    # ---- Anomaly flagging ----
+    attack_pairs_cache = load_attack_pairs() # Assumes load_attack_pairs exists
+    df["Anomaly"] = df.apply(
+        lambda r: "anomaly" if (str(r["Source"]), str(r["Destination"])) in attack_pairs_cache else "normal",
+        axis=1
+    )
+    if not df.empty: # Check if DataFrame is not empty before grouping
+        df["ClusterAnomaly"] = df.groupby("ClusterID")["Anomaly"].transform(
+            lambda s: "anomaly" if (s == "anomaly").any() else "normal"
+        )
+    else:
+        df["ClusterAnomaly"] = "normal" # Default if df is empty
+
     return df
 
 def process_csv(csv_text):
@@ -450,16 +518,71 @@ def get_cluster_table():
 # GroundTruth.csv is automatically read from the same folder.
 @app.route('/process_csv', methods=['POST'])
 def process_csv_endpoint():
-    global global_df
+    """ Endpoint to process uploaded CSV data. """
+    global global_df, global_start_time, global_end_time, global_duration_seconds # Declare globals
+
     try:
         data = request.get_json()
+        if not data or "csv_text" not in data:
+             return jsonify({"error": "No CSV data provided."}), 400
         csv_text = data.get("csv_text", "")
-        processed_text = process_csv(csv_text)
-        global_df = process_csv_to_df(csv_text)
-        return Response(processed_text, mimetype='text/plain')
+        if not csv_text.strip():
+             return jsonify({"error": "CSV data is empty."}), 400
+
+        # Process to DataFrame using the dedicated function
+        df = process_csv_to_df(csv_text) # This handles internal processing and error raising
+        global_df = df # Store the processed DataFrame globally
+
+        # --- Calculate Time Information ---
+        if "Time" in global_df.columns and pd.api.types.is_datetime64_any_dtype(global_df["Time"]) and not global_df["Time"].isnull().all():
+            min_time = global_df["Time"].min()
+            max_time = global_df["Time"].max()
+
+            if pd.notnull(min_time) and pd.notnull(max_time):
+                global_start_time = min_time.isoformat() # Use ISO format for JSON
+                global_end_time = max_time.isoformat()
+                global_duration_seconds = (max_time - min_time).total_seconds()
+            else:
+                # Handle cases where min/max might be NaT even if not all are NaT
+                global_start_time = None
+                global_end_time = None
+                global_duration_seconds = None
+        else:
+            # Reset if Time column is missing, not datetime, or all NaT
+            global_start_time = None
+            global_end_time = None
+            global_duration_seconds = None
+        # --- End Time Calculation ---
+
+        # Return a simple success confirmation
+        return jsonify({"message": "CSV processed successfully."}), 200
+
+    except ValueError as ve: # Catch specific errors from process_csv_to_df
+        logging.error(f"Value Error during CSV processing: {ve}")
+        global_start_time, global_end_time, global_duration_seconds = None, None, None # Reset globals
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logging.error(f"Error processing CSV: {e}")
-        return jsonify({"error": str(e)}), 400
+        logging.exception(f"Unexpected error processing CSV: {e}") # Log full traceback for unexpected errors
+        global_start_time, global_end_time, global_duration_seconds = None, None, None # Reset globals
+        return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
+
+@app.route('/time_info', methods=['GET'])
+def get_time_info():
+    """Returns the calculated start time, end time, and duration."""
+    # Check if globals were successfully populated
+    if global_df is None or global_start_time is None or global_end_time is None or global_duration_seconds is None:
+        # Check if it's just because no data was loaded yet
+        if global_df is None:
+             return jsonify({"error": "No data has been processed yet."}), 404
+        else:
+             # Data loaded, but time info likely missing/invalid in CSV
+             return jsonify({"error": "Time information could not be determined from the data."}), 404
+
+    return jsonify({
+        "start_time": global_start_time,
+        "end_time": global_end_time,
+        "duration_seconds": global_duration_seconds
+    })
 
 # New endpoint for downloading the processed CSV file
 @app.route('/download_csv', methods=['GET'])

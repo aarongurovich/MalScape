@@ -340,6 +340,16 @@
             fill: #ff7f0e; /* Orange color for highlight - Use specific color from map now */
             r: 6; /* Slightly larger radius */
         }
+        .node.grayed-out > circle {
+            fill: #d3d3d3 !important; /* Light gray */
+            stroke: #bbb !important;
+            opacity: 0.6;
+        }
+
+        .node.grayed-out > text {
+            fill: #aaa !important; /* Lighter gray for text */
+            opacity: 0.7;
+        }
         /* --- END ADDED Dendrogram CSS --- */
     </style>
 </head>
@@ -421,34 +431,39 @@
     </div>
     <button id="showTreeBtn" class="show-tree-button" style="display: none; margin-bottom: 15px;">Show Hierarchical Cluster Tree</button>
     <div id="dendrogramCard">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h3>Hierarchical Cluster Tree</h3>
-        <button id="hideTreeBtn" class="small-utility-button">Hide Tree</button>
-      </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div> <h3>Hierarchical Cluster Tree</h3>
+              <span id="treeInfoSpan" style="font-size: 12px; color: #555; margin-left: 10px;"></span>
+              <span id="timeInfoSpan" style="font-size: 12px; color: #555; margin-left: 15px;"></span> </div>
+            <button id="hideTreeBtn" class="small-utility-button">Hide Tree</button>
+          </div>
       <div id="inline-dendrogram-container">
         <svg id="inlineDendrogramSvg"></svg>
       </div>
       <div id="treeControls">
         <label for="dendrogramSortMetricSelect">Order Leaves By:</label>
         <select id="dendrogramSortMetricSelect">
-            <option value="Count" selected>Count (Default)</option>
+            <option value="Default" selected>Default (Structure)</option> <option value="Count">Count</option>
             <option value="Unique IPs">Unique IPs</option>
             <option value="Unique Sources">Unique Sources</option>
             <option value="Unique Destinations">Unique Destinations</option>
             <option value="Payload Size Variance">Payload Size Variance</option>
             <option value="Packets per Second">Packets per Second</option>
             <option value="Total Data Sent">Total Data Sent</option>
-             <option value="% SYN packets">% SYN packets</option>
-             <option value="% RST packets">% RST packets</option>
-             <option value="% ACK packets">% ACK packets</option>
-             <option value="% PSH packets">% PSH packets</option>
-             <option value="Length">Packet Length</option>
-             <option value="Len">Payload Length</option>
-            </select>
+            <option value="% SYN packets">% SYN packets</option>
+            <option value="% RST packets">% RST packets</option>
+            <option value="% ACK packets">% ACK packets</option>
+            <option value="% PSH packets">% PSH packets</option>
+            <option value="Length">Packet Length</option>
+            <option value="Len">Payload Length</option>
+        </select>
         <label for="resolutionInput">Louvain Resolution:</label>
         <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="default 2.5">
         <button onclick="reclusterAndRedraw()">Apply Resolution</button>
         <button onclick="resetInlineZoom()">Reset Zoom</button>
+        <label for="thresholdSlider">Visual Threshold:</label>
+        <input type="range" id="thresholdSlider" min="0" max="100" value="100" style="width: 150px; vertical-align: middle;">
+        <span id="thresholdValue">100%</span>
         <div class="tree-height-controls">
           <button class="custom-height-link" onclick="showCustomHeightInput()">Set Custom Height</button>
         </div>
@@ -520,6 +535,7 @@
     let csvProcessingController = null; // Controller to abort CSV processing fetch
     let initialTreeTransform = d3.zoomIdentity;
     let currentDendrogramHeight = 400; // Default height
+    const margin = { top: 30, right: 30, bottom: 120, left: 30 };
 
     let protocolColorMap = {};
     let globalCy; // For main #cy element, if used
@@ -1262,56 +1278,142 @@
     function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
 
     function updateLegend(cyEdges = null) {
-         const legendTableBody = d3.select('#legend tbody');
-         legendTableBody.html('');
-         let protocols = new Set();
-         let calculationPromise;
-         let totalCount = 0;
+        const legendTableBody = d3.select('#legend tbody');
+        legendTableBody.html(''); // Clear previous rows immediately
 
-         if (cyEdges && cyEdges.length > 0) {
-             document.querySelector('#legend-container h3').textContent = "Sidebar Protocols";
-             const counts = {};
-             cyEdges.forEach(edge => {
-                 const protocol = (edge.data('Protocol') || 'Unknown').trim(); if (!protocol) return;
-                 protocols.add(protocol);
-                 const count = edge.data('processCount') || 1;
-                 counts[protocol] = (counts[protocol] || 0) + count;
-                 totalCount += count;
-             });
-             totalCount = totalCount || 1;
-             const percentages = {};
-             Object.entries(counts).forEach(([p, c]) => { percentages[p] = (c / totalCount) * 100; });
-             calculationPromise = Promise.resolve(percentages);
-         } else {
-              document.querySelector('#legend-container h3').textContent = "Protocol Legend";
-             calculationPromise = fetch(`${API_BASE_URL}/protocol_percentages`).then(res => res.ok ? res.json() : Promise.reject('Failed global percentages')).catch(error => { console.error("Error fetching global protocol percentages:", error); return {}; });
-         }
+        let protocols = new Set(); // Stores unique lowercase protocol names
+        let displayLabelMap = {};  // Stores mapping: lowercase -> Original Case Display Label
+        let calculationPromise;
+        const currentLegendTitle = document.querySelector('#legend-container h3');
 
-         calculationPromise.then(percentages => {
-             if (!cyEdges) { Object.keys(percentages).forEach(proto => { if(proto) protocols.add(proto); }); }
-             protocols.forEach(proto => { if (proto && !protocolColorMap[proto]) { protocolColorMap[proto] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0'); } });
-             if (!protocolColorMap['Unknown']) { protocolColorMap['Unknown'] = DEFAULT_UNKNOWN_COLOR; }
+        if (cyEdges && cyEdges.length > 0) {
+            // --- Sidebar Legend Calculation ---
+            if (currentLegendTitle) currentLegendTitle.textContent = "Sidebar Protocols";
 
-             const sortedProtocols = Array.from(protocols).filter(p => p).sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
-             sortedProtocols.forEach(protocol => {
-                 const pct = percentages[protocol] || 0;
-                 const pctText = (pct > 0.01 ? pct.toFixed(2) : '<0.01') + '%';
-                 const color = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
-                 legendTableBody.append('tr').html(`<td>${protocol}</td><td><span class="color-box" style="background-color:${color}"></span></td><td>${pctText}</td>`);
-             });
+            const counts = {};
+            let totalCount = 0;
+            const localPercentages = {}; // Use lowercase keys internally
 
-             if (sidebarCy) {
-                 sidebarCy.edges().forEach(edge => {
-                     const protocol = edge.data('Protocol') || 'Unknown';
-                     const newColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
-                     const nodeIsSelected = selectedNodeId && (edge.source().id() === selectedNodeId || edge.target().id() === selectedNodeId);
-                     const edgeIsSelected = selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`);
-                     if (!nodeIsSelected && !edgeIsSelected) { edge.style({'line-color': newColor, 'target-arrow-color': newColor}); }
-                     edge.scratch('_protocolColor', newColor); // Update scratch always
-                 });
+            cyEdges.forEach(edge => {
+                const originalProtocol = (edge.data('Protocol') || 'Unknown').trim();
+                if (!originalProtocol) return;
+                const protocolLC = originalProtocol.toLowerCase(); // Lowercase for internal use
+
+                // Add to set and map
+                protocols.add(protocolLC);
+                if (!displayLabelMap[protocolLC]) { // Store first encountered casing
+                    displayLabelMap[protocolLC] = originalProtocol;
+                }
+
+                // Calculate counts
+                const count = edge.data('processCount') || 1;
+                counts[protocolLC] = (counts[protocolLC] || 0) + count; // Use lowercase key
+                totalCount += count;
+            });
+
+            totalCount = totalCount || 1; // Avoid division by zero
+
+            // Calculate percentages using lowercase keys
+            Object.entries(counts).forEach(([pLC, c]) => {
+                localPercentages[pLC] = (c / totalCount) * 100;
+            });
+            calculationPromise = Promise.resolve(localPercentages); // Resolve with lowercase-keyed percentages
+
+        } else {
+            // --- Global Legend Fetch ---
+            if (currentLegendTitle) currentLegendTitle.textContent = "Global Protocol Legend";
+            calculationPromise = fetch(`${API_BASE_URL}/protocol_percentages`)
+                .then(res => res.ok ? res.json() : Promise.reject('Failed global percentages'))
+                .then(originalPercentages => {
+                    // Process fetched percentages: create lowercase keys and display map
+                    const processedPercentages = {};
+                    Object.entries(originalPercentages).forEach(([key, value]) => {
+                         const originalDisplay = key.trim(); // Original casing for display
+                         if (!originalDisplay) return; // Skip empty keys
+                         const protocolLC = originalDisplay.toLowerCase(); // Lowercase for internal use
+
+                         processedPercentages[protocolLC] = value; // Store percentage with lowercase key
+                         protocols.add(protocolLC);            // Add lowercase to Set
+
+                         if (!displayLabelMap[protocolLC]) { // Store first encountered casing
+                             displayLabelMap[protocolLC] = originalDisplay;
+                         }
+                    });
+                    return processedPercentages; // Return object keyed by lowercase
+                })
+                .catch(error => {
+                    console.error("Error fetching/processing global protocol percentages:", error);
+                    return {}; // Return empty object on error
+                });
+        }
+
+        // --- Common Logic (Color Assignment, Sorting, Table Building) ---
+        calculationPromise.then(percentages => { // 'percentages' object now ALWAYS has lowercase keys
+
+            // Ensure colors exist for all unique lowercase protocols found
+            protocols.forEach(protocolLC => {
+                 // If color map doesn't have the lowercase key, assign one
+                 if (!protocolColorMap[protocolLC]) {
+                     // Special handling for 'unknown'
+                     if (protocolLC === 'unknown') {
+                          protocolColorMap['unknown'] = DEFAULT_UNKNOWN_COLOR;
+                          // Ensure display map has 'Unknown' if not already set
+                          if (!displayLabelMap['unknown']) displayLabelMap['unknown'] = 'Unknown';
+                     } else {
+                         // Generate random color for other protocols
+                         protocolColorMap[protocolLC] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                         // If display map is missing for some reason, fallback to lowercase
+                          if (!displayLabelMap[protocolLC]) displayLabelMap[protocolLC] = protocolLC;
+                     }
+                 }
+            });
+             // Ensure 'unknown' color mapping exists as a fallback
+             if (!protocolColorMap['unknown']) {
+                 protocolColorMap['unknown'] = DEFAULT_UNKNOWN_COLOR;
+                 if (!displayLabelMap['unknown']) displayLabelMap['unknown'] = 'Unknown';
              }
-         });
-     }
+
+
+            // Sort protocols (lowercase keys) based on percentages (descending)
+            // Access percentages using lowercase keys directly
+            const sortedProtocols = Array.from(protocols).filter(pLC => pLC).sort((aLC, bLC) => (percentages[bLC] || 0) - (percentages[aLC] || 0));
+
+            // Build the legend table body
+            legendTableBody.html(''); // Clear existing rows first (moved to top)
+            sortedProtocols.forEach(protocolLC => { // Iterate through sorted lowercase protocols
+                const pct = percentages[protocolLC] || 0; // Access using lowercase key
+                const pctText = (pct > 0.01 ? pct.toFixed(2) : '<0.01') + '%';
+                const color = protocolColorMap[protocolLC] || protocolColorMap['unknown']; // Use lowercase key for color
+                const displayLabel = displayLabelMap[protocolLC] || protocolLC; // Get display name from map
+
+                // Corrected HTML generation line
+                legendTableBody.append('tr').html(`<td>${displayLabel}</td><td><span class="color-box" style="background-color:${color}"></span></td><td style="text-align: right;">${pctText}</td>`);
+            });
+
+            // Update edge colors in the sidebar graph if it exists
+            if (sidebarCy) {
+                sidebarCy.edges().forEach(edge => {
+                    const protocolLC = (edge.data('Protocol') || 'Unknown').trim().toLowerCase(); // lowercase for matching
+                    const newColor = protocolColorMap[protocolLC] || protocolColorMap['unknown']; // Use lowercase key for color
+
+                    // Check selection status before changing color
+                    const edgeKey = `${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`;
+                    const nodeIsSelected = selectedNodeId && (edge.source().id() === selectedNodeId || edge.target().id() === selectedNodeId);
+                    const edgeIsSelected = selectedSidebarEdges.has(edgeKey);
+
+                    if (!nodeIsSelected && !edgeIsSelected) {
+                       edge.style({'line-color': newColor, 'target-arrow-color': newColor});
+                    }
+                    // Always update scratch color, using the determined color
+                    edge.scratch('_protocolColor', newColor);
+                });
+            }
+        }).catch(error => {
+           // Catch errors from the calculationPromise itself (e.g., fetch failure)
+           console.error("Error processing legend data:", error);
+           legendTableBody.html('<tr><td colspan="3" style="color: red;">Error loading legend</td></tr>');
+        });
+    }
 
      function updateHeatmap() {
         showLoading();
@@ -1573,6 +1675,7 @@
         showHeatmap(); // Initial heatmap load attempt
         updateLegend(); // Initial legend load attempt
         loadInlineDendrogram(); // Initial tree load attempt
+        updateTimeInfoDisplay(); // Fetch time info on initial load
 
         // --- Listener for Cancel Loading Button ---
         const cancelLoadingButton = document.getElementById('cancelLoadingBtn');
@@ -1587,44 +1690,7 @@
                 }
                 hideLoading();
             });
-        } else {
-            console.error("Cancel loading button not found.");
-        }
-
-        // --- Listeners for Hide/Show Dendrogram Buttons ---
-        const hideBtn = document.getElementById('hideTreeBtn');
-        const showBtn = document.getElementById('showTreeBtn');
-        if (hideBtn) { hideBtn.addEventListener('click', hideDendrogram); }
-        else { console.error("Hide Tree button not found."); }
-        if (showBtn) { showBtn.addEventListener('click', showDendrogram); }
-        else { console.error("Show Tree button not found."); }
-
-        // --- Listener for Sidebar Layout Selector ---
-        document.getElementById('sidebarLayoutSelect').addEventListener('change', applySidebarLayout);
-
-        // --- Listener for Main Filter Button ---
-        document.getElementById('applyFiltersBtn').addEventListener('click', updateHeatmap);
-
-        // --- Listener for Main Table Pagination Button ---
-        document.getElementById('goPageBtn').addEventListener('click', function () {
-             let pageInput = document.getElementById('currentPageInput');
-             let page = parseInt(pageInput.value, 10);
-             const totalPagesStr = document.getElementById('totalPages').textContent;
-             const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
-             if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity) && currentClusterID) {
-                 loadClusterTablePage(currentClusterID, page);
-             } else { alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`); }
-         });
-
-        // --- Listeners for Main Graph Size Controls ---
-        document.getElementById('nodeSizeMin').addEventListener('input', applySizeControls);
-        document.getElementById('nodeSizeMax').addEventListener('input', applySizeControls);
-        document.getElementById('edgeWidthMin').addEventListener('input', applySizeControls);
-        document.getElementById('edgeWidthMax').addEventListener('input', applySizeControls);
-
-        // --- Listeners for Edge Filter Panel ---
-        document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
-        document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
+        } else { console.error("Cancel loading button not found."); }
 
         // --- Listener for File Input ---
         document.getElementById('fileInput').addEventListener('change', function(event) {
@@ -1645,54 +1711,139 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ csv_text: csvText }),
-                        signal: signal
+                        signal: signal // Pass the abort signal
                     })
                     .then(response => {
+                        // Check if response is ok, otherwise parse error JSON
                         if (!response.ok) {
-                            return response.text().then(text => { throw new Error(text || `Processing failed (${response.status})`) });
+                            return response.json().then(err => {
+                                // Construct a more informative error
+                                let error = new Error(err.error || `Processing failed (${response.status})`);
+                                error.status = response.status; // Add status code to error object
+                                throw error;
+                            });
                         }
-                        return response.text();
+                        return response.json(); // Parse success JSON (e.g., {"message": "..."})
                     })
-                    .then(confirmation => {
-                        console.log('CSV processed successfully');
-                        csvProcessingController = null;
+                    .then(confirmationData => { // Receive the JSON data on success
+                        console.log('CSV processed successfully:', confirmationData.message); // Log success message
+                        csvProcessingController = null; // Reset controller
                         updateHeatmap();
                         updateLegend();
-                        loadInlineDendrogram();
+                        loadInlineDendrogram(); // Reload dendrogram after processing
+                        updateTimeInfoDisplay(); // <<< UPDATE TIME INFO DISPLAY HERE
                         clearSidebarVisualization();
                         toggleSidebar(false);
-                        document.getElementById('showTreeBtn').style.display = 'inline-block';
+                        // Show 'Show Tree' button only if dendrogram load was successful
+                        // (Check if window.lastTreeData exists after loadInlineDendrogram completes)
+                        // We might need loadInlineDendrogram to return a promise
+                        if (window.lastTreeData && Object.keys(window.lastTreeData).length > 0) {
+                            document.getElementById('showTreeBtn').style.display = 'inline-block';
+                        } else {
+                            document.getElementById('showTreeBtn').style.display = 'none';
+                        }
                         hideLoading();
                     })
                     .catch(error => {
+                        csvProcessingController = null; // Reset controller on error/abort
+                        hideLoading(); // Hide loading overlay
                         if (error.name === 'AbortError') {
                             console.log('Fetch aborted (CSV processing cancelled by user).');
+                            alert("CSV processing cancelled.");
                         } else {
                             console.error('Error processing file:', error);
+                            // Display specific error from backend if available
                             alert(`Error processing file: ${error.message}`);
                         }
-                        hideLoading();
-                        csvProcessingController = null;
+                        // Optionally clear displays on error
+                        document.getElementById('heatmap').innerHTML = '<p style="color: red; text-align: center;">Could not process CSV data.</p>';
+                        d3.select("#inlineDendrogramSvg").selectAll("*").remove();
+                        const treeInfoSpan = document.getElementById('treeInfoSpan');
+                        if(treeInfoSpan) treeInfoSpan.textContent = '';
+                        const timeInfoSpan = document.getElementById('timeInfoSpan');
+                        if(timeInfoSpan) timeInfoSpan.textContent = '';
+                        updateLegend(); // Update legend to show global (likely empty) state
                     });
                 };
                 reader.onerror = function(e) {
                     console.error("Error reading file:", e);
                     alert("Error reading file.");
                     hideLoading();
-                    csvProcessingController = null;
+                    csvProcessingController = null; // Reset controller
                 };
                 reader.readAsText(file);
             }
-            event.target.value = null;
+            event.target.value = null; // Allow re-uploading the same file
         });
 
+        // --- Other event listeners (download, filters, pagination, etc.) ---
+        // ... (ensure all previously added listeners are still here) ...
+
+        // --- Listener for Hide/Show Dendrogram Buttons ---
+        const hideBtn = document.getElementById('hideTreeBtn');
+        const showBtn = document.getElementById('showTreeBtn');
+        if (hideBtn) { hideBtn.addEventListener('click', hideDendrogram); }
+        else { console.error("Hide Tree button not found."); }
+        if (showBtn) { showBtn.addEventListener('click', showDendrogram); }
+        else { console.error("Show Tree button not found."); }
+
+        // --- Listener for Sidebar Layout Selector ---
+        const sidebarLayoutSelect = document.getElementById('sidebarLayoutSelect');
+        if(sidebarLayoutSelect) sidebarLayoutSelect.addEventListener('change', applySidebarLayout);
+
+        // --- Listener for Main Filter Button ---
+        const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+        if(applyFiltersBtn) applyFiltersBtn.addEventListener('click', updateHeatmap);
+
+        // --- Listener for Main Table Pagination Button ---
+        const goPageBtn = document.getElementById('goPageBtn');
+        if(goPageBtn) goPageBtn.addEventListener('click', function () {
+            let pageInput = document.getElementById('currentPageInput');
+            let page = parseInt(pageInput.value, 10);
+            const totalPagesStr = document.getElementById('totalPages').textContent;
+            const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
+            if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity) && currentClusterID) {
+                loadClusterTablePage(currentClusterID, page);
+            } else { alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`); }
+        });
+
+        // --- Listeners for Main Graph Size Controls ---
+        const nodeSizeMin = document.getElementById('nodeSizeMin');
+        const nodeSizeMax = document.getElementById('nodeSizeMax');
+        const edgeWidthMin = document.getElementById('edgeWidthMin');
+        const edgeWidthMax = document.getElementById('edgeWidthMax');
+        if(nodeSizeMin) nodeSizeMin.addEventListener('input', applySizeControls);
+        if(nodeSizeMax) nodeSizeMax.addEventListener('input', applySizeControls);
+        if(edgeWidthMin) edgeWidthMin.addEventListener('input', applySizeControls);
+        if(edgeWidthMax) edgeWidthMax.addEventListener('input', applySizeControls);
+
+        // --- Listeners for Edge Filter Panel ---
+        const applyEdgeFilterBtn = document.getElementById('applyEdgeFilterBtn');
+        const clearEdgeFilterBtn = document.getElementById('clearEdgeFilterBtn');
+        if(applyEdgeFilterBtn) applyEdgeFilterBtn.addEventListener('click', applyEdgeFilter);
+        if(clearEdgeFilterBtn) clearEdgeFilterBtn.addEventListener('click', clearEdgeFilter);
+
         // --- Listener for Download Button ---
-        document.getElementById('downloadButton').addEventListener('click', function() {
-            window.location.href = `${API_BASE_URL}/download_csv`;
+        const downloadButton = document.getElementById('downloadButton');
+        if(downloadButton) downloadButton.addEventListener('click', function() {
+            // Add check if data exists?
+            if(global_df && global_df.length > 0) { // Check if global_df is populated client-side (if kept)
+                window.location.href = `${API_BASE_URL}/download_csv`;
+            } else {
+                // Check backend state via time_info or another endpoint?
+                fetch(`${API_BASE_URL}/time_info`).then(res => {
+                    if(res.ok) {
+                        window.location.href = `${API_BASE_URL}/download_csv`;
+                    } else {
+                        alert("No processed data available to download. Please upload a CSV file first.");
+                    }
+                }).catch(() => alert("Could not check data status. Please upload a CSV file first."));
+            }
         });
 
         // --- Listener for Sidebar Pagination ---
-        sidebarGoPageBtn.addEventListener('click', function () {
+        const sidebarGoPageBtn = document.getElementById('sidebarGoPageBtn');
+        if (sidebarGoPageBtn) sidebarGoPageBtn.addEventListener('click', function () {
             let pageInput = document.getElementById('sidebarCurrentPageInput');
             let page = parseInt(pageInput.value, 10);
             const totalPagesStr = document.getElementById('sidebarTotalPages').textContent;
@@ -1711,201 +1862,426 @@
         });
 
         // --- Listener for Sidebar Reset Button ---
-        resetSidebarBtn.addEventListener('click', () => {
+        const resetSidebarBtn = document.getElementById('resetSidebarBtn');
+        if(resetSidebarBtn) resetSidebarBtn.addEventListener('click', () => {
             console.log("Resetting sidebar view and associated highlights.");
             clearSidebarVisualization();
-            resetHeatmapHighlights();
-            highlightTreeClusters();
+            resetHeatmapHighlights(); // Resets heatmap cell colors
+            highlightTreeClusters(); // Resets tree node colors/styles
             selectedNodeId = null;
-            document.getElementById('sidebarLayoutSelect').value = 'cose';
-            updateLegend();
+            document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
+            updateLegend(); // Update legend to global scope if sidebar is cleared
             console.log("Sidebar reset complete.");
         });
 
         // --- Listener for Sidebar Toggle Button ---
-        sidebarToggleBtn.addEventListener('click', () => toggleSidebar());
+        const sidebarToggleBtn = document.getElementById('sidebar-toggle');
+        if(sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', () => toggleSidebar());
 
         // --- Listener for Dendrogram Sort Metric Dropdown ---
         const metricSelect = document.getElementById('dendrogramSortMetricSelect');
         if (metricSelect) {
             metricSelect.addEventListener('change', () => {
                 if (window.lastTreeData) {
-                    // Redraw using the stored height to prevent shrinking
                     console.log(`Redrawing dendrogram, ordering by: ${metricSelect.value}`);
-                    showInlineDendrogram(window.lastTreeData, currentDendrogramHeight); // <<< USE STORED HEIGHT
-                    resetInlineZoom()
+                    // Use the stored height to prevent shrinking on redraw
+                    showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
+                    // Reset zoom after redraw based on new sort? Optional.
+                    // resetInlineZoom();
                 } else {
-                     console.warn("Cannot redraw dendrogram: No tree data available (window.lastTreeData is null). Load tree first.");
+                    console.warn("Cannot redraw dendrogram: No tree data available (window.lastTreeData is null). Load tree first.");
                 }
             });
         }
-        // --- END Listener ---
+
+        // --- Listener for Threshold Slider ---
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValueSpan = document.getElementById('thresholdValue');
+
+        if (thresholdSlider && thresholdValueSpan) {
+            thresholdSlider.addEventListener('input', () => {
+                const percentage = parseInt(thresholdSlider.value, 10);
+                thresholdValueSpan.textContent = percentage + '%';
+
+                const svg = d3.select("#inlineDendrogramSvg");
+                const svgNode = svg.node();
+                if (!svgNode) return;
+                const svgContent = svg.select("g"); // The group affected by zoom/pan
+
+                // Use the stored processed hierarchy root and calculated layout width
+                const root = window.lastTreeRoot;
+                const treeLayoutWidth = window.currentLayoutWidth; // Width used for layout
+
+                if (!root || svgContent.empty() || treeLayoutWidth === undefined) { // Check treeLayoutWidth too
+                    // console.warn("Stored tree root, SVG content, or layout width not ready for threshold update.");
+                    svg.select("#threshold-bar").style("display", "none");
+                    return; // Exit if essential elements aren't ready
+                }
+
+                const allVisualNodes = svgContent.selectAll('.node'); // The <g> elements in the SVG
+
+                if (allVisualNodes.empty()) {
+                    svg.select("#threshold-bar").style("display", "none");
+                    return;
+                }
+
+                // --- Calculate Threshold Y in D3 Layout Coordinate System ---
+                // Height used during layout calculation (must be consistent with showInlineDendrogram)
+                const height = Math.max(200, currentDendrogramHeight - margin.top - margin.bottom);
+                // Percentage maps directly to the layout height (assuming root y=0, leaves y=height)
+                const thresholdLayoutY = height * (percentage / 100);
+
+                // --- Gray out Nodes based on Stored Layout Y Coordinate ---
+                // D3 binds the hierarchy node data (like 'd') to the visual elements (<g class="node">)
+                allVisualNodes.each(function(d) { // 'd' here *is* the bound hierarchy node data
+                    if (d && typeof d.y === 'number') { // Check if data 'd' exists and has a numeric y property
+                        // Apply/remove class based on layout coordinate comparison
+                        d3.select(this).classed('grayed-out', d.y > thresholdLayoutY + 1e-6); // Add epsilon for floating point
+                    } else {
+                        // Optional: Handle cases where data binding might be missing or invalid
+                        // d3.select(this).classed('grayed-out', false); // Ensure it's not grayed out if data is bad
+                    }
+                });
+
+                // --- Position the Visual Threshold Bar ---
+                const transform = d3.zoomTransform(svgNode); // Get the current D3 zoom transform (k, x, y)
+
+                // --- CORRECTED VISUAL COORDINATE CALCULATION ---
+                // Incorporate margin.top before applying zoom scale/translation
+                const thresholdVisualY = ((thresholdLayoutY + margin.top) * transform.k) + transform.y;
+
+                // Incorporate margin.left before applying zoom scale/translation for horizontal extent
+                const barX1 = ((0 + margin.left) * transform.k) + transform.x; // Visual X for layout x=0 + margin
+                const barX2 = ((treeLayoutWidth + margin.left) * transform.k) + transform.x; // Visual X for layout x=layoutWidth + margin
+                // --- END CORRECTION ---
+
+                // Ensure bar is visible and update its position and width
+                svg.select("#threshold-bar")
+                    .style("display", null) // Make sure it's visible
+                    .attr("y1", thresholdVisualY)
+                    .attr("y2", thresholdVisualY)
+                    .attr("x1", barX1)
+                    .attr("x2", barX2);
+
+            }); // End of event listener callback
+
+            // --- Initial Trigger Logic ---
+            // This part tries to trigger the slider's 'input' event once after the initial tree render.
+            if (window.lastTreeData) { // Check if raw data exists (used as proxy for tree load attempt)
+                requestAnimationFrame(() => { // Wait for next frame render cycle
+                    const initialSlider = document.getElementById('thresholdSlider');
+                    // Ensure the processed root AND the SVG content group exist before triggering
+                    if (initialSlider && window.lastTreeRoot && d3.select("#inlineDendrogramSvg g").node()) {
+                         console.log("Triggering initial threshold calculation.");
+                         initialSlider.dispatchEvent(new Event('input'));
+                    } else {
+                         console.warn("Initial threshold trigger skipped: Processed root or SVG content not ready yet.");
+                         // Attempt to hide the bar if it can't be positioned initially
+                         d3.select("#threshold-bar").style("display", "none");
+                    }
+                 });
+            } else {
+                 // Ensure bar is hidden if no tree data exists on load
+                 d3.select("#threshold-bar").style("display", "none");
+            }
+
+        } else { // End of check for slider/span elements
+            console.error("Could not find threshold slider or value span elements.");
+        }
 
     }); // End DOMContentLoaded
 
     // --- BEGIN Dendrogram JS Functions ---
-    function showInlineDendrogram(data, svgH = 400) { // Keep default param
-        currentDendrogramHeight = svgH; // <<< STORE the height being used
+    function showInlineDendrogram(data, svgH = 400) {
+        const containerDiv = document.getElementById("inline-dendrogram-container");
+        if (!containerDiv) {
+            console.error("Dendrogram container div (#inline-dendrogram-container) not found! Cannot render tree.");
+            const svg = d3.select("#inlineDendrogramSvg");
+            svg.selectAll("*").remove();
+            svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+            .text("Error: Container element not found.");
+            document.getElementById("treeControls").style.display = "none";
+            // Clear info spans if container is missing
+            const treeInfoSpan = document.getElementById('treeInfoSpan');
+            if (treeInfoSpan) treeInfoSpan.textContent = '';
+            const timeInfoSpan = document.getElementById('timeInfoSpan');
+            if (timeInfoSpan) timeInfoSpan.textContent = '';
+            window.lastTreeRoot = null; // Reset stored root on error
+            return;
+        }
+
+        currentDendrogramHeight = svgH;
         document.getElementById('dendrogramCard').style.display = 'block';
         document.getElementById('showTreeBtn').style.display = 'none';
 
-        const containerDiv = document.getElementById("inline-dendrogram-container");
-        containerDiv.style.height = `${svgH}px`; // Set container height
+        containerDiv.style.height = `${svgH}px`; // Set container height based on input
 
         const svg = d3.select("#inlineDendrogramSvg");
         svg.selectAll("*").remove(); // Clear previous drawing
 
+        // Add the threshold bar line (initially invisible/unpositioned)
+        svg.append("line")
+            .attr("id", "threshold-bar")
+            .attr("stroke", "rgba(220, 53, 69, 0.7)")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5 3")
+            .style("pointer-events", "none")
+            .style("display", "none"); // Initially hidden
+
+        // --- Clear Info Spans Initially ---
+        const treeInfoSpan = document.getElementById('treeInfoSpan');
+        if (treeInfoSpan) treeInfoSpan.textContent = '';
+        // Time info is updated separately by updateTimeInfoDisplay()
+
         if (!data || data.id === undefined || data.dist === undefined) {
             console.error("Invalid or empty tree data received:", data);
             svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
-               .text("No hierarchical data available or error loading.");
+            .text("No hierarchical data available or error loading.");
             document.getElementById("treeControls").style.display = "none";
+            // Ensure info spans are cleared on error
+            if (treeInfoSpan) treeInfoSpan.textContent = '';
+            window.lastTreeRoot = null; // Reset stored root on error
             return;
         }
 
-        const margin = { top: 30, right: 30, bottom: 120, left: 30 };
-        const containerWidth = containerDiv.clientWidth || 600;
-        // Calculate drawing height based on the passed svgH
-        const height = Math.max(200, svgH - margin.top - margin.bottom);
-
+        // --- Basic Setup ---
+        const containerWidth = containerDiv.clientWidth || 600; // Use clientWidth as fallback
+        const height = Math.max(200, svgH - margin.top - margin.bottom); // Use global margin
         const root = d3.hierarchy(data); // Create hierarchy
 
-        // --- BEGIN MANUAL LAYOUT CALCULATION ---
+        // --- Calculate and Display Tree Info ---
+        const leafCount = root.leaves().length;
+        if (treeInfoSpan) {
+        treeInfoSpan.textContent = `(${leafCount} leaf nodes)`; // Update the span
+        }
+        // --- End Tree Info ---
 
-        // 1. Run d3.cluster() primarily to calculate DEPTH (y-coordinates)
-        const initialClusterLayout = d3.cluster().size([1, height]); // Use dummy width
-        initialClusterLayout(root);
-        // Now all nodes 'd' have a d.y based on their depth.
-
-        // 2. Get leaves AND the currently selected sort order
-        const leaves = root.leaves();
-        let sortedLeaves = [...leaves]; // Create a mutable copy
-
-        // --- Get selected metric and corresponding order ---
         const metricSelect = document.getElementById('dendrogramSortMetricSelect');
-        const selectedMetric = metricSelect ? metricSelect.value : 'Count'; // Default to 'Count'
-        const currentSortOrder = (window.heatmapSortOrders && window.heatmapSortOrders[selectedMetric]) ? window.heatmapSortOrders[selectedMetric] : null;
-        // ---
+        const selectedMetric = metricSelect ? metricSelect.value : 'Default';
+        const minLeafSpacing = 20;
 
-        // 3. Sort the LEAVES array according to the selected order (if available)
-        if (currentSortOrder && currentSortOrder.length > 0) {
-             console.log(`Applying manual layout based on heatmap '${selectedMetric}' sort order.`);
-             const orderMap = new Map(currentSortOrder.map((id, index) => [String(id), index]));
+        let layoutWidth; // Declare layoutWidth
 
-             sortedLeaves.sort((a, b) => {
-                 const aClusterId = String(a.data.cluster_id).trim();
-                 const bClusterId = String(b.data.cluster_id).trim();
-                 const aIndex = orderMap.get(aClusterId);
-                 const bIndex = orderMap.get(bClusterId);
-
-                 if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
-                 if (aIndex !== undefined) return -1;
-                 if (bIndex !== undefined) return 1;
-                 // Fallback for leaves NOT in map (sort by ID)
-                 const idA = parseInt(aClusterId, 10);
-                 const idB = parseInt(bClusterId, 10);
-                 if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
-                 return aClusterId.localeCompare(bClusterId);
-             });
+        // --- Conditional Layout Logic (Structure vs Metric) ---
+        if (selectedMetric === 'Default') {
+            console.log("Applying D3 default cluster layout (structure-based).");
+            // Default D3 cluster layout
+            const numLeaves = root.leaves().length;
+            const requiredWidth = numLeaves * minLeafSpacing;
+            const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
+            layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
+            window.currentLayoutWidth = layoutWidth; // Store final width for threshold bar
+            d3.cluster().size([layoutWidth, height])(root); // Calculates node.x and node.y
+            console.log(`Default layout width: ${layoutWidth}`);
         } else {
-             console.warn(`Sort order for metric '${selectedMetric}' unavailable, using default structural order for layout.`);
+            console.log(`Applying manual layout based on metric: ${selectedMetric}`);
+            // Manual layout based on metric sort order
+            // 1. Calculate d.y using d3.cluster
+            d3.cluster().size([1, height])(root); // Calculates d.y based on depth
+
+            // 2. Get leaves and sort them
+            const leaves = root.leaves();
+            let sortedLeaves = [...leaves];
+            const currentSortOrder = (window.heatmapSortOrders && window.heatmapSortOrders[selectedMetric]) ? window.heatmapSortOrders[selectedMetric] : null;
+
+            if (currentSortOrder && currentSortOrder.length > 0) {
+                console.log(`Using heatmap '${selectedMetric}' sort order.`);
+                // Use heatmap sort order
+                const orderMap = new Map(currentSortOrder.map((id, index) => [String(id), index]));
+                sortedLeaves.sort((a, b) => {
+                    const aClusterId = String(a.data.cluster_id).trim();
+                    const bClusterId = String(b.data.cluster_id).trim();
+                    const aIndex = orderMap.get(aClusterId);
+                    const bIndex = orderMap.get(bClusterId);
+                    if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
+                    if (aIndex !== undefined) return -1;
+                    if (bIndex !== undefined) return 1;
+                    // Fallback sort (numeric if possible)
+                    const idA = parseInt(aClusterId, 10); const idB = parseInt(bClusterId, 10);
+                    if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
+                    return aClusterId.localeCompare(bClusterId); // String fallback
+                });
+            } else {
+                // Fallback sort (numeric if possible, else string)
+                console.warn(`Sort order for metric '${selectedMetric}' unavailable, using fallback structural order.`);
+                sortedLeaves.sort((a,b) => {
+                    const idA = parseInt(String(a.data.cluster_id).trim(), 10);
+                    const idB = parseInt(String(b.data.cluster_id).trim(), 10);
+                    if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
+                    return String(a.data.cluster_id).trim().localeCompare(String(b.data.cluster_id).trim());
+                });
+            }
+
+            // 3. Calculate layout width based on sorted leaf spacing
+            const numLeaves = sortedLeaves.length;
+            const requiredWidth = numLeaves * minLeafSpacing;
+            const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
+            layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
+            window.currentLayoutWidth = layoutWidth; // Store final width
+
+            // 4. Manually assign x coordinates to leaves
+            const leafSpacing = numLeaves > 1 ? layoutWidth / (numLeaves - 1) : layoutWidth / 2;
+            sortedLeaves.forEach((leaf, i) => { leaf.x = i * leafSpacing; });
+
+            // 5. Manually calculate internal node x positions (average of children)
+            root.eachAfter(node => {
+                if (!node.children || node.children.length === 0) return;
+                node.x = d3.mean(node.children, d => d.x); // Use d3.mean for clarity
+            });
+            console.log(`Manual layout width for ${selectedMetric}: ${layoutWidth}`);
         }
 
-        // 4. Calculate layout width based on number of leaves
-        const numLeaves = sortedLeaves.length;
-        const minLeafSpacing = 14;
-        const requiredWidth = numLeaves * minLeafSpacing;
-        const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
-        const layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
-
-        // 5. Assign x coordinates to leaves based on the sortedLeaves array order
-        const leafSpacing = numLeaves > 1 ? layoutWidth / (numLeaves - 1) : layoutWidth / 2;
-        sortedLeaves.forEach((leaf, i) => {
-            leaf.x = i * leafSpacing;
-        });
-
-        // 6. Recursively calculate x for internal nodes as the mean of their children's x
-        root.eachAfter(node => {
-            if (!node.children) return; // Skip leaves
-            let childXSum = 0;
-            node.children.forEach(child => { childXSum += child.x; });
-            node.x = childXSum / node.children.length;
-        });
-
-        // --- END MANUAL LAYOUT CALCULATION ---
-
+        // <<< STORE THE PROCESSED ROOT WITH COORDINATES >>>
+        window.lastTreeRoot = root;
+        // <<< END STORING ROOT >>>
 
         // --- Rendering Code ---
-        const viewBoxWidth = layoutWidth + margin.left + margin.right;
-        const viewBoxHeight = height + margin.top + margin.bottom; // Use layout height + margins
+        // <<< START VIEWBOX CALCULATION >>>
+        const viewBoxWidth = window.currentLayoutWidth + margin.left + margin.right;
+        const viewBoxHeight = height + margin.top + margin.bottom;
         svg.attr("viewBox", `0 0 ${viewBoxWidth} ${viewBoxHeight}`)
-           .attr("preserveAspectRatio", "xMidYMid meet");
+        .attr("preserveAspectRatio", "xMidYMid meet");
+        // <<< END VIEWBOX CALCULATION >>>
 
-        const svgContent = svg.append("g"); // Group for SVG content (for zoom)
+        const svgContent = svg.append("g"); // Group for zoomable content
 
         // Draw Links
         svgContent.selectAll(".link")
-            .data(root.links())
+            .data(root.links()) // Use links from the *processed* root
             .join("path")
             .attr("class", "link")
-            .attr("d", d => `M${d.source.x},${d.source.y}V${(d.source.y + d.target.y) / 2}H${d.target.x}V${d.target.y}`)
+            .attr("d", d => {
+                // Add validation for coordinates just in case layout produced non-numbers
+                const sourceX = typeof d.source.x === 'number' && isFinite(d.source.x) ? d.source.x : 0;
+                const sourceY = typeof d.source.y === 'number' && isFinite(d.source.y) ? d.source.y : 0;
+                const targetX = typeof d.target.x === 'number' && isFinite(d.target.x) ? d.target.x : 0;
+                const targetY = typeof d.target.y === 'number' && isFinite(d.target.y) ? d.target.y : 0;
+                const midY = (sourceY + targetY) / 2;
+                const validMidY = typeof midY === 'number' && isFinite(midY) ? midY : sourceY;
+                // Apply margin.left and margin.top offset to rendering coordinates
+                return `M${sourceX + margin.left},${sourceY + margin.top}V${validMidY + margin.top}H${targetX + margin.left}V${targetY + margin.top}`;
+            })
             .attr("fill", "none").attr("stroke", "#ccc").attr("stroke-width", 1.5);
 
         // Draw Node groups
         const node = svgContent.selectAll(".node")
-            .data(root.descendants())
+            .data(root.descendants()) // Use descendants from the *processed* root
             .join("g")
             .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf"))
-            .attr("transform", d => `translate(${d.x},${d.y})`);
+            .attr("transform", d => {
+                // Add validation for coordinates
+                const x = typeof d.x === 'number' && isFinite(d.x) ? d.x : 0;
+                const y = typeof d.y === 'number' && isFinite(d.y) ? d.y : 0;
+                // Apply margin.left and margin.top offset here as well
+                return `translate(${x + margin.left},${y + margin.top})`;
+            });
 
         // Draw Circles
         node.append("circle").attr("r", 4).attr("fill", d => d.children ? "#555" : "#999");
 
-        // Draw Labels (Restoring Rotation)
+        // Draw Labels
         node.append("text")
             .attr("dy", "0.31em")
-            .attr("y", d => d.children ? -10 : 10) // Offset labels from node circle
-            .attr("text-anchor", d => d.children ? "middle" : "start") // Anchor middle for internal, start for leaves before rotation
+            .attr("y", d => d.children ? -10 : 10)
+            .attr("text-anchor", d => d.children ? "middle" : "start")
             .attr("font-size", "9px")
             .attr("fill", "#333")
-            .text(d => d.data.id || "") // Use node ID (e.g., "Cluster X") for label
+            .text(d => d.data.id || "") // Use node ID from original data
             .style("user-select", "none")
-            // Apply transform only to leaf nodes using .filter()
             .filter(d => !d.children)
-                .attr("transform", "translate(4, 0) rotate(45)"); // Apply rotation and slight offset
+                .attr("transform", "translate(4, 0) rotate(45)");
 
+        // --- Zoom and Pan ---
+        // <<< START CORRECTED INITIAL TRANSFORM CALCULATION >>>
+        let dx = 0; // Default translation
+        let dy = 0;
+        let initialScale = 1; // Default scale
 
-        // --- Zoom and Controls ---
-        let dx = margin.left;
-        let dy = margin.top;
-        let initialScale = 1;
-        // Calculate initial transform for centering/fitting (optional refinement)
         try {
+            // Get bounds *after* rendering the content AND applying margins
             const bounds = svgContent.node().getBBox();
+
             if (bounds.width > 0 && bounds.height > 0) {
-                 dx = (containerWidth / initialScale - bounds.width) / 2 - bounds.x / initialScale + (margin.left / initialScale);
-                 dy = margin.top / initialScale;
-           }
-        } catch (e) { console.error("Error calculating tree bounds for initial zoom:", e); }
+                 // Calculate scales needed to fit bounds into the VIEWBOX dimensions
+                 const scaleX = viewBoxWidth / bounds.width;
+                 const scaleY = viewBoxHeight / bounds.height;
+
+                 // Use the smaller scale factor to ensure the entire tree fits ('meet')
+                 // Apply a slight padding (e.g., 95%)
+                 initialScale = Math.min(scaleX, scaleY) * 0.95;
+
+                 // Ensure initial scale is not excessively small (minimum zoom) or large (max zoom)
+                 initialScale = Math.max(0.1, Math.min(initialScale, 2)); // Example limits
+
+                 // Calculate translation needed to center the SCALED bounds within the VIEWBOX
+                 dx = (viewBoxWidth / 2) - ((bounds.x + bounds.width / 2) * initialScale);
+                 dy = (viewBoxHeight / 2) - ((bounds.y + bounds.height / 2) * initialScale);
+
+                 // Basic sanity check for calculated values
+                 if (isNaN(dx)) dx = 0;
+                 if (isNaN(dy)) dy = 0;
+                 if (isNaN(initialScale) || initialScale <= 0) initialScale = 1;
+
+            } else {
+                console.warn("Could not get valid bounds for initial zoom calculation. Using defaults.");
+                dx = margin.left; // Fallback: Use margins
+                dy = margin.top;
+                initialScale = 1;
+            }
+        } catch (e) {
+             console.error("Error calculating tree bounds for initial zoom:", e);
+             dx = margin.left; // Fallback on error
+             dy = margin.top;
+             initialScale = 1;
+        }
+
+        // Store the calculated (or default) initial transform
         initialTreeTransform = d3.zoomIdentity.translate(dx, dy).scale(initialScale);
+        console.log("Calculated Initial Transform:", initialTreeTransform);
+        // <<< END CORRECTED INITIAL TRANSFORM CALCULATION >>>
 
-        // Setup and Apply Zoom
         const zoomBehavior = d3.zoom()
-            .scaleExtent([0.05, 10]) // Set zoom scale limits
-            .on("zoom", (event) => {
-                svgContent.attr("transform", event.transform); // Apply zoom transform to content group
+            .scaleExtent([0.05, 10]) // Define zoom limits
+             // Define the area within which the user can pan
+            .translateExtent([[0, 0], [viewBoxWidth, viewBoxHeight]])
+            .on("zoom.main", (event) => {
+                svgContent.attr("transform", event.transform);
+                // Trigger threshold update after the SVG content has been transformed
+                const thresholdSlider = document.getElementById('thresholdSlider');
+                if (thresholdSlider) {
+                    requestAnimationFrame(() => { // Ensures D3 transform is rendered
+                        thresholdSlider.dispatchEvent(new Event('input'));
+                    });
+                }
             });
-        window.inlineZoom = zoomBehavior; // Store zoom behavior reference
-        svg.call(zoomBehavior) // Apply zoom behavior to the main SVG element
-           .call(zoomBehavior.transform, initialTreeTransform) // Set initial zoom state
-           .on("dblclick.zoom", () => { // Reset zoom on double-click
-               svg.transition().duration(500).call(zoomBehavior.transform, initialTreeTransform);
-           });
 
-        document.getElementById("treeControls").style.display = "flex"; // Show controls
-        window.lastTreeData = data; // Store data for redraws
+        window.inlineZoom = zoomBehavior;
+        svg.call(zoomBehavior)
+            // Apply the calculated initial transform immediately
+            .call(zoomBehavior.transform, initialTreeTransform)
+            .on("dblclick.zoom", null); // Disable double-click zoom reset (use button)
+
+
+        // --- Final Steps ---
+        document.getElementById("treeControls").style.display = "flex";
+        window.lastTreeData = data; // Store raw data
         highlightTreeClusters(new Set(clusterHighlightColors.keys())); // Apply any existing highlights
-    }
+
+        // Apply initial threshold state *after* drawing and storing the processed root
+        const initialSlider = document.getElementById('thresholdSlider');
+        if (initialSlider) {
+            requestAnimationFrame(() => { // Wait for render cycle
+                // Ensure the processed root exists before triggering the initial threshold calc
+                if (window.lastTreeRoot && d3.select("#inlineDendrogramSvg g").node()) {
+                    console.log("Triggering initial threshold calculation after draw.");
+                    initialSlider.dispatchEvent(new Event('input'));
+                } else {
+                    console.warn("Initial threshold trigger skipped: Processed root node or SVG content not available yet.");
+                    d3.select("#threshold-bar").style("display", "none"); // Hide bar if it cannot be calculated
+                }
+            });
+        }
+    } // --- End of showInlineDendrogram ---
 
     function highlightTreeClusters(selectedClusterIds = new Set()) {
         const svgContent = d3.select("#inlineDendrogramSvg g");
@@ -2079,69 +2455,170 @@
           });
     }
 
+    function formatDuration(seconds) {
+        if (seconds === null || seconds === undefined || isNaN(seconds) || seconds < 0) {
+            return "N/A";
+        }
+        if (seconds < 60) {
+            return `${seconds.toFixed(2)}s`; // More concise seconds
+        }
+        let minutes = Math.floor(seconds / 60);
+        let remainingSeconds = Math.floor(seconds % 60); // Use floor for whole seconds
+        if (minutes < 60) {
+            return `${minutes}m ${remainingSeconds}s`;
+        }
+        let hours = Math.floor(minutes / 60);
+        let remainingMinutes = minutes % 60;
+        if (hours < 24) {
+            return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`;
+        }
+        let days = Math.floor(hours / 24);
+        let remainingHours = hours % 24;
+        // Omit seconds for durations >= 1 day for brevity
+        return `${days}d ${remainingHours}h ${remainingMinutes}m`;
+    }
+
+    function updateTimeInfoDisplay() {
+        const timeInfoSpan = document.getElementById('timeInfoSpan');
+        if (!timeInfoSpan) {
+            console.error("timeInfoSpan element not found");
+            return;
+        }
+
+        timeInfoSpan.textContent = 'Loading time info...'; // Indicate loading
+
+        fetch(`${API_BASE_URL}/time_info`)
+            .then(response => {
+            if (!response.ok) {
+                // If 404 (no data), clear the span. Otherwise, show error.
+                if (response.status === 404) {
+                    return response.json().then(err => {
+                        console.log("Time info not available:", err.error);
+                        return null; // Resolve with null to clear display
+                    });
+                }
+                // For other errors, try to get text, then throw
+                return response.text().then(text => { throw new Error(text || `HTTP error ${response.status}`) });
+            }
+            return response.json();
+            })
+            .then(data => {
+            if (data && data.start_time && data.end_time && data.duration_seconds !== null && !isNaN(data.duration_seconds)) {
+                // Attempt to parse dates safely
+                let startTimeStr = "Invalid Date";
+                let endTimeStr = "Invalid Date";
+                try {
+                    startTimeStr = new Date(data.start_time).toLocaleString();
+                    endTimeStr = new Date(data.end_time).toLocaleString();
+                    // Check if parsing resulted in "Invalid Date"
+                    if (startTimeStr === "Invalid Date" || endTimeStr === "Invalid Date") {
+                        throw new Error("Date parsing resulted in Invalid Date");
+                    }
+                } catch (dateError) {
+                    console.error("Error formatting dates:", dateError);
+                    // Use raw ISO strings as fallback if parsing fails
+                    startTimeStr = data.start_time || "N/A";
+                    endTimeStr = data.end_time || "N/A";
+                }
+
+                const durationFormatted = formatDuration(data.duration_seconds);
+                timeInfoSpan.textContent = `| Start: ${startTimeStr} | End: ${endTimeStr} | Duration: ${durationFormatted}`;
+            } else {
+                console.log("Clearing time info span (no/incomplete data received).");
+                timeInfoSpan.textContent = ''; // Clear if no data or incomplete data
+            }
+            })
+            .catch(error => {
+            console.error('Error fetching or processing time info:', error);
+            timeInfoSpan.textContent = '| Time info unavailable'; // Display error message
+            });
+        }
 
     function reclusterAndRedraw() {
-      const resolutionInput = document.getElementById('resolutionInput');
-      const resolution = parseFloat(resolutionInput.value);
-      const messageDiv = document.getElementById('reclusterMessage');
+        const resolutionInput = document.getElementById('resolutionInput');
+        const resolution = parseFloat(resolutionInput.value);
+        const messageDiv = document.getElementById('reclusterMessage');
+        const treeInfoSpan = document.getElementById('treeInfoSpan'); // Get info span
 
-      if (isNaN(resolution) || resolution <= 0) {
-          messageDiv.textContent = "Please enter a valid resolution > 0.";
-          resolutionInput.focus();
-          return;
-      }
+        if (isNaN(resolution) || resolution <= 0) {
+            messageDiv.textContent = "Please enter a valid resolution > 0.";
+            resolutionInput.focus();
+            return;
+        }
 
-      messageDiv.textContent = "Applying resolution and reclustering..."; // Loading message
-      console.log(`Requesting recluster with resolution: ${resolution}`);
+        messageDiv.textContent = "Applying resolution and reclustering..."; // Loading message
+        if (treeInfoSpan) treeInfoSpan.textContent = ''; // Clear tree info during recluster
+        console.log(`Requesting recluster with resolution: ${resolution}`);
+        showLoading(); // Show main loading overlay
 
-      // Fetch new hierarchy data with the specified resolution
-      fetch(`${API_BASE_URL}/hierarchical_clusters?resolution=${resolution}`)
-          .then(response => {
-                if (!response.ok) { return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) }); }
-                return response.json();
-          })
-          .then(treeData => {
-                console.log("Reclustered tree data received:", treeData);
+        // Fetch new hierarchy data with the specified resolution
+        fetch(`<span class="math-inline">\{API\_BASE\_URL\}/hierarchical\_clusters?resolution\=</span>{resolution}`)
+            .then(response => {
+                    if (!response.ok) {
+                        // Try to parse error message from backend JSON response
+                        return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                    }
+                    return response.json();
+            })
+            .then(treeData => {
+                    console.log("Reclustered tree data received:", treeData);
 
-              // Check for structural changes to provide feedback
-                let currentLeafCount = 0;
-                (function countLeaves(node) {
-                    if (!node || typeof node !== 'object') return;
-                    if (!node.children || node.children.length === 0) currentLeafCount++;
-                    else node.children.forEach(countLeaves);
-                })(treeData);
+                    // Check for structural changes to provide feedback
+                    let currentLeafCount = 0;
+                    (function countLeaves(node) { // Simple recursive leaf counter
+                        if (!node || typeof node !== 'object') return;
+                        if (!node.children || node.children.length === 0) {
+                        if(node.cluster_id !== undefined) currentLeafCount++; // Count only actual leaves with cluster_id
+                        } else {
+                        node.children.forEach(countLeaves);
+                        }
+                    })(treeData);
 
-                const currentHash = JSON.stringify(treeData); // Basic structural hash
+                    // --- Update Tree Info Span ---
+                    if (treeInfoSpan) {
+                        treeInfoSpan.textContent = `(${currentLeafCount} leaf nodes)`;
+                    }
+                    // --- End Update ---
 
-                const structureChanged = (
-                    previousClusterCount === null ||
-                    currentLeafCount !== previousClusterCount ||
-                    currentHash !== previousClusterHash
-                );
+                    // Basic structural comparison (can be improved)
+                    const currentHash = JSON.stringify(treeData);
+                    const structureChanged = (
+                        previousClusterCount === null ||
+                        currentLeafCount !== previousClusterCount ||
+                        currentHash !== previousClusterHash
+                    );
 
-                previousClusterCount = currentLeafCount; // Update state
-                previousClusterHash = currentHash;      // Update state
+                    previousClusterCount = currentLeafCount; // Update state
+                    previousClusterHash = currentHash;      // Update state
 
-                if (structureChanged) {
-                    messageDiv.textContent = `Reclustering complete. ${currentLeafCount} leaf clusters found.`;
-                    showInlineDendrogram(treeData); // Redraw the dendrogram
-                    resetInlineZoom(); // Reset zoom after redraw
+                    if (structureChanged) {
+                        messageDiv.textContent = `Reclustering complete. ${currentLeafCount} leaf clusters found.`;
+                        showInlineDendrogram(treeData, currentDendrogramHeight); // Redraw with current height
+                        // Do NOT reset zoom automatically, let user do it if needed
+                        // resetInlineZoom();
 
-                    // --- IMPORTANT: Update the main heatmap view ---
-                    console.log("Updating heatmap after recluster...");
-                    updateHeatmap(); // This should use the updated cluster IDs from the backend
-                    updateLegend(); // Also update legend
-                    // --- End Heatmap Update ---
+                        // --- IMPORTANT: Update the main heatmap and legend ---
+                        console.log("Updating heatmap and legend after recluster...");
+                        updateHeatmap(); // This uses the updated cluster IDs from the backend
+                        updateLegend(); // Update legend based on new global state
+                        clearSidebarVisualization(); // Clear sidebar as clusters changed
+                        toggleSidebar(false); // Close sidebar
+                        // --- End Updates ---
 
-                } else {
-                    messageDiv.textContent = "No structural change in clusters. Try a different resolution.";
-                }
-          })
-          .catch(err => {
-              console.error("Error during recluster/redraw:", err);
-              messageDiv.textContent = `Error: ${err.message || "Failed to recluster."}`;
-          });
-    }
+                    } else {
+                        messageDiv.textContent = "No structural change in clusters. Try a different resolution.";
+                        // Even if no structural change, redraw to apply potential sorting changes if metric selected
+                        showInlineDendrogram(treeData, currentDendrogramHeight);
+                    }
+                    hideLoading(); // Hide loading overlay
+            })
+            .catch(err => {
+                console.error("Error during recluster/redraw:", err);
+                messageDiv.textContent = `Error: ${err.message || "Failed to recluster."}`;
+                if (treeInfoSpan) treeInfoSpan.textContent = ''; // Clear info on error
+                hideLoading(); // Hide loading overlay on error too
+            });
+        }
 
     function showCustomHeightInput() {
         // Use the stored height for the prompt default
@@ -2165,19 +2642,6 @@
             }
         }
     }
-
-    function resetInlineZoom() {
-      const svg = d3.select("#inlineDendrogramSvg");
-      if (window.inlineZoom) {
-          // Reset zoom with a smooth transition
-          svg.transition().duration(500)
-              .call(window.inlineZoom.transform, d3.zoomIdentity);
-            console.log("Inline dendrogram zoom reset.");
-      } else {
-          console.warn("Cannot reset zoom, zoom behavior not initialized.");
-      }
-    }
-
     // --- END Dendrogram JS Functions ---
   </script>
 </body>
