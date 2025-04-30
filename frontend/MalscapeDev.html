@@ -8,209 +8,369 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-        html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #333; background-color: #f8f9fa; overflow-x: hidden; }
-        body { display: flex; }
+ * { box-sizing: border-box; }
+ html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #333; background-color: #f8f9fa; overflow-x: hidden; }
+ body { display: flex; }
 
-        #sidebar {
-            width: 0;
-            height: 100vh;
-            background-color: #f1f3f5;
-            border-right: 1px solid #dee2e6;
-            padding: 0;
-            overflow-x: hidden;
-            overflow-y: auto;
-            transition: width 0.3s ease, padding 0.3s ease;
-            position: fixed;
-            top: 0;
-            left: 0;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            z-index: 1100;
-            display: flex;
-            flex-direction: column;
-        }
-        #sidebar.open {
-            width: 500px;
-            padding: 20px;
-        }
-        #sidebar-content {
-            opacity: 0;
-            transition: opacity 0.3s ease 0.1s;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        #sidebar.open #sidebar-content {
-            opacity: 1;
-            overflow: visible;
-        }
-        #sidebar-cy {
-            width: 100%;
-            height: 40%;
-            min-height: 250px;
-            border: 1px solid #ced4da;
-            border-radius: 6px;
-            background-color: #fff;
-            margin-top: 10px;
-            flex-shrink: 0;
-        }
+ #legend-container {
+     width: 220px;
+     background-color: #fff;
+     border-right: 1px solid #dee2e6;
+     padding: 16px 12px;
+     height: 100vh;
+     overflow-y: auto;
+     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+     position: fixed;
+     left: -220px;
+     top: 0;
+     z-index: 1050;
+     transition: left 0.3s ease;
+ }
+ #legend-container.visible {
+     left: 0;
+ }
 
-        #sidebar-toggle {
-            position: fixed;
-            top: 50%;
-            left: 0;
-            transform: translateY(-50%);
-            z-index: 1200;
-            background-color: #4299e1;
-            color: white;
-            border: none;
-            padding: 15px 8px;
-            border-radius: 0 6px 6px 0;
-            cursor: pointer;
-            font-size: 18px;
-            line-height: 1;
-            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
-            transition: background-color 0.2s ease, left 0.3s ease;
-            writing-mode: vertical-rl;
-            text-orientation: mixed;
-        }
-        #sidebar-toggle:hover {
-            background-color: #3182ce;
-        }
+ #sidebar {
+     width: 0;
+     height: 100vh;
+     background-color: #f1f3f5;
+     border-right: 1px solid #dee2e6;
+     padding: 0;
+     overflow-x: hidden;
+     overflow-y: auto;
+     transition: width 0.3s ease, padding 0.3s ease, left 0.3s ease, background-color 0.3s ease;
+     position: fixed;
+     top: 0;
+     left: 0;
+     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+     z-index: 1100;
+     display: flex;
+     flex-direction: column;
+ }
+ #sidebar.open {
+     width: 500px;
+     padding: 20px;
+     left: 220px;
+ }
+ #sidebar-content {
+     opacity: 0;
+     transition: opacity 0.3s ease 0.1s;
+     height: 100%;
+     display: flex;
+     flex-direction: column;
+     overflow: hidden;
+     position: relative;
+ }
+ #sidebar.open #sidebar-content {
+     opacity: 1;
+     overflow: visible;
+ }
+ #sidebar-cy {
+     width: 100%;
+     height: 40%;
+     min-height: 250px;
+     border: 1px solid #ced4da;
+     border-radius: 6px;
+     background-color: #fff;
+     margin-top: 10px;
+     flex-shrink: 0;
+ }
 
-        #main-container {
-             flex: 1;
-             padding: 24px;
-             height: 100vh;
-             overflow-y: auto;
-             transition: margin-left 0.3s ease;
-             margin-left: 0;
-             padding-left: 40px;
-        }
+ #sidebar-toggle {
+     position: fixed;
+     top: 50%;
+     left: 0;
+     transform: translateY(-50%);
+     z-index: 1200;
+     background-color: #4299e1;
+     color: white;
+     border: none;
+     padding: 15px 8px;
+     border-radius: 0 6px 6px 0;
+     cursor: pointer;
+     font-size: 18px;
+     line-height: 1;
+     box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+     transition: background-color 0.2s ease, left 0.3s ease;
+     writing-mode: vertical-rl;
+     text-orientation: mixed;
+ }
+ #sidebar-toggle:hover {
+     background-color: #3182ce;
+ }
 
-        #nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax { width: 200px; }
-        #legend-container { width: 220px; background-color: #fff; border-left: 1px solid #e9ecef; padding: 16px 12px; height: 100vh; overflow-y: auto; box-shadow: -4px 0 8px rgba(0,0,0,0.05); position: fixed; right: 0; top: 0; z-index: 1000; }
-        h2 { color: #2c3e50; margin-top: 0; margin-bottom: 24px; font-size: 28px; font-weight: 600; border-bottom: 2px solid #4299e1; padding-bottom: 8px; display: inline-block; }
-        h3 { color: #2c3e50; font-size: 16px; margin-top: 0; margin-bottom: 12px; font-weight: 600; }
-        #sidebar h3 { font-size: 18px; margin-bottom: 10px; flex-shrink: 0; }
+ #main-container {
+     flex: 1;
+     padding: 24px;
+     height: 100vh;
+     overflow-y: auto;
+     transition: margin-left 0.3s ease;
+     margin-left: 0;
+     padding-left: 40px;
+ }
 
-        .control-group { margin-bottom: 20px; padding: 16px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .sidebar-control {
-            padding: 8px 0;
-            margin-bottom: 5px;
-            background: none;
-            box-shadow: none;
-            border-radius: 0;
-        }
-        .sidebar-control label {
-            font-size: 13px;
-            margin-right: 5px;
-        }
+ #nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax { width: 200px; }
+ h2 { color: #2c3e50; margin-top: 0; margin-bottom: 24px; font-size: 28px; font-weight: 600; border-bottom: 2px solid #4299e1; padding-bottom: 8px; display: inline-block; }
+ h3 { color: #2c3e50; font-size: 16px; margin-top: 0; margin-bottom: 12px; font-weight: 600; }
+ #sidebar h3 { font-size: 18px; margin-bottom: 10px; flex-shrink: 0; }
 
-        label { display: inline-block; margin-right: 8px; font-weight: 500; color: #4a5568; }
-        input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; margin-right: 12px; margin-bottom: 8px; transition: border-color 0.2s; }
-        input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus { border-color: #4299e1; outline: none; box-shadow: 0 0 0 3px rgba(66,153,225,0.15); }
-        button { background-color: #4299e1; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; margin-right: 8px; }
-        button:hover { background-color: #3182ce; }
-        #loadMoreBtn { display: none; margin-top: 16px; background-color: #38a169; }
-        #loadMoreBtn:hover { background-color: #2f855a; }
-        #cy { width: 100%; height: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 24px; margin-bottom: 24px; background-color: #fff; display: none; }
+ .control-group { margin-bottom: 20px; padding: 16px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+ .sidebar-control {
+     padding: 8px 0;
+     margin-bottom: 5px;
+     background: none;
+     box-shadow: none;
+     border-radius: 0;
+     flex-shrink: 0;
+ }
+ .sidebar-control label {
+     font-size: 13px;
+     margin-right: 5px;
+ }
 
-        #table-container { margin-top: 24px; margin-bottom: 24px; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: none; max-height: 300px; overflow-y: auto; }
-        #table-container table { width: 100%; border-collapse: collapse; table-layout: auto; }
-        #table-container th, #table-container td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; text-align: left; white-space: nowrap; }
-        #table-pagination { display: none; margin-top: 8px; text-align: center; }
-        #table-pagination input { width: 60px; text-align: center; }
+ mark {
+    background-color: yellow;
+    color: black;
+    padding: 0.1em;
+    border-radius: 3px;
+ }
 
-        #tooltip { position: absolute; display: none; background: rgba(255, 255, 255, 0.95); border-radius: 4px; padding: 8px 12px; font-size: 13px; color: #2d3748; pointer-events: none; z-index: 2000; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px; line-height: 1.5; border: 1px solid #dee2e6; }
-        .color-box { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; border: 1px solid #ccc; }
-        #legend { font-size: 12px; line-height: 1.4; table-layout: fixed; width: 100%;}
-        #legend th, #legend td { padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
-        #legend td:first-child, #legend th:first-child { width: 45%; }
-        #legend td:nth-child(2), #legend th:nth-child(2) { width: 25%; }
-        #legend td:last-child, #legend th:last-child { width: 30%; text-align: right;}
-        #backToHeatmap { margin: 20px 0; padding: 8px 16px; font-size: 14px; display: none; }
-        #edgeFilterPanel { position: absolute; top: 80px; right: 260px; width: 320px; padding: 12px; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: none; z-index: 999; }
-        #edgeFilterPanel h4 { margin-top: 0; margin-bottom: 8px; font-size: 16px; font-weight: 600; color: #2c3e50; }
-        #edgeFilterPanel label { display: block; margin-top: 8px; font-weight: 500; color: #4a5568; }
-        #edgeFilterPanel input { margin-bottom: 8px; width: 100%; }
-        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; flex-direction: column; }
-        .spinner { border: 8px solid #f3f3f3; border-top: 8px solid #4299e1; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 16px; }
-        .loading-text { font-size: 18px; color: #333; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #resetSidebarBtn { background-color: #6c757d; margin-top: 5px; margin-bottom: 10px; width: 100%; flex-shrink: 0; }
-        #resetSidebarBtn:hover { background-color: #5a6268; }
+ label { display: inline-block; margin-right: 8px; font-weight: 500; color: #4a5568; }
+ input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; margin-right: 12px; margin-bottom: 8px; transition: border-color 0.2s; }
+ input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus { border-color: #4299e1; outline: none; box-shadow: 0 0 0 3px rgba(66,153,225,0.15); }
+ button { background-color: #4299e1; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; margin-right: 8px; }
+ button:hover { background-color: #3182ce; }
+ #loadMoreBtn { display: none; margin-top: 16px; background-color: #38a169; }
+ #loadMoreBtn:hover { background-color: #2f855a; }
+ #cy { width: 100%; height: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 24px; margin-bottom: 24px; background-color: #fff; display: none; }
 
-        #sidebar-table-container {
-            margin-top: 15px;
-            flex-grow: 1;
-            overflow: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            background-color: #fff;
-            display: none;
-        }
-        #sidebar-table-container table {
-            font-size: 11px;
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: auto;
-        }
-        #sidebar-table-container th {
-            background-color: #f1f3f5;
-            padding: 8px 10px;
-            text-align: left;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            border-bottom: 2px solid #dee2e6;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-        #sidebar-table-container td {
-            padding: 8px 10px;
-            white-space: normal;
-            word-break: break-word;
-            border: none;
-            border-bottom: 1px solid #e9ecef;
-            vertical-align: top;
-            line-height: 1.4;
-        }
-        #sidebar-table-container tr:last-child td { border-bottom: none; }
-        #sidebar-table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
-        #sidebar-table-container tbody tr:hover { background-color: #e9ecef; }
+ #table-container { margin-top: 24px; margin-bottom: 24px; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: none; max-height: 300px; overflow-y: auto; }
+ #table-container table { width: 100%; border-collapse: collapse; table-layout: auto; }
+ #table-container th, #table-container td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; text-align: left; white-space: nowrap; }
+ #table-pagination { display: none; margin-top: 8px; text-align: center; }
+ #table-pagination input { width: 60px; text-align: center; }
+ #tooltip { position: absolute; display: none; background: rgba(255, 255, 255, 0.95); border-radius: 4px; padding: 8px 12px; font-size: 13px; color: #2d3748; pointer-events: none; z-index: 2000; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px; line-height: 1.5; border: 1px solid #dee2e6; }
+ .color-box { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; border: 1px solid #ccc; }
+ #legend { font-size: 12px; line-height: 1.4; table-layout: fixed; width: 100%;}
+ #legend th, #legend td { padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+ #legend td:first-child, #legend th:first-child { width: 45%; }
+ #legend td:nth-child(2), #legend th:nth-child(2) { width: 25%; }
+ #legend td:last-child, #legend th:last-child { width: 30%; text-align: right;}
+ #backToHeatmap { margin: 20px 0; padding: 8px 16px; font-size: 14px; display: none; }
+ #edgeFilterPanel { position: absolute; top: 80px; right: 20px; width: 320px; padding: 12px; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: none; z-index: 999; }
+ #edgeFilterPanel h4 { margin-top: 0; margin-bottom: 8px; font-size: 16px; font-weight: 600; color: #2c3e50; }
+ #edgeFilterPanel label { display: block; margin-top: 8px; font-weight: 500; color: #4a5568; }
+ #edgeFilterPanel input { margin-bottom: 8px; width: 100%; }
+ #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; flex-direction: column; }
+ .spinner { border: 8px solid #f3f3f3; border-top: 8px solid #4299e1; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 16px; }
+ .loading-text { font-size: 18px; color: #333; }
+ @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+ #resetSidebarBtn { background-color: #6c757d; margin-top: 5px; margin-bottom: 10px; width: 100%; flex-shrink: 0; }
+ #resetSidebarBtn:hover { background-color: #5a6268; }
 
-        #sidebar-table-container th,
-#sidebar-table-container td {
-  min-width: 150px;
-  word-break: break-word;
-}
-        #sidebar-table-pagination {
-            text-align: center;
-            margin-top: 8px;
-            display: none;
-            flex-shrink: 0;
-        }
-        #sidebar-table-pagination button { padding: 4px 8px; font-size: 12px; }
-        #sidebar-table-pagination input { width: 45px; font-size: 12px; padding: 4px 6px; }
+ #sidebar-table-search-container {
+      padding: 10px 0 5px 0;
+      flex-shrink: 0;
+      display: none;
+ }
+ #sidebar-table-search-container label {
+     font-weight: 600;
+     font-size: 13px;
+     margin-right: 5px;
+ }
+ #sidebarTableSearchInput {
+      width: calc(100% - 100px);
+      padding: 5px 8px;
+      font-size: 12px;
+ }
 
+ #sidebar-table-container {
+     margin-top: 15px;
+     flex-grow: 1;
+     overflow: auto;
+     border: 1px solid #dee2e6;
+     border-radius: 4px;
+     background-color: #fff;
+     display: none;
+     position: relative;
+ }
+ #sidebar-table-container table {
+     font-size: 11px;
+     width: 100%;
+     border-collapse: collapse;
+     table-layout: auto;
+ }
+ #sidebar-table-container th {
+     background-color: #f1f3f5;
+     padding: 8px 10px;
+     text-align: left;
+     position: sticky;
+     top: 0;
+     z-index: 1;
+     border-bottom: 2px solid #dee2e6;
+     font-weight: 600;
+     white-space: nowrap;
+ }
+ #sidebar-table-container td {
+     padding: 8px 10px;
+     white-space: normal;
+     word-break: break-word;
+     border: none;
+     border-bottom: 1px solid #e9ecef;
+     vertical-align: top;
+     line-height: 1.4;
+ }
+ #sidebar-table-container tr:last-child td { border-bottom: none; }
+ #sidebar-table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
+ #sidebar-table-container tbody tr:hover { background-color: #e9ecef; cursor: pointer; }
+
+ #sidebar-table-container th,
+ #sidebar-table-container td {
+   min-width: 150px;
+   word-break: break-word;
+ }
+ #sidebar-table-pagination {
+     text-align: center;
+     margin-top: 8px;
+     display: none;
+     flex-shrink: 0;
+ }
+ #sidebar-table-pagination button { padding: 4px 8px; font-size: 12px; }
+ #sidebar-table-pagination input { width: 45px; font-size: 12px; padding: 4px 6px; }
+
+ #sidebar-table-no-results {
+     text-align: center;
+     padding: 10px;
+     color: #6c757d;
+     display: none;
+ }
+
+ #sidebarFullscreenBtn {
+     position: absolute;
+     top: 0px;
+     right: 15px;
+     width: auto;
+     padding: 4px 8px;
+     font-size: 18px;
+     line-height: 1;
+     z-index: 1150;
+     background-color: #6c757d;
+     color: white;
+     border: 1px solid #5a6268;
+     border-radius: 4px;
+     cursor: pointer;
+     transition: background-color 0.2s ease, border-color 0.2s ease;
+     margin: 0;
+ }
+ #sidebarFullscreenBtn:hover {
+     background-color: #5a6268;
+     border-color: #4e555b;
+ }
+
+
+ #legend-container.fullscreen-active {
+     display: block !important;
+     position: fixed !important;
+     left: 0 !important;
+     top: 0 !important;
+     height: 100vh !important;
+     width: 220px !important;
+     z-index: 1999 !important;
+     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+     border-right: 1px solid #dee2e6;
+     background-color: #fff;
+     overflow-y: auto;
+ }
+
+ #sidebar.fullscreen #sidebar-cy {
+    flex: 1 1 60%;
+    min-height: 150px !important;
+    height: auto !important;
+    margin-top: 0 !important;
+    border-radius: 6px 0 0 6px;
+    border: 1px solid #dee2e6;
+ }
+
+ #sidebar.fullscreen h3,
+ #sidebar.fullscreen #resetSidebarBtn,
+ #sidebar.fullscreen #sidebar-info,
+ #sidebar.fullscreen #sidebar-table-pagination {
+    display: none !important;
+    visibility: hidden !important;
+ }
+
+ #sidebar.fullscreen #sidebar-table-search-container {
+    display: block !important;
+    visibility: visible !important;
+ }
+
+
+ #sidebar.fullscreen #sidebar-cy {
+    flex: 1 1 65%;
+    min-height: 150px !important;
+    height: auto !important;
+    margin-top: 0 !important;
+    border-radius: 6px 0 0 6px;
+    border: 1px solid #dee2e6;
+ }
+
+ #sidebar.fullscreen #sidebar-table-container {
+    flex: 1 1 30%;
+    min-height: 100px;
+    height: auto !important;
+    margin-top: 10px !important;
+    display: block;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+ }
+
+ body.sidebar-fullscreen #main-container,
+ body.sidebar-fullscreen #sidebar-toggle {
+    display: none !important;
+    visibility: hidden !important;
+ }
     </style>
 </head>
 <body>
-  <div id="loading-overlay">
+  <div id="loading-overlay" title="Data is loading...">
     <div class="spinner"></div>
     <div class="loading-text">Loading, please wait...</div>
   </div>
 
-  <button id="sidebar-toggle">&#9776;</button>
+  <div id="legend-container" title="Shows protocol colors and statistics.">
+    <h3>Protocol Legend</h3>
+    <table id="legend">
+      <thead><tr><th>Protocol</th><th>Color</th><th>Process %</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="control-group sidebar-control" style="margin-top: 20px; padding: 10px 0px 5px 0px; box-shadow: none;" title="Adjust node and edge sizes in the sidebar graph.">
+        <h3 style="margin-bottom: 10px; font-size: 14px;">Sidebar Graph Sizing</h3>
 
-  <div id="sidebar">
+        <label for="sidebarNodeSizeMin" style="font-size: 12px; display: block; margin-bottom: 2px;">Min Node Size:</label>
+        <input type="number" id="sidebarNodeSizeMin" placeholder="5" step="1" min="1" value="10" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+
+        <label for="sidebarNodeSizeMax" style="font-size: 12px; display: block; margin-bottom: 2px;">Max Node Size:</label>
+        <input type="number" id="sidebarNodeSizeMax" placeholder="40" step="1" min="1" value="40" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+
+        <label for="sidebarEdgeWidthMin" style="font-size: 12px; display: block; margin-bottom: 2px;">Min Edge Width:</label>
+        <input type="number" id="sidebarEdgeWidthMin" placeholder="0.5" step="0.1" min="0.1" value="1" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+
+        <label for="sidebarEdgeWidthMax" style="font-size: 12px; display: block; margin-bottom: 2px;">Max Edge Width:</label>
+        <input type="number" id="sidebarEdgeWidthMax" placeholder="8" step="0.1" min="0.1" value="6" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+    </div>
+    
+  </div>
+
+  <button id="sidebar-toggle" title="Open/close cluster detail sidebar">&#9776;</button>
+
+  <div id="sidebar" title="Shows detailed graph and data for selected heatmap clusters.">
       <div id="sidebar-content">
-          <h3>Cluster Visualization</h3>
-          <button id="resetSidebarBtn">Reset Sidebar View</button>
+          <button id="sidebarFullscreenBtn" title="Toggle Sidebar Fullscreen">&#x2922;</button>
 
-          <div class="control-group sidebar-control">
+          <h3>Cluster Visualization</h3>
+          <button id="resetSidebarBtn" title="Clear sidebar graph, table, and heatmap selections.">Reset Sidebar View</button>
+
+          <div class="control-group sidebar-control" title="Change sidebar graph layout.">
               <label for="sidebarLayoutSelect">Layout:</label>
               <select id="sidebarLayoutSelect" style="padding: 4px 8px; font-size: 12px; max-width: 150px;">
                   <option value="cose" selected>Cose (Default)</option>
@@ -218,17 +378,24 @@
                   <option value="circle">Circle</option>
                   <option value="grid">Grid</option>
                   <option value="concentric">Concentric</option>
-                  <option value="random">Random</option>
-              </select>
+                  </select>
           </div>
 
           <div id="sidebar-cy-loading" style="display: none; text-align: center; margin-top: 5px; color: #6c757d;">Loading graph...</div>
-          <div id="sidebar-cy"></div>
+          <div id="sidebar-cy" title="Interactive graph of selected cluster(s). Click nodes/edges to filter table."></div>
           <div id="sidebar-info" style="margin-top: 10px; font-size: 14px; text-align: center; flex-shrink: 0;">Click a cell on the heatmap to add its cluster. Click nodes or edges in the graph to highlight and filter the table below.</div>
+
+          <div id="sidebar-table-search-container" title="Filter sidebar table rows.">
+              <label for="sidebarTableSearchInput">Search Table:</label>
+              <input type="text" id="sidebarTableSearchInput" placeholder="Enter keywords...">
+          </div>
+
           <div id="sidebar-table-loading" style="display: none; text-align: center; margin-top: 20px; color: #6c757d;">Loading table...</div>
-          <div id="sidebar-table-container"></div>
-          <div id="sidebar-table-pagination">
-              <span>Page <input type="number" id="sidebarCurrentPageInput" value="1" min="1" style="width:45px;"> of <span id="sidebarTotalPages">?</span></span>
+          <div id="sidebar-table-container" title="Detailed connection data for selected cluster/node/edge(s). Click row to highlight edge.">
+             <p id="sidebar-table-no-results">No rows match your search criteria.</p>
+             </div>
+          <div id="sidebar-table-pagination" title="Navigate sidebar table pages.">
+              <span>Page <input type="number" id="sidebarCurrentPageInput" value="1" min="1"> of <span id="sidebarTotalPages">?</span></span>
               <button id="sidebarGoPageBtn">Go</button>
           </div>
       </div>
@@ -239,55 +406,55 @@
     <div id="topControls">
       <div style="margin-bottom: 16px; background: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         <label for="fileInput"><strong>Upload CSV File:</strong></label>
-        <input type="file" id="fileInput" accept=".csv">
-        <button id="downloadButton">Download Processed CSV File</button>
+        <input type="file" id="fileInput" accept=".csv" title="Select CSV file to visualize.">
+        <button id="downloadButton" title="Download currently loaded data as CSV.">Download Processed CSV File</button>
       </div>
-      <div class="control-group">
+      <div class="control-group" title="Filter data displayed in heatmap.">
         <label for="rowOrderSelect">Order Cells By:</label>
-        <select id="rowOrderSelect"> <option value="descending">Descending</option> <option value="ascending">Ascending</option> </select>
+        <select id="rowOrderSelect" title="Order heatmap rows by metric value."> <option value="descending">Descending</option> <option value="ascending">Ascending</option> </select>
         <label for="minSourceAmtFilter">Min Src:</label>
-        <input type="number" id="minSourceAmtFilter" placeholder="1" step="1" style="width:60px;">
+        <input type="number" id="minSourceAmtFilter" placeholder="1" step="1" style="width:60px;" title="Minimum source appearances.">
         <label for="maxSourceAmtFilter">Max Src:</label>
-        <input type="number" id="maxSourceAmtFilter" placeholder="Inf" step="1" style="width:60px;">
+        <input type="number" id="maxSourceAmtFilter" placeholder="Inf" step="1" style="width:60px;" title="Maximum source appearances.">
         <label for="minDestinationAmtFilter">Min Dst:</label>
-        <input type="number" id="minDestinationAmtFilter" placeholder="1" step="1" style="width:60px;">
+        <input type="number" id="minDestinationAmtFilter" placeholder="1" step="1" style="width:60px;" title="Minimum destination appearances.">
         <label for="maxDestinationAmtFilter">Max Dst:</label>
-        <input type="number" id="maxDestinationAmtFilter" placeholder="Inf" step="1" style="width:60px;">
+        <input type="number" id="maxDestinationAmtFilter" placeholder="Inf" step="1" style="width:60px;" title="Maximum destination appearances.">
         <label for="payloadSearch">Payload:</label>
-        <input type="text" id="payloadSearch" placeholder="Keyword" style="width:100px;">
+        <input type="text" id="payloadSearch" placeholder="Keyword" style="width:100px;" title="Filter by payload keyword.">
         <label for="sourceFilter">Src IP:</label>
-        <input type="text" id="sourceFilter" placeholder="IP" style="width:100px;">
+        <input type="text" id="sourceFilter" placeholder="IP" style="width:100px;" title="Filter by source IP/subnet.">
         <label for="destinationFilter">Dst IP:</label>
-        <input type="text" id="destinationFilter" placeholder="IP" style="width:100px;">
+        <input type="text" id="destinationFilter" placeholder="IP" style="width:100px;" title="Filter by destination IP/subnet.">
         <label for="protocolFilter">Proto:</label>
-        <input type="text" id="protocolFilter" placeholder="TCP" style="width:60px;">
+        <input type="text" id="protocolFilter" placeholder="TCP" style="width:60px;" title="Filter by protocol name.">
         <label for="entropyMinFilter">Min Ent:</label>
-        <input type="number" id="entropyMinFilter" placeholder="0.0" step="0.1" style="width:60px;">
+        <input type="number" id="entropyMinFilter" placeholder="0.0" step="0.1" style="width:60px;" title="Minimum payload entropy.">
         <label for="entropyMaxFilter">Max Ent:</label>
-        <input type="number" id="entropyMaxFilter" placeholder="Inf" step="0.1" style="width:60px;">
+        <input type="number" id="entropyMaxFilter" placeholder="Inf" step="0.1" style="width:60px;" title="Maximum payload entropy.">
         <label for="isLargePacketFilter">Large Pkts:</label>
-        <input type="checkbox" id="isLargePacketFilter">
+        <input type="checkbox" id="isLargePacketFilter" title="Filter for large packets.">
         <label for="isSuspiciousAckFilter">Susp ACK:</label>
-        <input type="checkbox" id="isSuspiciousAckFilter">
-        <button id="applyFiltersBtn" style="margin-left: 10px;">Apply Filters</button>
+        <input type="checkbox" id="isSuspiciousAckFilter" title="Filter for suspicious ACKs.">
+        <button id="applyFiltersBtn" style="margin-left: 10px;" title="Apply selected filters to heatmap.">Apply Filters</button>
       </div>
     </div>
-    <div id="heatmap"></div>
-    <div id="table-search-container" style="display:none; margin-bottom: 12px; margin-top: 24px;">
+    <div id="heatmap" title="Heatmap overview. Rows are metrics, columns are clusters. Click cell for details."></div>
+    <div id="table-search-container" style="display:none; margin-bottom: 12px; margin-top: 24px;" title="Search main table payload.">
       <label for="tableSearchInput"><strong>Search Payload:</strong></label>
       <input type="text" id="tableSearchInput" placeholder="Enter keyword..." style="padding: 6px 10px; width: 250px;">
     </div>
-    <div id="table-container"></div>
-    <div id="table-pagination">
+    <div id="table-container" title="Main connection data table (used in network graph view)."></div>
+    <div id="table-pagination" title="Navigate main table pages.">
       <span>Page <input type="number" id="currentPageInput" value="1" min="1" style="width:60px;"> of <span id="totalPages">?</span></span>
       <button id="goPageBtn">Go</button>
     </div>
     <div style="margin-top: 20px;">
-        <button id="loadMoreBtn">Load More</button>
-        <button id="backToHeatmap">Back to Heatmap</button>
-        <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;">Refresh Network</button>
+        <button id="loadMoreBtn" title="Load more data (not implemented).">Load More</button>
+        <button id="backToHeatmap" title="Return to heatmap view.">Back to Heatmap</button>
+        <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;" title="Refresh network graph (not implemented).">Refresh Network</button>
     </div>
-    <div id="sizeControls" style="display: none; margin-top: 16px;">
+    <div id="sizeControls" style="display: none; margin-top: 16px;" title="Adjust node and edge sizes in the main graph.">
       <label for="edgeWidthMin">Min Edge Width:</label>
       <input type="number" id="edgeWidthMin" placeholder="1" step="0.1" min="0.1" value="1">
       <label for="edgeWidthMax">Max Edge Width:</label>
@@ -297,64 +464,62 @@
       <label for="nodeSizeMax">Max Node Size:</label>
       <input type="number" id="nodeSizeMax" placeholder="60" step="1" min="1" value="60">
     </div>
-    <div id="cy"></div>
+    <div id="cy" title="Main network graph view (not fully implemented)."></div>
   </div>
 
-  <div id="legend-container">
-    <h3>Protocol Legend</h3>
-    <table id="legend">
-      <thead><tr><th>Protocol</th><th>Color</th><th>Process %</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <div id="edgeFilterPanel">
+  <div id="edgeFilterPanel" title="Filter edges in main network graph.">
     <h4>Edge Filter</h4>
     <label for="edgeFilterSource">Source (partial ok):</label> <input type="text" id="edgeFilterSource">
     <label for="edgeFilterDestination">Destination (partial ok):</label> <input type="text" id="edgeFilterDestination">
     <label for="edgeFilterProtocol">Protocol (partial ok):</label> <input type="text" id="edgeFilterProtocol">
     <label for="edgeFilterWeight">Edge Weight (e.g. >=1000):</label> <input type="text" id="edgeFilterWeight" placeholder=">=1000">
     <label for="edgeFilterProcessCount">Process Count (e.g. >5):</label> <input type="text" id="edgeFilterProcessCount" placeholder=">=5">
-    <button id="applyEdgeFilterBtn">Filter Edges</button> <button id="clearEdgeFilterBtn">Clear Filter</button>
+    <button id="applyEdgeFilterBtn" title="Apply edge filters.">Filter Edges</button> <button id="clearEdgeFilterBtn" title="Remove edge filters.">Clear Filter</button>
   </div>
 
-  <div id="tooltip"></div>
+  <div id="tooltip" title="Hover details appear here."></div>
 
   <script>
     const API_BASE_URL = 'http://127.0.0.1:5000';
     const DEFAULT_UNKNOWN_COLOR = '#cccccc';
-    const SELECTED_EDGE_COLOR = '#ff0000'; // Red
-    const SELECTED_NODE_COLOR = '#ff0000'; // Red
+    const SELECTED_EDGE_COLOR = '#ff0000';
+    const SELECTED_NODE_COLOR = '#ff0000';
     const SELECTED_EDGE_WIDTH = 3.5;
     const SELECTED_EDGE_ZINDEX = 999;
-    
 
     let protocolColorMap = {};
-    let globalCy; // For main #cy element, if used
-    let sidebarCy; // For #sidebar-cy element
-    let currentClusterID = null; // Cluster ID shown in main table/graph
-    let currentSidebarTableClusterId = null; // Cluster ID shown in sidebar table (cluster mode)
+    let globalCy;
+    let sidebarCy;
+    let currentClusterID = null;
+    let currentSidebarTableClusterId = null;
     const TABLE_PAGE_SIZE = 30;
     const heatmapCellWidth = 2;
     const heatmapCellHeight = 15;
     let tooltip;
-    let clusterHighlightColors = new Map(); // Maps clusterID -> highlight color for heatmap/nodes
-    let addedSidebarClusters = new Set(); // Tracks clusterIDs added to sidebar graph
-    let selectedSidebarEdges = new Set(); // Tracks individually selected edges (edgeKey format)
-    let selectedNodeId = null; // Tracks ID of the currently selected node in sidebar graph
-    let sidebarTableMode = 'cluster'; // 'cluster' or 'edges'
+    let clusterHighlightColors = new Map();
+    let addedSidebarClusters = new Set();
+    let selectedSidebarEdges = new Set();
+    let selectedNodeId = null;
+    let sidebarTableMode = 'cluster';
     let isSidebarOpen = false;
-    let sidebarWidth = 500;
+    const sidebarWidth = 500;
+    const legendWidth = 220;
 
     const sidebar = document.getElementById('sidebar');
     const sidebarToggleBtn = document.getElementById('sidebar-toggle');
     const mainContainer = document.getElementById('main-container');
+    const legendContainer = document.getElementById('legend-container');
     const resetSidebarBtn = document.getElementById('resetSidebarBtn');
     const sidebarTableContainer = document.getElementById('sidebar-table-container');
     const sidebarTablePagination = document.getElementById('sidebar-table-pagination');
     const sidebarGoPageBtn = document.getElementById('sidebarGoPageBtn');
+    const sidebarSearchContainer = document.getElementById('sidebar-table-search-container');
+    const sidebarSearchInput = document.getElementById('sidebarTableSearchInput');
+    const sidebarInfoDiv = document.getElementById('sidebar-info');
+    const sidebarFullscreenBtn = document.getElementById('sidebarFullscreenBtn');
+    let isSidebarFullscreen = false;
 
-    // --- Layout Options Definitions ---
+
     const sidebarLayoutOptions = {
         cose: {
             name: 'cose', animate: true, animationDuration: 500, padding: 30,
@@ -381,21 +546,16 @@
             position: function( node ){},
             animate: true, animationDuration: 500, fit: true
         },
-        random: {
-            name: 'random', fit: true, padding: 30,
-            animate: true, animationDuration: 300
-        },
         concentric: {
             name: 'concentric', fit: true, padding: 30, startAngle: 3 / 2 * Math.PI,
             sweep: undefined, clockwise: true, equidistant: false,
             minNodeSpacing: 20, avoidOverlap: true, nodeDimensionsIncludeLabels: false,
-            concentric: function( node ){ return node.degree(); }, // Level based on degree
-            levelWidth: function( nodes ){ return nodes.maxDegree() / 4; }, // Dynamic level width
+            concentric: function( node ){ return node.degree(); },
+            levelWidth: function( nodes ){ return nodes.maxDegree() / 4; },
             animate: true, animationDuration: 500
         }
     };
 
-    // --- Function to Apply Selected Layout ---
     function applySidebarLayout() {
         if (!sidebarCy) {
             console.log("Sidebar graph not initialized yet.");
@@ -410,43 +570,40 @@
         }
 
         console.log(`Applying sidebar layout: ${selectedLayoutName}`);
-        // Run the layout
         let layout = sidebarCy.layout(layoutConfig);
         layout.run();
-        // Optional: Refit after layout animation if needed (might depend on layout behavior)
-        // layout.one('layoutstop', () => {
-        //     if (sidebarCy) sidebarCy.fit(null, 30); // Fit with padding
-        // });
     }
 
     function toggleSidebar(forceOpen = null) {
-        const shouldBeOpen = forceOpen !== null ? forceOpen : !isSidebarOpen;
-        if (shouldBeOpen) {
-            if (!isSidebarOpen) {
-                sidebar.classList.add('open');
-                isSidebarOpen = true;
-                sidebarToggleBtn.innerHTML = '&times;';
-                sidebarToggleBtn.style.left = `${sidebarWidth}px`;
-                mainContainer.style.marginLeft = `${sidebarWidth}px`;
-                setTimeout(() => {
-                    if (sidebarCy) {
-                        sidebarCy.resize();
-                        // No need to fit here, layout application handles fitting
-                        // sidebarCy.fit(null, 50);
-                         applySidebarLayout(); // Re-apply layout on open might be desired
-                    }
-                }, 350);
-            }
-        } else {
-             if (isSidebarOpen) {
-                sidebar.classList.remove('open');
-                isSidebarOpen = false;
-                sidebarToggleBtn.innerHTML = '&#9776;';
-                sidebarToggleBtn.style.left = '0px';
-                mainContainer.style.marginLeft = '0px';
-            }
-        }
-    }
+     const shouldBeOpen = forceOpen !== null ? forceOpen : !isSidebarOpen;
+
+     if (shouldBeOpen) {
+         if (!isSidebarOpen) {
+             legendContainer.classList.add('visible');
+             sidebar.classList.add('open');
+             isSidebarOpen = true;
+             sidebarToggleBtn.innerHTML = '&times;';
+             sidebarToggleBtn.style.left = `${legendWidth + sidebarWidth}px`;
+             mainContainer.style.marginLeft = `${legendWidth + sidebarWidth}px`;
+             setTimeout(() => {
+                 if (sidebarCy) {
+                     sidebarCy.resize();
+                     applySidebarLayout();
+                     sidebarCy.fit(null, 30);
+                 }
+             }, 350);
+         }
+     } else {
+          if (isSidebarOpen) {
+             legendContainer.classList.remove('visible');
+             sidebar.classList.remove('open');
+             isSidebarOpen = false;
+             sidebarToggleBtn.innerHTML = '&#9776;';
+             sidebarToggleBtn.style.left = `0px`;
+             mainContainer.style.marginLeft = `0px`;
+          }
+     }
+ }
 
     resetSidebarBtn.addEventListener('click', () => {
         console.log("Resetting sidebar view and heatmap highlights.");
@@ -454,14 +611,206 @@
         updateLegend();
         updateHeatmap();
         selectedNodeId = null;
-        document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
+        document.getElementById('sidebarLayoutSelect').value = 'cose';
     });
 
     function showSidebarLoading(isLoadingGraph, isLoadingTable) {
         document.getElementById('sidebar-cy-loading').style.display = isLoadingGraph ? 'block' : 'none';
         document.getElementById('sidebar-table-loading').style.display = isLoadingTable ? 'block' : 'none';
         const showInfo = !isLoadingGraph && !isLoadingTable && (!sidebarCy || sidebarCy.elements().length === 0) && selectedSidebarEdges.size === 0 && selectedNodeId === null;
-         document.getElementById('sidebar-info').style.display = showInfo ? 'block' : 'none';
+         sidebarInfoDiv.style.display = showInfo ? 'block' : 'none';
+    }
+
+    function filterSidebarTable() {
+        if (!sidebarTableContainer || !sidebarSearchInput) return;
+
+        const keywords = sidebarSearchInput.value.toLowerCase().split(' ').filter(k => k.trim() !== '');
+        const tableBody = sidebarTableContainer.querySelector('tbody');
+        const noResultsMsg = document.getElementById('sidebar-table-no-results');
+
+        if (!tableBody) {
+            if (noResultsMsg) noResultsMsg.style.display = 'none';
+            return;
+        }
+
+        const rows = tableBody.querySelectorAll('tr');
+        let visibleRowCount = 0;
+
+        const removeHighlight = (node) => {
+            const marks = node.querySelectorAll('mark');
+            marks.forEach(mark => {
+                const parent = mark.parentNode;
+                while (mark.firstChild) {
+                    parent.insertBefore(mark.firstChild, mark);
+                }
+                parent.removeChild(mark);
+                parent.normalize();
+            });
+        };
+
+        const addHighlight = (node, textToHighlight) => {
+            if (!textToHighlight) return;
+
+            const text = node.textContent.toLowerCase();
+            const startIndex = text.indexOf(textToHighlight);
+
+            if (startIndex === -1) return;
+
+            const pattern = new RegExp(textToHighlight.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+            const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
+            let currentNode;
+            const nodesToProcess = [];
+
+            while(currentNode = walker.nextNode()) {
+                 nodesToProcess.push(currentNode);
+            }
+
+            nodesToProcess.forEach(textNode => {
+                const textContent = textNode.nodeValue;
+                let match;
+                let lastIndex = 0;
+                const fragment = document.createDocumentFragment();
+
+                while ((match = pattern.exec(textContent)) !== null) {
+                    if (match.index > lastIndex) {
+                        fragment.appendChild(document.createTextNode(textContent.substring(lastIndex, match.index)));
+                    }
+                    const mark = document.createElement('mark');
+                    mark.textContent = match[0];
+                    fragment.appendChild(mark);
+
+                    lastIndex = pattern.lastIndex;
+                }
+                if (lastIndex < textContent.length) {
+                    fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
+                }
+
+                if (fragment.hasChildNodes() && lastIndex > 0) {
+                     textNode.parentNode.replaceChild(fragment, textNode);
+                }
+            });
+        };
+
+        rows.forEach(row => {
+            row.querySelectorAll('td').forEach(cell => {
+                removeHighlight(cell);
+            });
+
+            const rowText = row.textContent.toLowerCase();
+            let showRow = true;
+            if (keywords.length > 0) {
+                for (const keyword of keywords) {
+                    if (!rowText.includes(keyword)) {
+                        showRow = false;
+                        break;
+                    }
+                }
+            } else {
+                showRow = true;
+            }
+
+            row.style.display = showRow ? '' : 'none';
+
+            if (showRow && keywords.length > 0) {
+                visibleRowCount++;
+                row.querySelectorAll('td').forEach(cell => {
+                    keywords.forEach(keyword => {
+                        addHighlight(cell, keyword);
+                    });
+                });
+            } else if (showRow) {
+                 visibleRowCount++;
+            }
+        });
+
+        if (noResultsMsg) {
+             noResultsMsg.style.display = (visibleRowCount === 0 && keywords.length > 0) ? 'block' : 'none';
+        }
+    }
+
+    function handleSidebarTableRowClick(event) {
+        if (!sidebarCy || event.target.tagName !== 'TD') {
+            return;
+        }
+
+        const row = event.target.closest('tr');
+        if (!row || !row.parentElement || row.parentElement.tagName !== 'TBODY') {
+             console.log("Clicked outside table body row.");
+             return;
+        }
+
+        const table = row.closest('table');
+        if (!table) return;
+
+        const headerCells = Array.from(table.querySelectorAll('thead th'));
+        const dataCells = Array.from(row.querySelectorAll('td'));
+
+        let sourceIndex = -1;
+        let destIndex = -1;
+        let protocolIndex = -1;
+
+        headerCells.forEach((th, index) => {
+            const headerText = th.textContent.trim();
+            if (headerText === 'Source') sourceIndex = index;
+            else if (headerText === 'Destination') destIndex = index;
+            else if (headerText === 'Protocol') protocolIndex = index;
+        });
+
+        if (sourceIndex === -1 || destIndex === -1 || protocolIndex === -1) {
+            console.error("Could not find Source, Destination, or Protocol columns in the sidebar table header.");
+            return;
+        }
+
+        const source = dataCells[sourceIndex]?.textContent.trim();
+        const destination = dataCells[destIndex]?.textContent.trim();
+        const protocol = dataCells[protocolIndex]?.textContent.trim();
+
+        if (!source || !destination || !protocol) {
+            console.error("Could not extract valid source, destination, or protocol from table row.", { source, destination, protocol });
+            return;
+        }
+
+        console.log(`Table row clicked. Finding edge: ${source} -> ${destination} [${protocol}]`);
+
+        const edgeSelector = `edge[source = "${source}"][target = "${destination}"][Protocol = "${protocol}"]`;
+        const edgeToSelect = sidebarCy.elements(edgeSelector);
+
+        if (edgeToSelect.length > 0) {
+            console.log("Edge found:", edgeToSelect.id());
+            deselectCurrentNode();
+
+            sidebarCy.edges().filter(edge => edge !== edgeToSelect.first()).forEach(edge => {
+                 selectedSidebarEdges.delete(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`);
+                 const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                 const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                 edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                 edge.unselect();
+            });
+
+            const targetEdge = edgeToSelect.first();
+            const edgeKey = `${source}|${destination}|${protocol}`;
+            selectedSidebarEdges.add(edgeKey);
+            targetEdge.style({
+                 'line-color': SELECTED_EDGE_COLOR,
+                 'target-arrow-color': SELECTED_EDGE_COLOR,
+                 'width': SELECTED_EDGE_WIDTH,
+                 'z-index': SELECTED_EDGE_ZINDEX
+            });
+            sidebarCy.elements().unselect();
+            targetEdge.select();
+
+            sidebarCy.animate({
+                fit: {
+                    eles: targetEdge.union(targetEdge.connectedNodes()),
+                    padding: 70
+                },
+                duration: 400
+            });
+             updateSidebarTableForSelectedEdges();
+
+        } else {
+            console.warn(`Edge not found in sidebar graph for: ${source} -> ${destination} [${protocol}]`);
+        }
     }
 
     function clearSidebarVisualization() {
@@ -475,15 +824,18 @@
         selectedNodeId = null;
         sidebarTableMode = 'cluster';
         currentSidebarTableClusterId = null;
-        sidebarTableContainer.innerHTML = '';
+        sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>';
         sidebarTableContainer.style.display = 'none';
         sidebarTablePagination.style.display = 'none';
+        sidebarSearchContainer.style.display = 'none';
+        if(sidebarSearchInput) sidebarSearchInput.value = '';
+
         document.getElementById('sidebar-cy').innerHTML = '';
-        document.getElementById('sidebar-info').innerHTML = 'Click a cell on the heatmap to add its cluster. Click nodes or edges in the graph to highlight and filter the table below.';
-        document.getElementById('sidebar-info').style.display = 'block';
+        sidebarInfoDiv.innerHTML = 'Click a cell on the heatmap to add its cluster. Click nodes or edges in the graph to highlight and filter the table below.';
+        sidebarInfoDiv.style.display = 'block';
         document.getElementById('sidebar-cy-loading').style.display = 'none';
         document.getElementById('sidebar-table-loading').style.display = 'none';
-        document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
+        document.getElementById('sidebarLayoutSelect').value = 'cose';
         console.log("Sidebar visualization, color map, selections, and table cleared.");
     }
 
@@ -492,13 +844,12 @@
         const minCount = 1;
         const maxCount = 100;
         const minWidth = 1;
-        const maxWidth = 10;
+        const maxWidth = 5;
         const range = (maxCount - minCount) || 1;
         const width = minWidth + (maxWidth - minWidth) * ((count - minCount) / range);
         return Math.max(minWidth, Math.min(width, maxWidth));
     }
 
-    // Cytoscape Style Configuration (Borders Removed)
     const CYTOSCAPE_STYLE = [
         { selector: 'node', style: {
             'background-color': '#888',
@@ -507,8 +858,9 @@
             'height': 'mapData(NodeWeight, 0, 1, 15, 60)',
             'font-size': 10, 'color': '#000',
             'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 4,
-            'border-width': 0, // No borders
-            'transition-property': 'background-color',
+            'border-width': 0,
+            'shape': 'ellipse',
+            'transition-property': 'background-color, shape',
             'transition-duration': '0.15s'
         }},
         { selector: 'edge', style: {
@@ -518,6 +870,12 @@
             'transition-property': 'line-color, target-arrow-color, width, z-index',
             'transition-duration': '0.15s',
             'z-index': 1
+        }},
+        { selector: 'node[Classification = "Internal"]', style: {
+            'shape': 'square'
+        }},
+        { selector: 'node[Classification = "External"]', style: {
+            'shape': 'ellipse'
         }}
     ];
 
@@ -549,7 +907,7 @@
         console.warn("Could not find highly distinct color, using fallback random hue.");
         let fallbackHue;
         do {
-             fallbackHue = Math.floor(Math.random() * 360);
+            fallbackHue = Math.floor(Math.random() * 360);
         } while ((fallbackHue >= 0 && fallbackHue <= 25) || (fallbackHue >= 335 && fallbackHue <= 360) || (fallbackHue >= 195 && fallbackHue <= 265));
         return `hsl(${fallbackHue}, 85%, 60%)`;
     }
@@ -568,22 +926,25 @@
                     console.warn(`Missing scratch color for node ${selectedNodeId}, reverted using cluster/default color.`);
                 }
                 node.connectedEdges().forEach(edge => {
-                    const originalEdgeColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
-                    const originalEdgeWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
-                    edge.style({
-                        'line-color': originalEdgeColor,
-                        'target-arrow-color': originalEdgeColor,
-                        'width': originalEdgeWidth,
-                        'z-index': 1
-                    });
+                    const edgeKey = `${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`;
+                    if (!selectedSidebarEdges.has(edgeKey)) {
+                         const originalEdgeColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                         const originalEdgeWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                         edge.style({
+                            'line-color': originalEdgeColor,
+                            'target-arrow-color': originalEdgeColor,
+                            'width': originalEdgeWidth,
+                            'z-index': 1
+                         });
+                    }
                 });
-                 console.log(`Node ${selectedNodeId} and its edges deselected.`);
+                 node.unselect();
+                console.log(`Node ${selectedNodeId} and its non-selected edges deselected.`);
             } else {
-                 console.warn(`Attempted to deselect node ${selectedNodeId}, but it was not found.`);
+                console.warn(`Attempted to deselect node ${selectedNodeId}, but it was not found.`);
             }
             selectedNodeId = null;
         }
-        selectedSidebarEdges.clear();
     }
 
     function visualizeClusterInSidebar(clusterID, nodeColor) {
@@ -596,82 +957,95 @@
                  loadSidebarClusterTable(clusterID, 1);
              }
              deselectCurrentNode();
+             if (selectedSidebarEdges.size > 0 && sidebarCy) {
+                  sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
+                  .forEach(edge => {
+                      const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                      const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                      edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                      edge.unselect();
+                  });
+                  selectedSidebarEdges.clear();
+             }
+             applySidebarSizeControls();
              return;
         }
 
         toggleSidebar(true);
         showSidebarLoading(true, false);
-        document.getElementById('sidebar-info').innerHTML = `Loading network for Cluster ${clusterID}...`;
-        document.getElementById('sidebar-info').style.display = 'block';
+        sidebarInfoDiv.innerHTML = `Loading network for Cluster ${clusterID}...`;
+        sidebarInfoDiv.style.display = 'block';
 
         fetch(`${API_BASE_URL}/cluster_network?cluster_id=${clusterID}`)
-             .then(response => { if (!response.ok) throw new Error(`Network error (${response.status})`); return response.json(); })
-             .then(data => {
-                 showSidebarLoading(false, false);
+            .then(response => { if (!response.ok) throw new Error(`Network error (${response.status})`); return response.json(); })
+            .then(data => {
+                showSidebarLoading(false, false);
 
-                 if (!data || (!data.nodes || data.nodes.length === 0)) {
-                     console.log(`No network data for Cluster ${clusterID}.`);
-                     if (!sidebarCy) {
-                         sidebarCy = cytoscape({ container: document.getElementById('sidebar-cy'), style: CYTOSCAPE_STYLE });
-                         bindSidebarGraphEvents();
-                     }
-                     addedSidebarClusters.add(clusterID);
-                     loadSidebarClusterTable(clusterID, 1);
-                     updateLegend(sidebarCy?.edges());
-                     deselectCurrentNode();
-                     return;
-                 }
+                if (!data || (!data.nodes || data.nodes.length === 0)) {
+                    console.log(`No network data for Cluster ${clusterID}.`);
+                    if (!sidebarCy) {
+                        sidebarCy = cytoscape({ container: document.getElementById('sidebar-cy'), style: CYTOSCAPE_STYLE });
+                        bindSidebarGraphEvents();
+                    }
+                    addedSidebarClusters.add(clusterID);
+                    loadSidebarClusterTable(clusterID, 1);
+                    updateLegend(sidebarCy?.edges());
+                    deselectCurrentNode();
+                    return;
+                }
 
-                 const nodesToAdd = data.nodes.map(node => ({
-                     group: 'nodes',
-                     data: { ...node.data, clusterID: clusterID },
-                     style: { ...(node.style || {}), 'background-color': nodeColor },
-                     scratch: { _originalColor: nodeColor }
-                 }));
+                const nodesToAdd = data.nodes.map(node => ({
+                    group: 'nodes',
+                    data: { ...node.data, clusterID: clusterID, Classification: node.data.Classification || 'Unknown' },
+                    style: { 'background-color': nodeColor },
+                    scratch: { _originalColor: nodeColor }
+                }));
 
-                 const edgesToAdd = data.edges.map(edge => {
-                     const protocol = edge.data.Protocol || 'Unknown';
-                     if (!protocolColorMap[protocol]) {
-                         protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
-                     }
-                     const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
-                     const originalWidth = calculateEdgeWidth(edge.data.processCount);
-                     return {
-                         group: 'edges',
-                         data: { ...edge.data, clusterID: clusterID },
-                         style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor, 'width': originalWidth },
-                         scratch: { _protocolColor: edgeColor, _originalWidth: originalWidth }
-                     };
-                 });
+                const edgesToAdd = data.edges.map(edge => {
+                    const protocol = edge.data.Protocol || 'Unknown';
+                    if (!protocolColorMap[protocol]) {
+                        protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                    }
+                    const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                    return {
+                        group: 'edges',
+                        data: { ...edge.data, clusterID: clusterID },
+                        style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor },
+                        scratch: { _protocolColor: edgeColor }
+                    };
+                });
 
-                 if (!sidebarCy) {
-                     sidebarCy = cytoscape({
-                         container: document.getElementById('sidebar-cy'),
-                         elements: { nodes: nodesToAdd, edges: edgesToAdd },
-                         style: CYTOSCAPE_STYLE
-                     });
-                     bindSidebarGraphEvents();
-                     applySidebarLayout(); // Apply selected layout on creation
-                 } else {
-                     sidebarCy.add(nodesToAdd.concat(edgesToAdd));
-                     applySidebarLayout(); // Apply selected layout after adding elements
-                 }
+                if (!sidebarCy) {
+                    sidebarCy = cytoscape({
+                        container: document.getElementById('sidebar-cy'),
+                        elements: { nodes: nodesToAdd, edges: edgesToAdd },
+                        style: CYTOSCAPE_STYLE
+                    });
+                    bindSidebarGraphEvents();
+                    applySidebarSizeControls();
+                    applySidebarLayout();
+                    sidebarCy.fit(null, 30);
+                } else {
+                    sidebarCy.add(nodesToAdd.concat(edgesToAdd));
+                    applySidebarSizeControls();
+                    applySidebarLayout();
+                    sidebarCy.fit(null, 30);
+                }
 
-                 addedSidebarClusters.add(clusterID);
-                 document.getElementById('sidebar-info').style.display = 'none';
-                 updateLegend(sidebarCy.edges());
-                 loadSidebarClusterTable(clusterID, 1);
-                 deselectCurrentNode();
-
-             })
-             .catch(error => {
-                 console.error(`Error visualizing cluster ${clusterID} in sidebar:`, error);
-                 showSidebarLoading(false, false);
-                 document.getElementById('sidebar-info').innerHTML = `Error loading graph data for Cluster ${clusterID}.`;
-                 document.getElementById('sidebar-info').style.display = 'block';
-                 loadSidebarClusterTable(clusterID, 1);
-                 deselectCurrentNode();
-             });
+                addedSidebarClusters.add(clusterID);
+                sidebarInfoDiv.style.display = 'none';
+                updateLegend(sidebarCy.edges());
+                loadSidebarClusterTable(clusterID, 1);
+                deselectCurrentNode();
+            })
+            .catch(error => {
+                console.error(`Error visualizing cluster ${clusterID} in sidebar:`, error);
+                showSidebarLoading(false, false);
+                sidebarInfoDiv.innerHTML = `Error loading graph data for Cluster ${clusterID}.`;
+                sidebarInfoDiv.style.display = 'block';
+                loadSidebarClusterTable(clusterID, 1);
+                deselectCurrentNode();
+            });
     }
 
     function bindSidebarGraphEvents() {
@@ -683,41 +1057,44 @@
         sidebarCy.removeListener('tap');
 
         sidebarCy.on('mouseover', 'node', (event) => {
-             const node = event.target;
-             tooltip.style("display", "block")
-                    .html(`Node: ${node.data('label')}<br>Class: ${node.data('Classification') || 'N/A'}<br>Cluster: ${node.data('clusterID')}`)
-                    .style("left", (event.originalEvent.pageX + 10) + "px")
-                    .style("top", (event.originalEvent.pageY + 10) + "px");
+            const node = event.target;
+            tooltip.style("display", "block")
+                   .html(`Node: ${node.data('label')}<br>Class: ${node.data('Classification') || 'N/A'}<br>Cluster: ${node.data('clusterID')}`)
+                   .style("left", (event.originalEvent.pageX + 10) + "px")
+                   .style("top", (event.originalEvent.pageY + 10) + "px");
         });
         sidebarCy.on('mouseover', 'edge', (event) => {
-             const edge = event.target;
-             tooltip.style("display", "block")
-                    .html(`Src: ${edge.data('source')}<br>Dst: ${edge.data('target')}<br>Proto: ${edge.data('Protocol')}<br>Count: ${edge.data('processCount') || 0}<br>Cluster: ${edge.data('clusterID')}`)
-                    .style("left", (event.originalEvent.pageX + 10) + "px")
-                    .style("top", (event.originalEvent.pageY + 10) + "px");
+            const edge = event.target;
+            tooltip.style("display", "block")
+                   .html(`Src: ${edge.data('source')}<br>Dst: ${edge.data('target')}<br>Proto: ${edge.data('Protocol')}<br>Count: ${edge.data('processCount') || 0}<br>Cluster: ${edge.data('clusterID')}`)
+                   .style("left", (event.originalEvent.pageX + 10) + "px")
+                   .style("top", (event.originalEvent.pageY + 10) + "px");
         });
         sidebarCy.on('mouseout', 'node, edge', () => {
             tooltip.style("display", "none");
         });
 
         sidebarCy.on('click', 'edge', (event) => {
-            if (selectedNodeId) {
+             if (selectedNodeId) {
                 console.log("Node selection active, ignoring individual edge click.");
                 return;
-            }
+             }
             const edge = event.target;
             const source = edge.data('source');
             const target = edge.data('target');
             const protocol = edge.data('Protocol');
             const edgeKey = `${source}|${target}|${protocol}`;
+
             if (selectedSidebarEdges.has(edgeKey)) {
                 selectedSidebarEdges.delete(edgeKey);
                 const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
                 const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
                 edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                edge.unselect();
             } else {
                 selectedSidebarEdges.add(edgeKey);
                 edge.style({ 'line-color': SELECTED_EDGE_COLOR, 'target-arrow-color': SELECTED_EDGE_COLOR, 'width': SELECTED_EDGE_WIDTH, 'z-index': SELECTED_EDGE_ZINDEX });
+                edge.select();
             }
             updateSidebarTableForSelectedEdges();
         });
@@ -727,104 +1104,199 @@
             const clickedNodeId = clickedNode.id();
 
             if (selectedSidebarEdges.size > 0) {
-                selectedSidebarEdges.clear(); // Clear individual edge selections
-                // Edges will be reset by deselectCurrentNode or styled by new node selection below
+                sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
+                .forEach(edge => {
+                    const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                    const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                    edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                    edge.unselect();
+                });
+                selectedSidebarEdges.clear();
             }
 
             if (selectedNodeId === clickedNodeId) {
                 deselectCurrentNode();
                  if (currentSidebarTableClusterId) { loadSidebarClusterTable(currentSidebarTableClusterId, 1); }
                  else { updateSidebarTableForSelectedEdges(); }
+
             } else {
-                deselectCurrentNode(); // Deselect previous first
+                deselectCurrentNode();
+
                 if (!clickedNode.scratch('_originalColor')) {
                     clickedNode.scratch('_originalColor', clickedNode.style('background-color'));
                 }
                 clickedNode.style('background-color', SELECTED_NODE_COLOR);
                 clickedNode.connectedEdges().forEach(edge => {
+                    if(!edge.scratch('_originalWidth')){
+                        edge.scratch('_originalWidth', edge.style('width'));
+                    }
+                    if(!edge.scratch('_protocolColor')){
+                        edge.scratch('_protocolColor', edge.style('line-color'));
+                    }
                     edge.style({ 'line-color': SELECTED_EDGE_COLOR, 'target-arrow-color': SELECTED_EDGE_COLOR, 'width': SELECTED_EDGE_WIDTH, 'z-index': SELECTED_EDGE_ZINDEX });
                 });
+                 clickedNode.select();
                 selectedNodeId = clickedNodeId;
                 console.log(`Node ${selectedNodeId} and its edges selected.`);
-                updateSidebarTableForSelectedEdges(); // Update table based on new node selection
+                updateSidebarTableForSelectedEdges();
             }
-             document.getElementById('sidebar-info').style.display = 'none';
+             sidebarInfoDiv.style.display = 'none';
         });
 
          sidebarCy.on('tap', function(event){
-             if (event.target === sidebarCy) { // Tapped on background
+             if (event.target === sidebarCy) {
+                 let deselectedSomething = false;
                  if(selectedNodeId){
                       deselectCurrentNode();
-                      if (currentSidebarTableClusterId) { loadSidebarClusterTable(currentSidebarTableClusterId, 1); }
-                      else { updateSidebarTableForSelectedEdges(); }
-                 } else if (selectedSidebarEdges.size > 0) {
+                      deselectedSomething = true;
+                 }
+                 if (selectedSidebarEdges.size > 0) {
                       sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
                       .forEach(edge => {
                           const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
                           const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
                           edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                          edge.unselect();
                       });
                       selectedSidebarEdges.clear();
-                      updateSidebarTableForSelectedEdges();
+                      deselectedSomething = true;
+                 }
+                 if (deselectedSomething) {
+                    if (currentSidebarTableClusterId) { loadSidebarClusterTable(currentSidebarTableClusterId, 1); }
+                    else { updateSidebarTableForSelectedEdges(); }
                  }
              }
          });
     }
 
+    function applySidebarSizeControls() {
+        if (!sidebarCy) return;
+
+        const minNS = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMin').value) || 10, 1);
+        const maxNS = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMax').value) || 40, minNS + 1);
+        const minEW = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMin').value) || 1, 0.1);
+        const maxEW = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMax').value) || 6, minEW + 0.1);
+
+        console.log(`Applying sidebar sizes: Node(${minNS}-${maxNS}), Edge(${minEW}-${maxEW})`);
+
+        sidebarCy.batch(() => {
+            const nodeWeights = sidebarCy.nodes().map(n => n.data('NodeWeight') ?? n.degree());
+            const minNodeWeight = nodeWeights.length > 0 ? Math.min(...nodeWeights) : 0;
+            const maxNodeWeight = nodeWeights.length > 0 ? Math.max(...nodeWeights) : 1;
+            const nodeWeightRange = (maxNodeWeight - minNodeWeight) || 1;
+
+            sidebarCy.nodes().forEach(n => {
+                const weight = n.data('NodeWeight') ?? n.degree();
+                let size = minNS + (maxNS - minNS) * ((weight - minNodeWeight) / nodeWeightRange);
+                size = Math.max(minNS, Math.min(size, maxNS));
+                n.style({ 'width': size, 'height': size });
+            });
+
+            const edgeCounts = sidebarCy.edges().map(e => e.data('processCount') || 1);
+            if (edgeCounts.length > 0) {
+                const minCount = Math.min(...edgeCounts);
+                const maxCount = Math.max(...edgeCounts);
+                const countRange = (maxCount - minCount) || 1;
+
+                sidebarCy.edges().forEach(e => {
+                    const count = e.data('processCount') || 1;
+                    let width = minEW + (maxEW - minEW) * ((count - minCount) / countRange);
+                    width = Math.max(minEW, Math.min(width, maxEW));
+
+                    e.scratch('_originalWidth', width);
+                    const edgeKey = `${e.data('source')}|${e.data('target')}|${e.data('Protocol')}`;
+                    const nodeIsSelected = selectedNodeId && (e.source().id() === selectedNodeId || e.target().id() === selectedNodeId);
+                    const edgeIsSelected = selectedSidebarEdges.has(edgeKey);
+
+                    if (!nodeIsSelected && !edgeIsSelected) {
+                         e.style('width', width);
+                    } else {
+                        e.style('width', SELECTED_EDGE_WIDTH);
+                    }
+                });
+            }
+        });
+    }
+
     function updateSidebarTableForSelectedEdges() {
         if (selectedNodeId && sidebarCy) {
-             const node = sidebarCy.getElementById(selectedNodeId);
-             if (node && node.length > 0) {
-                 const connectedEdgeData = node.connectedEdges().map(edge => ({ source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') }));
-                  if (connectedEdgeData.length > 0) { loadSidebarMultiEdgeTable(connectedEdgeData, 1); }
-                  else {
-                      sidebarTableContainer.innerHTML = '<p style="padding:10px; text-align:center; color:#6c757d;">Selected node has no connections.</p>';
-                      sidebarTableContainer.style.display = 'block';
-                      sidebarTablePagination.style.display = 'none';
-                  }
-                  document.getElementById('sidebar-info').style.display = 'none';
-                  return;
-             } else {
-                 selectedNodeId = null; // Node not found, reset state
-             }
+            const node = sidebarCy.getElementById(selectedNodeId);
+            if (node && node.length > 0) {
+                const connectedEdgeData = node.connectedEdges().map(edge => ({
+                    source: edge.data('source'),
+                    destination: edge.data('target'),
+                    protocol: edge.data('Protocol')
+                }));
+                 if (connectedEdgeData.length > 0) {
+                    loadSidebarMultiEdgeTable(connectedEdgeData, 1);
+                 } else {
+                    sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p><p style="padding:10px; text-align:center; color:#6c757d;">Selected node has no connections.</p>';
+                    sidebarTableContainer.style.display = 'block';
+                    sidebarTablePagination.style.display = 'none';
+                    sidebarSearchContainer.style.display = 'none';
+                 }
+                 sidebarInfoDiv.style.display = 'none';
+                 return;
+            } else {
+                selectedNodeId = null;
+            }
         }
 
         if (selectedSidebarEdges.size > 0) {
-            const edgeList = Array.from(selectedSidebarEdges).map(key => { const parts = key.split('|'); return { source: parts[0], destination: parts[1], protocol: parts[2] }; });
+            const edgeList = Array.from(selectedSidebarEdges).map(key => {
+                const parts = key.split('|');
+                return { source: parts[0], destination: parts[1], protocol: parts[2] };
+            });
             loadSidebarMultiEdgeTable(edgeList, 1);
-            document.getElementById('sidebar-info').style.display = 'none';
-        } else { // No node or edges selected
+            sidebarInfoDiv.style.display = 'none';
+        }
+        else {
             if (currentSidebarTableClusterId) {
                 loadSidebarClusterTable(currentSidebarTableClusterId, 1);
             } else {
-                 sidebarTableContainer.innerHTML = '';
-                 sidebarTableContainer.style.display = 'none';
-                 sidebarTablePagination.style.display = 'none';
-                 document.getElementById('sidebar-info').innerHTML = 'Click nodes or edges in the graph to filter the table below, or click a heatmap cell.';
-                 document.getElementById('sidebar-info').style.display = 'block';
+                sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>';
+                sidebarTableContainer.style.display = 'none';
+                sidebarTablePagination.style.display = 'none';
+                sidebarSearchContainer.style.display = 'none';
+                sidebarInfoDiv.innerHTML = 'Click nodes or edges in the graph to filter the table below, or click a heatmap cell.';
+                sidebarInfoDiv.style.display = 'block';
             }
         }
     }
 
     function loadSidebarMultiEdgeTable(edgeList, page) {
         if (!edgeList || edgeList.length === 0) {
-             updateSidebarTableForSelectedEdges();
-             return;
-         }
+            console.log("Attempted to load multi-edge table with empty list. Reverting view.");
+            updateSidebarTableForSelectedEdges();
+            return;
+        }
         sidebarTableMode = 'edges';
         console.log(`Loading sidebar table for ${edgeList.length} edges, page ${page}`);
         showSidebarLoading(false, true);
         sidebarTableContainer.style.display = 'none';
         sidebarTablePagination.style.display = 'none';
+        sidebarSearchContainer.style.display = 'none';
+
         const payload = { edges: edgeList, page: page, page_size: TABLE_PAGE_SIZE };
 
-        fetch(`${API_BASE_URL}/get_multi_edge_table`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        fetch(`${API_BASE_URL}/get_multi_edge_table`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
         .then(response => response.ok ? response.text() : Promise.reject(`Failed multi-edge table page (${response.status})`))
         .then(html => {
             showSidebarLoading(false, false);
-            sidebarTableContainer.innerHTML = html;
+             const tempDiv = document.createElement('div');
+             tempDiv.innerHTML = html;
+             const tableHtml = tempDiv.querySelector('table')?.outerHTML || '';
+             const summaryHtml = tempDiv.querySelector('#table-summary')?.outerHTML || '';
+             sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>' + tableHtml;
             sidebarTableContainer.style.display = 'block';
-            const summaryElem = sidebarTableContainer.querySelector('#table-summary');
+            sidebarSearchContainer.style.display = 'block';
+            if (sidebarSearchInput) filterSidebarTable();
+
+            const summaryElem = tempDiv.querySelector('#table-summary');
             if (summaryElem && summaryElem.dataset.total) {
                 const total = parseInt(summaryElem.dataset.total, 10);
                  if (total > 0) {
@@ -833,20 +1305,23 @@
                     document.getElementById('sidebarTotalPages').textContent = totalPages || 1;
                     document.getElementById('sidebarCurrentPageInput').value = page;
                     document.getElementById('sidebarCurrentPageInput').max = totalPages || 1;
-                 } else { sidebarTablePagination.style.display = 'none'; }
+                 } else {
+                    sidebarTablePagination.style.display = 'none';
+                 }
             } else {
                 document.getElementById('sidebarTotalPages').textContent = '?';
                 document.getElementById('sidebarCurrentPageInput').value = page;
                 sidebarTablePagination.style.display = 'none';
                 console.warn("No table summary total found in multi-edge sidebar table response.");
             }
-             sidebarTableContainer.scrollTop = 0;
+            sidebarTableContainer.scrollTop = 0;
         })
         .catch(error => {
             console.error("Error fetching multi-edge sidebar table:", error);
             showSidebarLoading(false, false);
-            sidebarTableContainer.innerHTML = `<p style="color: red; padding: 10px;">Error loading table data for selected edges.</p>`;
+            sidebarTableContainer.innerHTML = `<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p><p style="color: red; padding: 10px;">Error loading table data for selected edges.</p>`;
             sidebarTableContainer.style.display = 'block';
+            sidebarSearchContainer.style.display = 'none';
             sidebarTablePagination.style.display = 'none';
         });
     }
@@ -860,66 +1335,132 @@
         clusterHighlightColors.forEach((color, clusterId) => {
             d3.selectAll('rect.cell[data-cluster="' + clusterId + '"]').attr('fill', color);
         });
-     }
+    }
 
     function renderCombinedHeatmap(dataByMetric) {
-         const orderOption = document.getElementById("rowOrderSelect").value || "descending";
-         const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
-         const maxCellsPerRow = 700;
-         const heatmapData = dataByMetric.map(({ metric, pivotData }) => ({ metric, values: [...pivotData].sort(comparator).slice(0, maxCellsPerRow) }));
-         const maxCols = d3.max(heatmapData, r => r.values.length) || 1;
-         const labelMargin = 150;
-         const verticalSpace = 10;
-         const numRows = heatmapData.length;
-         const totalHeight = 20 + numRows * heatmapCellHeight + (numRows - 1) * verticalSpace + 20;
-         const width = labelMargin + maxCols * heatmapCellWidth + 40;
+        const orderOption = document.getElementById("rowOrderSelect").value || "descending";
+        const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
+        const maxCellsPerRow = 700;
+        const heatmapData = dataByMetric;
 
-         d3.select("#heatmap").select("svg").remove();
-         const svg = d3.select("#heatmap").append("svg").attr("width", width).attr("height", totalHeight);
+        const filteredHeatmapData = heatmapData.map(rowData => ({
+            metric: rowData.metric,
+            pivotData: rowData.pivotData.filter(cellData => cellData.cluster !== 'N/A')
+        }));
 
-         heatmapData.forEach((rowData, rowIndex) => {
-             const rowY = 20 + rowIndex * (heatmapCellHeight + verticalSpace);
-             svg.append("text").attr("x", labelMargin - 10).attr("y", rowY + heatmapCellHeight / 2).attr("text-anchor", "end").attr("alignment-baseline", "middle").attr("font-size", "12px").attr("fill", "black").text(rowData.metric);
-             const numericValues = rowData.values.map(d => typeof d.value === 'number' ? d.value : 0).filter(v => !isNaN(v));
-             const rowMax = numericValues.length > 0 ? d3.max(numericValues) : 1;
-             const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, rowMax === 0 ? 1 : rowMax]);
+        const maxCols = d3.max(filteredHeatmapData, r => r.pivotData.length) || 1;
 
-             rowData.values.forEach((cellData, colIndex) => {
-                 const cellX = labelMargin + colIndex * heatmapCellWidth;
-                 const numericValue = typeof cellData.value === 'number' && !isNaN(cellData.value) ? cellData.value : 0;
-                 const originalFillColor = cellData.clusterAnomaly === 'anomaly' ? 'red' : colorScale(numericValue);
-                 const highlightColor = clusterHighlightColors.get(cellData.cluster);
-                 const currentFill = highlightColor || originalFillColor;
+        const labelMargin = 150;
+        const heatmapCellWidth = 4;
+        const heatmapCellHeight = 18;
+        const baseVerticalSpace = 7;
+        const sectionGap = 18;
+        const separatorIndices = [4, 7, 11, 12];
 
-                 svg.append("rect")
-                    .attr("class", "cell").attr("data-cluster", cellData.cluster)
-                    .attr("data-clusteranomaly", cellData.clusterAnomaly).attr("data-metric", rowData.metric)
-                    .attr("data-value", cellData.value).attr("data-original-fill", originalFillColor)
-                    .attr("x", cellX).attr("y", rowY).attr("width", heatmapCellWidth).attr("height", heatmapCellHeight)
-                    .attr("fill", currentFill).style("cursor", "pointer")
-                    .on("mouseover", function (event) {
-                        const d = d3.select(this);
-                        tooltip.style("display", "block")
-                               .html(`<strong>${d.attr("data-metric")}</strong><br>Cluster: ${d.attr("data-cluster")}<br>Value: ${d.attr("data-value")}<br>Anomaly: ${d.attr("data-clusteranomaly")}`)
-                               .style("left", (event.pageX + 10) + "px").style("top", (event.pageY + 10) + "px");
-                    })
-                    .on("mouseout", () => tooltip.style("display", "none"))
-                    .on("click", function (event) {
-                        event.stopPropagation();
-                        const cell = d3.select(this);
-                        const clusterID = cell.attr("data-cluster");
-                        let currentHighlightColor = clusterHighlightColors.get(clusterID);
-                        if (!currentHighlightColor) {
-                             currentHighlightColor = generateUniqueHighlightColor();
-                             clusterHighlightColors.set(clusterID, currentHighlightColor);
-                        }
-                        d3.selectAll('rect.cell[data-cluster="' + clusterID + '"]').attr('fill', currentHighlightColor);
-                        visualizeClusterInSidebar(clusterID, currentHighlightColor);
-                    });
-             });
-         });
-         applyAllHeatmapHighlights();
-     }
+        let calculatedTotalHeight = 20;
+        for (let i = 0; i < heatmapData.length; i++) {
+            calculatedTotalHeight += heatmapCellHeight;
+            if (i < heatmapData.length - 1) {
+                 calculatedTotalHeight += separatorIndices.includes(i + 1) ? sectionGap : baseVerticalSpace;
+            }
+        }
+        calculatedTotalHeight += 20;
+
+        const width = labelMargin + maxCols * heatmapCellWidth + 40;
+
+        d3.select("#heatmap").select("svg").remove();
+        const svg = d3.select("#heatmap").append("svg")
+            .attr("width", width)
+            .attr("height", calculatedTotalHeight);
+
+        let currentY = 20;
+
+        filteredHeatmapData.forEach((rowData, rowIndex) => {
+
+            if (separatorIndices.includes(rowIndex)) {
+                 const lineY = currentY - (sectionGap - baseVerticalSpace) / 2;
+                 svg.append("line")
+                    .attr("x1", labelMargin - 10)
+                    .attr("y1", lineY)
+                    .attr("x2", labelMargin + maxCols * heatmapCellWidth)
+                    .attr("y2", lineY)
+                    .attr("stroke", "#bdbdbd")
+                    .attr("stroke-width", 1)
+                    .attr("stroke-dasharray", "3,3");
+            }
+
+            svg.append("text")
+                .attr("x", labelMargin - 10)
+                .attr("y", currentY + heatmapCellHeight / 2)
+                .attr("text-anchor", "end")
+                .attr("alignment-baseline", "middle")
+                .attr("font-size", "12px")
+                .attr("fill", "black")
+                .text(rowData.metric);
+
+            const sortedValues = [...rowData.pivotData].sort(comparator).slice(0, maxCellsPerRow);
+
+            const numericValues = sortedValues
+                                    .filter(d => d.clusterAnomaly !== 'anomaly')
+                                    .map(d => typeof d.value === 'number' ? d.value : 0)
+                                    .filter(v => !isNaN(v));
+            const rowMax = numericValues.length > 0 ? d3.max(numericValues) : 1;
+            const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                                 .domain([0, rowMax === 0 ? 1 : rowMax]);
+
+            sortedValues.forEach((cellData, colIndex) => {
+                const cellX = labelMargin + colIndex * heatmapCellWidth;
+                const numericValue = typeof cellData.value === 'number' && !isNaN(cellData.value) ? cellData.value : 0;
+
+                const originalFillColor = cellData.clusterAnomaly === 'anomaly' ? '#e57373' : colorScale(numericValue);
+                const highlightColor = clusterHighlightColors.get(cellData.cluster);
+                const currentFill = highlightColor || originalFillColor;
+
+                svg.append("rect")
+                   .attr("class", "cell")
+                   .attr("data-cluster", cellData.cluster)
+                   .attr("data-clusteranomaly", cellData.clusterAnomaly)
+                   .attr("data-metric", rowData.metric)
+                   .attr("data-value", cellData.value)
+                   .attr("data-original-fill", originalFillColor)
+                   .attr("x", cellX)
+                   .attr("y", currentY)
+                   .attr("width", heatmapCellWidth)
+                   .attr("height", heatmapCellHeight)
+                   .attr("fill", currentFill)
+                   .style("stroke", "#eee")
+                   .style("stroke-width", 0.5)
+                   .style("cursor", "pointer")
+                   .on("mouseover", function (event) {
+                       const d = d3.select(this);
+                       tooltip.style("display", "block")
+                              .html(`<strong>${d.attr("data-metric")}</strong><br>Cluster: ${d.attr("data-cluster")}<br>Value: ${d.attr("data-value")}<br>Anomaly: ${d.attr("data-clusteranomaly")}`)
+                              .style("left", (event.pageX + 10) + "px")
+                              .style("top", (event.pageY + 10) + "px");
+                   })
+                   .on("mouseout", () => tooltip.style("display", "none"))
+                   .on("click", function (event) {
+                       event.stopPropagation();
+                       const cell = d3.select(this);
+                       const clusterID = cell.attr("data-cluster");
+                       let currentHighlightColor = clusterHighlightColors.get(clusterID);
+                       if (!currentHighlightColor) {
+                           currentHighlightColor = generateUniqueHighlightColor();
+                           clusterHighlightColors.set(clusterID, currentHighlightColor);
+                       }
+                       d3.selectAll('rect.cell[data-cluster="' + clusterID + '"]')
+                         .attr('fill', currentHighlightColor);
+                       visualizeClusterInSidebar(clusterID, currentHighlightColor);
+                   });
+            });
+
+            currentY += heatmapCellHeight;
+            if (rowIndex < heatmapData.length - 1) {
+                currentY += separatorIndices.includes(rowIndex + 1) ? sectionGap : baseVerticalSpace;
+            }
+        });
+        applyAllHeatmapHighlights();
+    }
 
     function showHeatmap() {
         if (globalCy) { globalCy.destroy(); globalCy = null; }
@@ -932,144 +1473,203 @@
         document.getElementById('table-pagination').style.display = 'none';
         document.getElementById('table-search-container').style.display = "none";
         document.getElementById('topControls').style.display = 'block';
+        document.getElementById('sidebarNodeSizeMin').addEventListener('input', applySidebarSizeControls);
+        document.getElementById('sidebarNodeSizeMax').addEventListener('input', applySidebarSizeControls);
+        document.getElementById('sidebarEdgeWidthMin').addEventListener('input', applySidebarSizeControls);
+        document.getElementById('sidebarEdgeWidthMax').addEventListener('input', applySidebarSizeControls);
         d3.select("#heatmap").style("display", "block");
         clearEdgeFilter();
         clearSidebarVisualization();
         updateLegend();
         updateHeatmap();
         toggleSidebar(false);
-    }
+       }
     document.getElementById('backToHeatmap').addEventListener('click', showHeatmap);
 
     function showLoading() { document.getElementById('loading-overlay').style.display = 'flex'; }
     function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
 
     function updateLegend(cyEdges = null) {
-         const legendTableBody = d3.select('#legend tbody');
-         legendTableBody.html('');
-         let protocols = new Set();
-         let calculationPromise;
-         let totalCount = 0;
+        const legendTableBody = d3.select('#legend tbody');
+        legendTableBody.html('');
+        let protocols = new Set();
+        let calculationPromise;
+        let totalCount = 0;
 
-         if (cyEdges && cyEdges.length > 0) {
-             document.querySelector('#legend-container h3').textContent = "Sidebar Protocols";
-             const counts = {};
-             cyEdges.forEach(edge => {
-                 const protocol = (edge.data('Protocol') || 'Unknown').trim(); if (!protocol) return;
-                 protocols.add(protocol);
-                 const count = edge.data('processCount') || 1;
-                 counts[protocol] = (counts[protocol] || 0) + count;
-                 totalCount += count;
-             });
-             totalCount = totalCount || 1;
-             const percentages = {};
-             Object.entries(counts).forEach(([p, c]) => { percentages[p] = (c / totalCount) * 100; });
-             calculationPromise = Promise.resolve(percentages);
-         } else {
-              document.querySelector('#legend-container h3').textContent = "Protocol Legend";
-             calculationPromise = fetch(`${API_BASE_URL}/protocol_percentages`).then(res => res.ok ? res.json() : Promise.reject('Failed global percentages')).catch(error => { console.error("Error fetching global protocol percentages:", error); return {}; });
-         }
+        if (cyEdges && cyEdges.length > 0) {
+            document.querySelector('#legend-container h3').textContent = "Sidebar Protocols";
+            const counts = {};
+            cyEdges.forEach(edge => {
+                const protocol = (edge.data('Protocol') || 'Unknown').trim();
+                if (!protocol) return;
+                protocols.add(protocol);
+                const count = edge.data('processCount') || 1;
+                counts[protocol] = (counts[protocol] || 0) + count;
+                totalCount += count;
+            });
+            totalCount = totalCount || 1;
+            const percentages = {};
+            Object.entries(counts).forEach(([p, c]) => { percentages[p] = (c / totalCount) * 100; });
+            calculationPromise = Promise.resolve(percentages);
+        } else {
+             document.querySelector('#legend-container h3').textContent = "Protocol Edge Coloring";
+            calculationPromise = fetch(`${API_BASE_URL}/protocol_percentages`)
+                .then(res => res.ok ? res.json() : Promise.reject('Failed global percentages'))
+                .catch(error => {
+                    console.error("Error fetching global protocol percentages:", error);
+                    return {};
+                });
+        }
 
-         calculationPromise.then(percentages => {
-             if (!cyEdges) { Object.keys(percentages).forEach(proto => { if(proto) protocols.add(proto); }); }
-             protocols.forEach(proto => { if (proto && !protocolColorMap[proto]) { protocolColorMap[proto] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0'); } });
-             if (!protocolColorMap['Unknown']) { protocolColorMap['Unknown'] = DEFAULT_UNKNOWN_COLOR; }
+        calculationPromise.then(percentages => {
+            if (!cyEdges) {
+                Object.keys(percentages).forEach(proto => { if(proto) protocols.add(proto); });
+            }
+            protocols.forEach(proto => {
+                if (proto && !protocolColorMap[proto]) {
+                    protocolColorMap[proto] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                }
+            });
+            if (!protocolColorMap['Unknown']) {
+                protocolColorMap['Unknown'] = DEFAULT_UNKNOWN_COLOR;
+            }
 
-             const sortedProtocols = Array.from(protocols).filter(p => p).sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
-             sortedProtocols.forEach(protocol => {
-                 const pct = percentages[protocol] || 0;
-                 const pctText = (pct > 0.01 ? pct.toFixed(2) : '<0.01') + '%';
-                 const color = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
-                 legendTableBody.append('tr').html(`<td>${protocol}</td><td><span class="color-box" style="background-color:${color}"></span></td><td>${pctText}</td>`);
-             });
+            const sortedProtocols = Array.from(protocols).filter(p => p).sort((a, b) => (percentages[b] || 0) - (percentages[a] || 0));
 
-             if (sidebarCy) {
-                 sidebarCy.edges().forEach(edge => {
-                     const protocol = edge.data('Protocol') || 'Unknown';
-                     const newColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
-                     const nodeIsSelected = selectedNodeId && (edge.source().id() === selectedNodeId || edge.target().id() === selectedNodeId);
-                     const edgeIsSelected = selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`);
-                     if (!nodeIsSelected && !edgeIsSelected) { edge.style({'line-color': newColor, 'target-arrow-color': newColor}); }
-                     edge.scratch('_protocolColor', newColor); // Update scratch always
-                 });
-             }
-         });
-     }
+            sortedProtocols.forEach(protocol => {
+                const pct = percentages[protocol] || 0;
+                const pctText = (pct > 0.01 ? pct.toFixed(2) : '<0.01') + '%';
+                const color = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                legendTableBody.append('tr').html(
+                    `<td>${protocol}</td><td><span class="color-box" style="background-color:${color}"></span></td><td>${pctText}</td>`
+                );
+            });
+
+            if (sidebarCy) {
+                sidebarCy.edges().forEach(edge => {
+                    const protocol = edge.data('Protocol') || 'Unknown';
+                    const newColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                    const nodeIsSelected = selectedNodeId && (edge.source().id() === selectedNodeId || edge.target().id() === selectedNodeId);
+                    const edgeIsSelected = selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`);
+                    if (!nodeIsSelected && !edgeIsSelected) {
+                         edge.style({'line-color': newColor, 'target-arrow-color': newColor});
+                    }
+                    edge.scratch('_protocolColor', newColor);
+                });
+            }
+        });
+       }
 
     function updateHeatmap() {
-         showLoading();
-         const metrics = [
-             { label: "Count", value: "count" }, { label: "Unique IPs", value: "Unique IPs" },
-             { label: "Unique Sources", value: "Unique Sources" }, { label: "Unique Destinations", value: "Unique Destinations" },
-             { label: "Packet Length", value: "Length" }, { label: "Payload Length", value: "Len" },
-             { label: "Payload Size Variance", value: "Payload Size Variance" }, { label: "Packets per Second", value: "Packets per Second" },
-             { label: "Total Data Sent", value: "Total Data Sent" }, { label: "% SYN packets", value: "% SYN packets" },
-             { label: "% RST packets", value: "% RST packets" }, { label: "% ACK packets", value: "% ACK packets" },
-             { label: "% PSH packets", value: "% PSH packets" }
-         ];
-         const filterParamsBase = {
-             payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
-             sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
-             destinationFilter: document.getElementById('destinationFilter').value.trim().toLowerCase(),
-             protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
-             entropyMin: document.getElementById('entropyMinFilter').value, entropyMax: document.getElementById('entropyMaxFilter').value,
-             isLargePacketOnly: document.getElementById('isLargePacketFilter').checked, isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
-             minSourceAmt: document.getElementById('minSourceAmtFilter').value, maxSourceAmt: document.getElementById('maxSourceAmtFilter').value,
-             minDestinationAmt: document.getElementById('minDestinationAmtFilter').value, maxDestinationAmt: document.getElementById('maxDestinationAmtFilter').value
-         };
-         Promise.all(metrics.map(m => {
-             const filterParams = { ...filterParamsBase, metric: m.value };
-             return fetch(`${API_BASE_URL}/filter_and_aggregate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(filterParams) })
-                 .then(response => response.ok ? response.json() : Promise.reject(`Failed ${m.label} (${response.status})`))
-                 .then(data => ({ metric: m.label, pivotData: data }))
-                 .catch(error => { console.error(`Error fetching ${m.label}:`, error); return { metric: m.label, pivotData: [], error: true }; });
-         }))
-         .then(results => { renderCombinedHeatmap(results.filter(r => !r.error)); hideLoading(); })
-         .catch(error => { console.error("Major error fetching heatmap data:", error); d3.select("#heatmap").html('<p style="color: red;">Error loading heatmap data.</p>'); hideLoading(); });
-         applyAllHeatmapHighlights();
-     }
+        showLoading();
+        const metrics = [
+            { label: "Unique IPs", value: "Unique IPs" },
+            { label: "Unique Sources", value: "Unique Sources" },
+            { label: "Unique Destinations", value: "Unique Destinations" },
+            { label: "Number of Processes", value: "count" },
+            { label: "Packet Length", value: "Length" },
+            { label: "Payload Length", value: "Len" },
+            { label: "Payload Size Variance", value: "Payload Size Variance" },
+            { label: "Start Time (Rel Sec)", value: "Start Time" },
+            { label: "Duration (Sec)", value: "Duration" },
+            { label: "Avg Inter-Arrival (Sec)", value: "Average Inter-Arrival Time" },
+            { label: "Packets per Second", value: "Packets per Second" },
+            { label: "Total Data Sent", value: "Total Data Sent" },
+            { label: "% SYN packets", value: "% SYN packets" },
+            { label: "% RST packets", value: "% RST packets" },
+            { label: "% ACK packets", value: "% ACK packets" },
+            { label: "% PSH packets", value: "% PSH packets" }
+        ];
+
+        const filterParamsBase = {
+            payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
+            sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
+            destinationFilter: document.getElementById('destinationFilter').value.trim().toLowerCase(),
+            protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
+            entropyMin: document.getElementById('entropyMinFilter').value, entropyMax: document.getElementById('entropyMaxFilter').value,
+            isLargePacketOnly: document.getElementById('isLargePacketFilter').checked, isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
+            minSourceAmt: document.getElementById('minSourceAmtFilter').value, maxSourceAmt: document.getElementById('maxSourceAmtFilter').value,
+            minDestinationAmt: document.getElementById('minDestinationAmtFilter').value, maxDestinationAmt: document.getElementById('maxDestinationAmtFilter').value
+        };
+        Promise.all(metrics.map(m => {
+            const filterParams = { ...filterParamsBase, metric: m.value };
+            return fetch(`${API_BASE_URL}/filter_and_aggregate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(filterParams)
+            })
+            .then(response => response.ok ? response.json() : Promise.reject(`Failed ${m.label} (${response.status})`))
+            .then(data => ({ metric: m.label, pivotData: data }))
+            .catch(error => {
+                console.error(`Error fetching ${m.label}:`, error);
+                return { metric: m.label, pivotData: [], error: true };
+            });
+        }))
+        .then(results => {
+            renderCombinedHeatmap(results.filter(r => !r.error));
+            hideLoading();
+        })
+        .catch(error => {
+            console.error("Major error fetching heatmap data:", error);
+            d3.select("#heatmap").html('<p style="color: red;">Error loading heatmap data.</p>');
+            hideLoading();
+        });
+        applyAllHeatmapHighlights();
+       }
 
     function loadSidebarClusterTable(clusterID, page) {
-         if (!clusterID) return;
-         sidebarTableMode = 'cluster';
-         currentSidebarTableClusterId = clusterID;
-         console.log(`Loading sidebar table for Cluster ${clusterID}, page ${page}`);
-         showSidebarLoading(false, true);
-         sidebarTableContainer.style.display = 'none';
-         sidebarTablePagination.style.display = 'none';
+        if (!clusterID) return;
+        sidebarTableMode = 'cluster';
+        currentSidebarTableClusterId = clusterID;
+        console.log(`Loading sidebar table for Cluster ${clusterID}, page ${page}`);
+        showSidebarLoading(false, true);
+        sidebarTableContainer.style.display = 'none';
+        sidebarTablePagination.style.display = 'none';
+        sidebarSearchContainer.style.display = 'none';
 
-         fetch(`${API_BASE_URL}/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
-             .then(response => response.ok ? response.text() : Promise.reject(`Failed cluster table page (${response.status})`))
-             .then(html => {
-                 showSidebarLoading(false, false);
-                 sidebarTableContainer.innerHTML = html;
-                 sidebarTableContainer.style.display = 'block';
-                 const summaryElem = sidebarTableContainer.querySelector('#table-summary');
-                 if (summaryElem && summaryElem.dataset.total) {
-                     const total = parseInt(summaryElem.dataset.total, 10);
-                      if (total > 0) {
-                         sidebarTablePagination.style.display = 'block';
-                         const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
-                         document.getElementById('sidebarTotalPages').textContent = totalPages || 1;
-                         document.getElementById('sidebarCurrentPageInput').value = page;
-                         document.getElementById('sidebarCurrentPageInput').max = totalPages || 1;
-                      } else { sidebarTablePagination.style.display = 'none'; }
-                 } else {
-                     document.getElementById('sidebarTotalPages').textContent = '?';
-                     document.getElementById('sidebarCurrentPageInput').value = page;
-                     sidebarTablePagination.style.display = 'none';
-                     console.warn("No table summary total found in sidebar cluster table response.");
-                 }
-                  sidebarTableContainer.scrollTop = 0;
-             })
-             .catch(error => {
-                 console.error("Error fetching sidebar cluster table:", error);
-                 showSidebarLoading(false, false);
-                 sidebarTableContainer.innerHTML = `<p style="color: red; padding: 10px;">Error loading table data.</p>`;
-                 sidebarTableContainer.style.display = 'block';
-                 sidebarTablePagination.style.display = 'none';
-             });
-     }
+        fetch(`${API_BASE_URL}/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+            .then(response => response.ok ? response.text() : Promise.reject(`Failed cluster table page (${response.status})`))
+            .then(html => {
+                showSidebarLoading(false, false);
+                 const tempDiv = document.createElement('div');
+                 tempDiv.innerHTML = html;
+                 const tableHtml = tempDiv.querySelector('table')?.outerHTML || '';
+                 const summaryHtml = tempDiv.querySelector('#table-summary')?.outerHTML || '';
+                 sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>' + tableHtml;
+                sidebarTableContainer.style.display = 'block';
+                sidebarSearchContainer.style.display = 'block';
+                if (sidebarSearchInput) filterSidebarTable();
+
+
+                const summaryElem = tempDiv.querySelector('#table-summary');
+                if (summaryElem && summaryElem.dataset.total) {
+                    const total = parseInt(summaryElem.dataset.total, 10);
+                    if (total > 0) {
+                        sidebarTablePagination.style.display = 'block';
+                        const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+                        document.getElementById('sidebarTotalPages').textContent = totalPages || 1;
+                        document.getElementById('sidebarCurrentPageInput').value = page;
+                        document.getElementById('sidebarCurrentPageInput').max = totalPages || 1;
+                    } else {
+                        sidebarTablePagination.style.display = 'none';
+                    }
+                } else {
+                    document.getElementById('sidebarTotalPages').textContent = '?';
+                    document.getElementById('sidebarCurrentPageInput').value = page;
+                    sidebarTablePagination.style.display = 'none';
+                    console.warn("No table summary total found in sidebar cluster table response.");
+                }
+                sidebarTableContainer.scrollTop = 0;
+            })
+            .catch(error => {
+                console.error("Error fetching sidebar cluster table:", error);
+                showSidebarLoading(false, false);
+                sidebarTableContainer.innerHTML = `<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p><p style="color: red; padding: 10px;">Error loading table data.</p>`;
+                sidebarTableContainer.style.display = 'block';
+                sidebarSearchContainer.style.display = 'none';
+                sidebarTablePagination.style.display = 'none';
+            });
+       }
 
     sidebarGoPageBtn.addEventListener('click', function () {
         let pageInput = document.getElementById('sidebarCurrentPageInput');
@@ -1078,188 +1678,363 @@
         const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
 
         if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity)) {
-             if (sidebarTableMode === 'cluster' && currentSidebarTableClusterId) {
-                 loadSidebarClusterTable(currentSidebarTableClusterId, page);
-             } else if (sidebarTableMode === 'edges') {
-                 let edgeList = [];
-                 if (selectedNodeId && sidebarCy) {
-                      const node = sidebarCy.getElementById(selectedNodeId);
-                      if (node && node.length > 0) { edgeList = node.connectedEdges().map(edge => ({ source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') })); }
+            if (sidebarTableMode === 'cluster' && currentSidebarTableClusterId) {
+                loadSidebarClusterTable(currentSidebarTableClusterId, page);
+            } else if (sidebarTableMode === 'edges') {
+                let edgeList = [];
+                if (selectedNodeId && sidebarCy) {
+                    const node = sidebarCy.getElementById(selectedNodeId);
+                    if (node && node.length > 0) {
+                        edgeList = node.connectedEdges().map(edge => ({ source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') }));
+                    }
                  } else if (selectedSidebarEdges.size > 0) {
-                      edgeList = Array.from(selectedSidebarEdges).map(key => { const parts = key.split('|'); return { source: parts[0], destination: parts[1], protocol: parts[2] }; });
+                    edgeList = Array.from(selectedSidebarEdges).map(key => {
+                        const parts = key.split('|');
+                        return { source: parts[0], destination: parts[1], protocol: parts[2] };
+                    });
                  }
-                 if (edgeList.length > 0) { loadSidebarMultiEdgeTable(edgeList, page); }
-                 else { console.warn("Sidebar pagination clicked in edge mode, but no edges identified as selected."); }
-             } else { console.warn("Sidebar pagination clicked but current table context is unclear."); }
-        } else { alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`); }
+                 if (edgeList.length > 0) {
+                     loadSidebarMultiEdgeTable(edgeList, page);
+                 } else {
+                     console.warn("Sidebar pagination clicked in edge mode, but no edges identified as selected.");
+                 }
+            } else {
+                console.warn("Sidebar pagination clicked but current table context is unclear.");
+            }
+        } else {
+            alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`);
+        }
     });
 
     function loadClusterTablePage(clusterID, page) {
-         currentClusterID = clusterID;
-         fetch(`${API_BASE_URL}/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
-             .then(response => response.ok ? response.text() : Promise.reject(`Failed main table page (${response.status})`))
-             .then(html => {
-                 const container = document.getElementById('table-container');
-                 container.innerHTML = html;
-                 container.style.display = 'block';
-                 document.getElementById('table-pagination').style.display = 'block';
-                 const summaryElem = container.querySelector('#table-summary');
-                 if (summaryElem && summaryElem.dataset.total) {
-                     const total = parseInt(summaryElem.dataset.total, 10);
-                     const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
-                     document.getElementById('totalPages').textContent = totalPages || 1;
-                     document.getElementById('currentPageInput').value = page;
-                     document.getElementById('currentPageInput').max = totalPages || 1;
-                 } else {
-                     document.getElementById('totalPages').textContent = '?';
-                     document.getElementById('currentPageInput').value = page;
-                     console.warn("No table summary total in main table response.");
-                 }
-                 container.scrollTop = 0;
-             }).catch(error => {
-                 console.error("Error fetching main cluster table:", error);
-                 document.getElementById('table-container').innerHTML = `<p style="color: red; padding: 10px;">Error loading table data.</p>`;
-                 document.getElementById('table-container').style.display = 'block';
-                 document.getElementById('table-pagination').style.display = 'none';
-             });
-     }
+        currentClusterID = clusterID;
+        fetch(`${API_BASE_URL}/get_cluster_table?cluster_id=${clusterID}&page=${page}&page_size=${TABLE_PAGE_SIZE}`)
+            .then(response => response.ok ? response.text() : Promise.reject(`Failed main table page (${response.status})`))
+            .then(html => {
+                const container = document.getElementById('table-container');
+                container.innerHTML = html;
+                container.style.display = 'block';
+                document.getElementById('table-pagination').style.display = 'block';
+
+                const summaryElem = container.querySelector('#table-summary');
+                if (summaryElem && summaryElem.dataset.total) {
+                    const total = parseInt(summaryElem.dataset.total, 10);
+                    const totalPages = Math.ceil(total / TABLE_PAGE_SIZE);
+                    document.getElementById('totalPages').textContent = totalPages || 1;
+                    document.getElementById('currentPageInput').value = page;
+                    document.getElementById('currentPageInput').max = totalPages || 1;
+                } else {
+                    document.getElementById('totalPages').textContent = '?';
+                    document.getElementById('currentPageInput').value = page;
+                    console.warn("No table summary total in main table response.");
+                }
+                container.scrollTop = 0;
+            }).catch(error => {
+                console.error("Error fetching main cluster table:", error);
+                document.getElementById('table-container').innerHTML = `<p style="color: red; padding: 10px;">Error loading table data.</p>`;
+                document.getElementById('table-container').style.display = 'block';
+                document.getElementById('table-pagination').style.display = 'none';
+            });
+       }
 
     function createClusterTable(clusterID) {
         loadClusterTablePage(clusterID, 1);
         document.getElementById('table-search-container').style.display = "block";
-    }
+       }
 
     function visualizeNetwork(elements) {
-         if (globalCy) { globalCy.destroy(); }
-         globalCy = cytoscape({ container: document.getElementById('cy'), elements: elements, style: CYTOSCAPE_STYLE, layout: { name: 'cose' } }); // Default layout for main graph
-         applySizeControls();
-     }
+        if (globalCy) { globalCy.destroy(); }
+        globalCy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: elements,
+            style: CYTOSCAPE_STYLE,
+            layout: { name: 'cose' }
+        });
+        applySizeControls();
+       }
 
     function applySizeControls() {
-         if (!globalCy) return;
-         const minNS = Math.max(parseFloat(document.getElementById('nodeSizeMin').value) || 15, 1);
-         const maxNS = Math.max(parseFloat(document.getElementById('nodeSizeMax').value) || 60, minNS + 1);
-         const minEW = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 1, 0.1);
-         const maxEW = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 10, minEW + 0.1);
+        if (!globalCy) return;
+        const minNS = Math.max(parseFloat(document.getElementById('nodeSizeMin').value) || 15, 1);
+        const maxNS = Math.max(parseFloat(document.getElementById('nodeSizeMax').value) || 60, minNS + 1);
+        const minEW = Math.max(parseFloat(document.getElementById('edgeWidthMin').value) || 1, 0.1);
+        const maxEW = Math.max(parseFloat(document.getElementById('edgeWidthMax').value) || 10, minEW + 0.1);
 
-         globalCy.batch(() => {
-             globalCy.nodes().forEach(n => {
-                 const weight = n.data('NodeWeight') ?? 0.5;
-                 let size = minNS + (maxNS - minNS) * weight;
-                 size = Math.max(minNS, Math.min(size, maxNS));
-                 n.style({ 'width': size, 'height': size });
-             });
-             const counts = globalCy.edges().map(e => e.data('processCount') || 1);
-             if (counts.length > 0) {
-                 const minCount = Math.min(...counts);
-                 const maxCount = Math.max(...counts);
-                 const countRange = (maxCount - minCount) || 1;
-                 globalCy.edges().forEach(e => {
-                     const count = e.data('processCount') || 1;
-                     let width = minEW + (maxEW - minEW) * ((count - minCount) / countRange);
-                     width = Math.max(minEW, Math.min(width, maxEW));
-                     e.style('width', width);
-                 });
-             }
-         });
-     }
+        globalCy.batch(() => {
+            globalCy.nodes().forEach(n => {
+                const weight = n.data('NodeWeight') ?? 0.5;
+                let size = minNS + (maxNS - minNS) * weight;
+                size = Math.max(minNS, Math.min(size, maxNS));
+                n.style({ 'width': size, 'height': size });
+            });
+            const counts = globalCy.edges().map(e => e.data('processCount') || 1);
+            if (counts.length > 0) {
+                const minCount = Math.min(...counts);
+                const maxCount = Math.max(...counts);
+                const countRange = (maxCount - minCount) || 1;
+
+                globalCy.edges().forEach(e => {
+                    const count = e.data('processCount') || 1;
+                    let width = minEW + (maxEW - minEW) * ((count - minCount) / countRange);
+                    width = Math.max(minEW, Math.min(width, maxEW));
+                    e.style('width', width);
+                });
+            }
+        });
+       }
 
     function applyEdgeFilter() {
-         if (!globalCy) return;
-         const sourceFilter = document.getElementById('edgeFilterSource').value.toLowerCase();
-         const destFilter = document.getElementById('edgeFilterDestination').value.toLowerCase();
-         const protoFilter = document.getElementById('edgeFilterProtocol').value.toLowerCase();
-         const weightFilterStr = document.getElementById('edgeFilterWeight').value;
-         const countFilterStr = document.getElementById('edgeFilterProcessCount').value;
+        if (!globalCy) return;
+        const sourceFilter = document.getElementById('edgeFilterSource').value.toLowerCase();
+        const destFilter = document.getElementById('edgeFilterDestination').value.toLowerCase();
+        const protoFilter = document.getElementById('edgeFilterProtocol').value.toLowerCase();
+        const weightFilterStr = document.getElementById('edgeFilterWeight').value;
+        const countFilterStr = document.getElementById('edgeFilterProcessCount').value;
 
-         const parseFilter = (filterStr) => { const match = filterStr.match(/^([<>=!]+)?\s*(\d+(\.\d+)?)$/); if (match) { const operator = match[1] || '=='; const value = parseFloat(match[2]); return { operator, value }; } return null; };
-         const weightFilter = parseFilter(weightFilterStr);
-         const countFilter = parseFilter(countFilterStr);
+        const parseFilter = (filterStr) => {
+            const match = filterStr.match(/^([<>=!]+)?\s*(\d+(\.\d+)?)$/);
+            if (match) {
+                const operator = match[1] || '==';
+                const value = parseFloat(match[2]);
+                return { operator, value };
+            }
+            return null;
+        };
+        const weightFilter = parseFilter(weightFilterStr);
+        const countFilter = parseFilter(countFilterStr);
 
-         globalCy.edges().forEach(edge => {
-             let show = true;
-             const data = edge.data();
-             if (sourceFilter && !data.source?.toLowerCase().includes(sourceFilter)) show = false;
-             if (destFilter && !data.target?.toLowerCase().includes(destFilter)) show = false;
-             if (protoFilter && !data.Protocol?.toLowerCase().includes(protoFilter)) show = false;
-             if (weightFilter) { const edgeWeight = data.EdgeWeight || 0; if (weightFilter.operator === '>=' && !(edgeWeight >= weightFilter.value)) show = false; else if (weightFilter.operator === '>' && !(edgeWeight > weightFilter.value)) show = false; else if (weightFilter.operator === '<=' && !(edgeWeight <= weightFilter.value)) show = false; else if (weightFilter.operator === '<' && !(edgeWeight < weightFilter.value)) show = false; else if (weightFilter.operator === '==' && !(edgeWeight == weightFilter.value)) show = false; else if (weightFilter.operator === '!=' && !(edgeWeight != weightFilter.value)) show = false; }
-             if (countFilter) { const processCount = data.processCount || 0; if (countFilter.operator === '>=' && !(processCount >= countFilter.value)) show = false; else if (countFilter.operator === '>' && !(processCount > countFilter.value)) show = false; else if (countFilter.operator === '<=' && !(processCount <= countFilter.value)) show = false; else if (countFilter.operator === '<' && !(processCount < countFilter.value)) show = false; else if (countFilter.operator === '==' && !(processCount == countFilter.value)) show = false; else if (countFilter.operator === '!=' && !(processCount != countFilter.value)) show = false; }
-             edge.style('display', show ? 'element' : 'none');
-         });
-     }
+        globalCy.edges().forEach(edge => {
+            let show = true;
+            const data = edge.data();
+
+            if (sourceFilter && !data.source?.toLowerCase().includes(sourceFilter)) show = false;
+            if (destFilter && !data.target?.toLowerCase().includes(destFilter)) show = false;
+            if (protoFilter && !data.Protocol?.toLowerCase().includes(protoFilter)) show = false;
+
+            if (weightFilter && show) {
+                const edgeWeight = data.EdgeWeight || 0;
+                switch (weightFilter.operator) {
+                    case '>=': if (!(edgeWeight >= weightFilter.value)) show = false; break;
+                    case '>':  if (!(edgeWeight > weightFilter.value)) show = false; break;
+                    case '<=': if (!(edgeWeight <= weightFilter.value)) show = false; break;
+                    case '<':  if (!(edgeWeight < weightFilter.value)) show = false; break;
+                    case '==': if (!(edgeWeight == weightFilter.value)) show = false; break;
+                    case '!=': if (!(edgeWeight != weightFilter.value)) show = false; break;
+                }
+            }
+
+            if (countFilter && show) {
+                const processCount = data.processCount || 0;
+                 switch (countFilter.operator) {
+                    case '>=': if (!(processCount >= countFilter.value)) show = false; break;
+                    case '>':  if (!(processCount > countFilter.value)) show = false; break;
+                    case '<=': if (!(processCount <= countFilter.value)) show = false; break;
+                    case '<':  if (!(processCount < countFilter.value)) show = false; break;
+                    case '==': if (!(processCount == countFilter.value)) show = false; break;
+                    case '!=': if (!(processCount != countFilter.value)) show = false; break;
+                }
+            }
+            edge.style('display', show ? 'element' : 'none');
+        });
+       }
 
     function clearEdgeFilter() {
-         document.getElementById('edgeFilterSource').value = '';
-         document.getElementById('edgeFilterDestination').value = '';
-         document.getElementById('edgeFilterProtocol').value = '';
-         document.getElementById('edgeFilterWeight').value = '';
-         document.getElementById('edgeFilterProcessCount').value = '';
-         if(globalCy) { globalCy.edges().style('display', 'element'); }
+        document.getElementById('edgeFilterSource').value = '';
+        document.getElementById('edgeFilterDestination').value = '';
+        document.getElementById('edgeFilterProtocol').value = '';
+        document.getElementById('edgeFilterWeight').value = '';
+        document.getElementById('edgeFilterProcessCount').value = '';
+        if(globalCy) { globalCy.edges().style('display', 'element'); }
+       }
+
+     function toggleSidebarFullscreen() {
+        if (!document.fullscreenEnabled) {
+            alert("Fullscreen mode is not supported by your browser.");
+            return;
+        }
+
+        if (!document.fullscreenElement && !isSidebarFullscreen) {
+            // Enter fullscreen
+            sidebar.requestFullscreen().then(() => {
+                sidebar.classList.add('fullscreen');
+                legendContainer.classList.add('fullscreen-active'); // Show legend
+                document.body.classList.add('sidebar-fullscreen');
+                isSidebarFullscreen = true;
+                sidebarFullscreenBtn.innerHTML = '&#x274C;'; // Exit icon
+                sidebarFullscreenBtn.title = "Exit Sidebar Fullscreen";
+                console.log("Entered sidebar fullscreen.");
+                if (sidebarCy) {
+                    setTimeout(() => {
+                         sidebarCy.resize();
+                         // Recenter graph on entering fullscreen
+                         sidebarCy.fit(null, 50); // Fit with 50px padding
+                         // applySidebarLayout(); // Optional: re-run layout
+                    }, 100); // Increased delay slightly
+                }
+            }).catch(err => {
+                alert(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
+                console.error("Fullscreen request failed:", err);
+            });
+        } else if (document.fullscreenElement === sidebar || isSidebarFullscreen) {
+            // Exit fullscreen
+            document.exitFullscreen().catch(err => {
+                alert(`Error attempting to disable fullscreen mode: ${err.message} (${err.name})`);
+                console.error("Fullscreen exit failed:", err);
+                 cleanupFullscreenStyles();
+            });
+            // Style cleanup and recentering is handled by 'fullscreenchange'
+        } else {
+            console.warn("Fullscreen state mismatch detected.");
+             cleanupFullscreenStyles();
+        }
+     }
+
+     function cleanupFullscreenStyles() {
+        sidebar.classList.remove('fullscreen');
+        legendContainer.classList.remove('fullscreen-active'); // Hide legend unless sidebar is open
+        document.body.classList.remove('sidebar-fullscreen');
+        isSidebarFullscreen = false;
+        sidebarFullscreenBtn.innerHTML = '&#x2922;';
+        sidebarFullscreenBtn.title = "Toggle Sidebar Fullscreen";
+        console.log("Cleaned up fullscreen styles.");
+
+        // Restore normal sidebar state (open or closed) - this triggers resize/layout
+        toggleSidebar(isSidebarOpen);
+
+        // Recenter is handled by the fullscreenchange listener after this
      }
 
     document.addEventListener('DOMContentLoaded', () => {
         tooltip = d3.select("#tooltip");
+
         showHeatmap();
         updateLegend();
 
         document.getElementById('sidebarLayoutSelect').addEventListener('change', applySidebarLayout);
         document.getElementById('applyFiltersBtn').addEventListener('click', updateHeatmap);
+
         document.getElementById('goPageBtn').addEventListener('click', function () {
-             let page = parseInt(document.getElementById('currentPageInput').value, 10);
-             const totalPagesStr = document.getElementById('totalPages').textContent;
-             const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
-             if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity)) {
-                  if (currentClusterID !== null && document.getElementById('table-container').style.display === 'block') { loadClusterTablePage(currentClusterID, page); }
-                  else { console.warn("Main pagination Go clicked, but no active main cluster table identified."); }
-             } else { alert(`Please enter a valid page number for the main table (1 to ${totalPagesStr}).`); }
+            let page = parseInt(document.getElementById('currentPageInput').value, 10);
+            const totalPagesStr = document.getElementById('totalPages').textContent;
+            const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
+            if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity)) {
+                 if (currentClusterID !== null && document.getElementById('table-container').style.display === 'block') {
+                     loadClusterTablePage(currentClusterID, page);
+                 } else {
+                     console.warn("Main pagination Go clicked, but no active main cluster table identified.");
+                 }
+            } else {
+                alert(`Please enter a valid page number for the main table (1 to ${totalPagesStr}).`);
+            }
         });
+
         document.getElementById('nodeSizeMin').addEventListener('input', applySizeControls);
         document.getElementById('nodeSizeMax').addEventListener('input', applySizeControls);
         document.getElementById('edgeWidthMin').addEventListener('input', applySizeControls);
         document.getElementById('edgeWidthMax').addEventListener('input', applySizeControls);
         document.getElementById('applyEdgeFilterBtn').addEventListener('click', applyEdgeFilter);
         document.getElementById('clearEdgeFilterBtn').addEventListener('click', clearEdgeFilter);
+        document.getElementById('sidebarNodeSizeMin').addEventListener('input', applySidebarSizeControls);
+        document.getElementById('sidebarNodeSizeMax').addEventListener('input', applySidebarSizeControls);
+        document.getElementById('sidebarEdgeWidthMin').addEventListener('input', applySidebarSizeControls);
+        document.getElementById('sidebarEdgeWidthMax').addEventListener('input', applySidebarSizeControls);
+
+
         document.getElementById('fileInput').addEventListener('change', function(event) {
-             const file = event.target.files[0];
-             if (file) {
-                 showLoading();
-                 const reader = new FileReader();
-                 reader.onload = function(e) {
-                     const csvText = e.target.result;
-                     fetch(`${API_BASE_URL}/process_csv`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv_text: csvText }), })
-                     .then(response => { if (!response.ok) { return response.text().then(text => { throw new Error(text || `Processing failed (${response.status})`) }); } return response.text(); })
-                     .then(confirmation => { console.log('CSV processed successfully.'); showHeatmap(); updateLegend(); hideLoading(); })
-                     .catch(error => { console.error('Error processing file:', error); alert(`Error processing file: ${error.message}`); hideLoading(); });
-                 };
-                 reader.onerror = function(e) { console.error("Error reading file:", e); alert("Error reading file."); hideLoading(); };
-                 reader.readAsText(file);
-             }
-             event.target.value = null;
+            const file = event.target.files[0];
+            if (file) {
+                showLoading();
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const csvText = e.target.result;
+                    fetch(`${API_BASE_URL}/process_csv`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ csv_text: csvText }),
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text || `Processing failed (${response.status})`) });
+                        }
+                        return response.text();
+                    })
+                    .then(confirmation => {
+                        console.log('CSV processed successfully.');
+                        protocolColorMap = {};
+                        showHeatmap();
+                        updateLegend();
+                        hideLoading();
+                    })
+                    .catch(error => {
+                        console.error('Error processing file:', error);
+                        alert(`Error processing file: ${error.message}`);
+                        hideLoading();
+                    });
+                };
+                reader.onerror = function(e) {
+                    console.error("Error reading file:", e);
+                    alert("Error reading file.");
+                    hideLoading();
+                };
+                reader.readAsText(file);
+            }
+            event.target.value = null;
         });
-        document.getElementById('downloadButton').addEventListener('click', function() { window.location.href = `${API_BASE_URL}/download_csv`; });
-        sidebarGoPageBtn.addEventListener('click', function () { // Ensure sidebar pagination listener exists
-            let pageInput = document.getElementById('sidebarCurrentPageInput');
-            let page = parseInt(pageInput.value, 10);
-            const totalPagesStr = document.getElementById('sidebarTotalPages').textContent;
-            const totalPages = totalPagesStr === '?' ? Infinity : parseInt(totalPagesStr, 10);
-            if (!isNaN(page) && page >= 1 && (page <= totalPages || totalPages === Infinity)) {
-                if (sidebarTableMode === 'cluster' && currentSidebarTableClusterId) {
-                    loadSidebarClusterTable(currentSidebarTableClusterId, page);
-                } else if (sidebarTableMode === 'edges') {
-                    let edgeList = [];
-                    if (selectedNodeId && sidebarCy) { const node = sidebarCy.getElementById(selectedNodeId); if (node && node.length > 0) { edgeList = node.connectedEdges().map(edge => ({ source: edge.data('source'), destination: edge.data('target'), protocol: edge.data('Protocol') })); } }
-                    else if (selectedSidebarEdges.size > 0) { edgeList = Array.from(selectedSidebarEdges).map(key => { const parts = key.split('|'); return { source: parts[0], destination: parts[1], protocol: parts[2] }; }); }
-                    if (edgeList.length > 0) { loadSidebarMultiEdgeTable(edgeList, page); }
-                    else { console.warn("Sidebar pagination clicked in edge mode, but no edges identified as selected."); }
-                } else { console.warn("Sidebar pagination clicked but current table context is unclear."); }
-            } else { alert(`Please enter a valid page number between 1 and ${totalPagesStr}.`); }
+
+        document.getElementById('downloadButton').addEventListener('click', function() {
+             window.location.href = `${API_BASE_URL}/download_csv`;
         });
-        resetSidebarBtn.addEventListener('click', () => { // Ensure reset listener exists
-            console.log("Resetting sidebar view and heatmap highlights.");
-            clearSidebarVisualization(); updateLegend(); updateHeatmap(); selectedNodeId = null;
-            document.getElementById('sidebarLayoutSelect').value = 'cose';
+
+        sidebarToggleBtn.addEventListener('click', () => toggleSidebar());
+
+        if (sidebarFullscreenBtn) {
+            sidebarFullscreenBtn.addEventListener('click', toggleSidebarFullscreen);
+        } else {
+            console.error("Sidebar fullscreen button not found!");
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && isSidebarFullscreen) {
+                // Exiting fullscreen
+                console.log("Fullscreen exited via event listener.");
+                 cleanupFullscreenStyles(); // Handles style cleanup and resize/layout via toggleSidebar
+                 // Fit after cleanup and potential transitions
+                 if (sidebarCy) {
+                     setTimeout(() => {
+                         sidebarCy.fit(null, 50); // Fit with 50px padding
+                     }, 400); // Delay to allow transitions from toggleSidebar
+                 }
+            } else if (document.fullscreenElement === sidebar && !isSidebarFullscreen) {
+                 // Entering fullscreen (potentially triggered by browser UI, not button)
+                 console.warn("Fullscreen entered via event listener - attempting state sync.");
+                 isSidebarFullscreen = true; // Sync state
+                 sidebar.classList.add('fullscreen');
+                 legendContainer.classList.add('fullscreen-active');
+                 document.body.classList.add('sidebar-fullscreen');
+                 sidebarFullscreenBtn.innerHTML = '&#x274C;';
+                 sidebarFullscreenBtn.title = "Exit Sidebar Fullscreen";
+                 if (sidebarCy) {
+                    setTimeout(() => {
+                         sidebarCy.resize();
+                         sidebarCy.fit(null, 50); // Fit with 50px padding
+                         // applySidebarLayout(); // Optional: re-run layout
+                     }, 100); // Delay might need adjustment
+                 }
+            }
         });
-        sidebarToggleBtn.addEventListener('click', () => toggleSidebar()); // Ensure toggle listener exists
+
+        if (sidebarTableContainer) {
+             sidebarTableContainer.addEventListener('click', handleSidebarTableRowClick);
+        } else {
+            console.error("Sidebar table container not found!");
+        }
+
+        if (sidebarSearchInput) {
+            sidebarSearchInput.addEventListener('input', filterSidebarTable);
+        } else {
+            console.error("Sidebar table search input not found!");
+        }
+
     });
   </script>
 </body>

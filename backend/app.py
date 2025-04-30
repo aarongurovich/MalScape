@@ -289,6 +289,31 @@ def filter_and_aggregate():
         agg = grouped.apply(packets_per_second)
     elif metric == "Total Data Sent":
         agg = df.groupby("ClusterID")["Length"].sum()
+    elif metric == "Start Time":
+        # Ensure Time is datetime
+        df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+        # Find the minimum time per cluster (returns timestamps)
+        # For heatmap display, maybe convert to seconds since epoch or relative time?
+        # Let's convert to seconds since the overall minimum time for numerical representation
+        overall_min_time = df['Time'].min()
+        agg = df.groupby("ClusterID")["Time"].min()
+        # Calculate seconds since the very first packet in the dataset
+        agg = (agg - overall_min_time).dt.total_seconds()
+        agg = agg.fillna(0) # Handle clusters with no valid time data
+
+    elif metric == "Duration":
+        # Ensure Time is datetime
+        df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+        grouped = df.groupby("ClusterID")["Time"]
+        agg = (grouped.max() - grouped.min()).dt.total_seconds()
+        agg = agg.fillna(0) # Clusters with one packet have 0 duration
+
+    elif metric == "Average Inter-Arrival Time":
+        # Ensure InterArrivalTime is numeric
+        df["InterArrivalTime"] = pd.to_numeric(df["InterArrivalTime"], errors='coerce')
+        # Calculate the mean inter-arrival time per cluster
+        agg = df.groupby("ClusterID")["InterArrivalTime"].mean()
+        agg = agg.fillna(0) # Handle clusters where mean cannot be calculated
     else:
         df[metric] = pd.to_numeric(df[metric], errors='coerce').fillna(0)
         agg = df.groupby("ClusterID")[metric].sum()
