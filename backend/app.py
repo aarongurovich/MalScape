@@ -74,7 +74,7 @@ def compute_clusters(df, resolution=2.5):
         if pd.notna(src) and pd.notna(dst):
             weight = group.shape[0]
             G.add_edge(src, dst, weight=weight)
-    partition = community_louvain.best_partition(G, weight='weight', resolution=resolution)
+    partition = community_louvain.best_partition(G, weight='weight', resolution=resolution, random_state=42)
     return partition
 
 def load_attack_pairs(path: str = r"backend\GroundTruth.csv") -> set:

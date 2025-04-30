@@ -350,8 +350,7 @@
             fill: #aaa !important; /* Lighter gray for text */
             opacity: 0.7;
         }
-        /* --- END ADDED Dendrogram CSS --- */
-    </style>
+        /* --- END ADDED Dendrogram CSS --- */</style>
 </head>
 <body>
   <div id="loading-overlay">
@@ -470,6 +469,8 @@
         <div id="reclusterMessage" style="width: 100%; margin-top: 5px;"></div>
       </div>
     </div>
+    
+
     <div id="heatmap"></div>
     <div id="table-search-container" style="display:none; margin-bottom: 12px; margin-top: 24px;">
       <label for="tableSearchInput"><strong>Search Payload:</strong></label>
@@ -525,6 +526,17 @@
     const SELECTED_NODE_COLOR = '#ff0000'; // Red
     const SELECTED_EDGE_WIDTH = 3.5;
     const SELECTED_EDGE_ZINDEX = 999;
+
+    const metrics = [
+        { label: "Count", value: "count" }, { label: "Unique IPs", value: "Unique IPs" },
+        { label: "Unique Sources", value: "Unique Sources" }, { label: "Unique Destinations", value: "Unique Destinations" },
+        { label: "Packet Length", value: "Length" }, { label: "Payload Length", value: "Len" },
+        { label: "Payload Size Variance", value: "Payload Size Variance" }, { label: "Packets per Second", value: "Packets per Second" },
+        { label: "Total Data Sent", value: "Total Data Sent" }, { label: "% SYN packets", value: "% SYN packets" },
+        { label: "% RST packets", value: "% RST packets" }, { label: "% ACK packets", value: "% ACK packets" },
+        { label: "% PSH packets", value: "% PSH packets" }
+        // Add or remove metrics here as needed
+    ];
     
     let previousClusterCount = null; // dendrogram change detection
     let previousClusterHash = null; // dendrogram change detection
@@ -678,7 +690,7 @@
             sidebarCy = null;
         }
         addedSidebarClusters.clear();
-        clusterHighlightColors.clear(); // Keep this if heatmap uses it
+        clusterHighlightColors.clear(); // Clear the highlight map <<< THIS IS KEY
         selectedSidebarEdges.clear();
         selectedNodeId = null;
         sidebarTableMode = 'cluster';
@@ -693,7 +705,35 @@
         document.getElementById('sidebar-table-loading').style.display = 'none';
         document.getElementById('sidebarLayoutSelect').value = 'cose'; // Reset layout dropdown
 
+        // --- ADDED: Reset tree-attached heatmap cells ---
+        try { // Add try-catch for safety in case SVG isn't rendered
+             const svgContent = d3.select("#inlineDendrogramSvg g"); // Get the main group within the SVG
+             if (!svgContent.empty()) {
+                 svgContent.selectAll('.heatmap-cell').each(function() { // Select cells within the dendrogram SVG
+                     const cell = d3.select(this);
+                     const originalColor = cell.attr("data-original-fill");
+                     if (originalColor) {
+                         // Reset fill immediately (or add .transition().duration(100) if desired)
+                         cell.attr("fill", originalColor);
+                     } else {
+                         // Fallback if original color wasn't stored somehow
+                         cell.attr("fill", "#eee"); // Default fallback color
+                     }
+                 });
+                 console.log("Reset tree-attached heatmap cells.");
+             } else {
+                  console.log("Tree SVG content not found, skipping tree heatmap cell reset.");
+             }
+        } catch (error) {
+             console.error("Error resetting tree-attached heatmap cells:", error);
+        }
+        // --- END ADDED ---
+
+
         console.log("Sidebar visualization, selections, and table cleared.");
+
+        // Note: The reset button listener already calls resetHeatmapHighlights() and highlightTreeClusters() separately,
+        // which handle the main heatmap and tree nodes respectively.
     }
 
     function calculateEdgeWidth(processCount) {
@@ -1415,20 +1455,15 @@
         });
     }
 
-     function updateHeatmap() {
+    function updateHeatmap() {
         showLoading();
-        // Define the metrics to display in the heatmap
-        const metrics = [
-            { label: "Count", value: "count" }, { label: "Unique IPs", value: "Unique IPs" },
-            { label: "Unique Sources", value: "Unique Sources" }, { label: "Unique Destinations", value: "Unique Destinations" },
-            { label: "Packet Length", value: "Length" }, { label: "Payload Length", value: "Len" },
-            { label: "Payload Size Variance", value: "Payload Size Variance" }, { label: "Packets per Second", value: "Packets per Second" },
-            { label: "Total Data Sent", value: "Total Data Sent" }, { label: "% SYN packets", value: "% SYN packets" },
-            { label: "% RST packets", value: "% RST packets" }, { label: "% ACK packets", value: "% ACK packets" },
-            { label: "% PSH packets", value: "% PSH packets" }
-            // Add or remove metrics here as needed
-        ];
-        // Get filter parameters from the UI
+        // Metrics array is now defined globally
+
+        // Initialize/reset global stores
+        window.fullHeatmapData = {};
+        window.heatmapSortOrders = {};
+
+        // Get filter parameters from the UI (keep this part)
         const filterParamsBase = {
             payloadKeyword: document.getElementById('payloadSearch').value.trim().toLowerCase(),
             sourceFilter: document.getElementById('sourceFilter').value.trim().toLowerCase(),
@@ -1441,21 +1476,18 @@
         };
 
         // Fetch data for all metrics in parallel
-        Promise.all(metrics.map(m => {
+        Promise.all(metrics.map(m => { // Use global metrics
             const filterParams = { ...filterParamsBase, metric: m.value };
             return fetch(`${API_BASE_URL}/filter_and_aggregate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(filterParams) })
                 .then(response => response.ok ? response.json() : Promise.reject(`Failed ${m.label} (${response.status})`))
-                .then(data => ({ metric: m.label, pivotData: data })) // Use label for keys
+                .then(data => ({ metric: m.label, pivotData: data })) // Keep label for keys
                 .catch(error => { console.error(`Error fetching ${m.label}:`, error); return { metric: m.label, pivotData: [], error: true }; });
         }))
         .then(results => {
             // Filter out errors
             const validResults = results.filter(r => !r.error);
 
-            // --- Store sort orders for ALL available metrics ---
-            window.heatmapSortOrders = {}; // Initialize/reset
-            // const availableMetrics = []; // Uncomment if dynamically populating dropdown
-
+            // Store sort orders AND full data for ALL available metrics
             const orderOption = document.getElementById("rowOrderSelect").value || "descending";
             const comparator = orderOption === "descending" ? (a, b) => b.value - a.value : (a, b) => a.value - b.value;
 
@@ -1463,20 +1495,23 @@
                 const metricName = r.metric; // The label (e.g., "Count", "Unique IPs")
                 if (r.pivotData && r.pivotData.length > 0) {
                      const sortedData = [...r.pivotData].sort(comparator);
+                     // Store sort order (cluster IDs only)
                      window.heatmapSortOrders[metricName] = sortedData.map(d => d.cluster);
-                    // availableMetrics.push(metricName); // Uncomment if dynamically populating
-                    // console.log(`Stored sort order for ${metricName}`);
+                     // <<< Store the full data >>>
+                     window.fullHeatmapData[metricName] = r.pivotData; // Store the array of {cluster, value, anomaly}
+                     // console.log(`Stored data and sort order for ${metricName}`);
                 } else {
-                     window.heatmapSortOrders[metricName] = []; // Store empty if no data
-                    // console.log(`No data found for metric ${metricName}`);
+                     window.heatmapSortOrders[metricName] = []; // Store empty sort order
+                     // <<< Store empty data array >>>
+                     window.fullHeatmapData[metricName] = []; // Store empty array if no data
+                     // console.log(`No data found for metric ${metricName}`);
                 }
             });
 
             // Keep old variable for compatibility or remove if fully transitioned
             window.heatmapCountSortOrder = window.heatmapSortOrders['Count'] || [];
-            // --- End Storing Sort Orders ---
 
-            renderCombinedHeatmap(validResults); // Render the heatmap
+            renderCombinedHeatmap(validResults); // Render the main heatmap
             hideLoading();
         })
         .catch(error => {
@@ -2001,12 +2036,11 @@
             svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
             .text("Error: Container element not found.");
             document.getElementById("treeControls").style.display = "none";
-            // Clear info spans if container is missing
             const treeInfoSpan = document.getElementById('treeInfoSpan');
             if (treeInfoSpan) treeInfoSpan.textContent = '';
             const timeInfoSpan = document.getElementById('timeInfoSpan');
             if (timeInfoSpan) timeInfoSpan.textContent = '';
-            window.lastTreeRoot = null; // Reset stored root on error
+            window.lastTreeRoot = null;
             return;
         }
 
@@ -2014,270 +2048,473 @@
         document.getElementById('dendrogramCard').style.display = 'block';
         document.getElementById('showTreeBtn').style.display = 'none';
 
-        containerDiv.style.height = `${svgH}px`; // Set container height based on input
+        containerDiv.style.height = `${svgH}px`;
 
         const svg = d3.select("#inlineDendrogramSvg");
-        svg.selectAll("*").remove(); // Clear previous drawing
+        svg.selectAll("*").remove();
 
-        // Add the threshold bar line (initially invisible/unpositioned)
         svg.append("line")
             .attr("id", "threshold-bar")
             .attr("stroke", "rgba(220, 53, 69, 0.7)")
             .attr("stroke-width", 2)
             .attr("stroke-dasharray", "5 3")
             .style("pointer-events", "none")
-            .style("display", "none"); // Initially hidden
+            .style("display", "none");
 
-        // --- Clear Info Spans Initially ---
         const treeInfoSpan = document.getElementById('treeInfoSpan');
         if (treeInfoSpan) treeInfoSpan.textContent = '';
-        // Time info is updated separately by updateTimeInfoDisplay()
 
         if (!data || data.id === undefined || data.dist === undefined) {
             console.error("Invalid or empty tree data received:", data);
             svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
             .text("No hierarchical data available or error loading.");
             document.getElementById("treeControls").style.display = "none";
-            // Ensure info spans are cleared on error
             if (treeInfoSpan) treeInfoSpan.textContent = '';
-            window.lastTreeRoot = null; // Reset stored root on error
+            window.lastTreeRoot = null;
             return;
         }
 
         // --- Basic Setup ---
-        const containerWidth = containerDiv.clientWidth || 600; // Use clientWidth as fallback
-        const height = Math.max(200, svgH - margin.top - margin.bottom); // Use global margin
-        const root = d3.hierarchy(data); // Create hierarchy
+        const containerWidth = containerDiv.clientWidth || 600;
+        // Use global metrics array
+        const features = metrics.map(m => m.label); // Use labels as features
+        const numHeatmapFeatures = features.length; // Dynamic number of rows
 
-        // --- Calculate and Display Tree Info ---
+        const heatmapRowHeight = 15; // Height per heatmap row
+        const heatmapSpacing = 5; // Space between dendrogram and heatmap
+
+        const dendrogramHeight = Math.max(200, svgH - margin.top - margin.bottom);
+        const heatmapTotalHeight = (heatmapRowHeight * numHeatmapFeatures); // Total height needed for heatmap rows
+        const height = dendrogramHeight; // Use dendrogramHeight for tree layout
+
+        const root = d3.hierarchy(data);
+
         const leafCount = root.leaves().length;
         if (treeInfoSpan) {
-        treeInfoSpan.textContent = `(${leafCount} leaf nodes)`; // Update the span
+            treeInfoSpan.textContent = `${leafCount} Clusters`;
         }
-        // --- End Tree Info ---
 
         const metricSelect = document.getElementById('dendrogramSortMetricSelect');
         const selectedMetric = metricSelect ? metricSelect.value : 'Default';
-        const minLeafSpacing = 20;
+        const minLeafSpacing = 20; // Minimum visual space per leaf
 
-        let layoutWidth; // Declare layoutWidth
+        // --- 1. Calculate Structural Layout (Always) ---
+        console.log("Calculating structural layout...");
+        const treeLayout = d3.cluster().size([1, height]); // Use height for Y, 1 for temporary X range
+        treeLayout(root); // Apply layout to calculate default node depths (y) and structure
 
-        // --- Conditional Layout Logic (Structure vs Metric) ---
-        if (selectedMetric === 'Default') {
-            console.log("Applying D3 default cluster layout (structure-based).");
-            // Default D3 cluster layout
-            const numLeaves = root.leaves().length;
-            const requiredWidth = numLeaves * minLeafSpacing;
-            const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
-            layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
-            window.currentLayoutWidth = layoutWidth; // Store final width for threshold bar
-            d3.cluster().size([layoutWidth, height])(root); // Calculates node.x and node.y
-            console.log(`Default layout width: ${layoutWidth}`);
-        } else {
-            console.log(`Applying manual layout based on metric: ${selectedMetric}`);
-            // Manual layout based on metric sort order
-            // 1. Calculate d.y using d3.cluster
-            d3.cluster().size([1, height])(root); // Calculates d.y based on depth
+        // Determine layout width based on leaf count and minimum spacing
+        const numLeaves = root.leaves().length;
+        const requiredWidth = numLeaves * minLeafSpacing;
+        const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
+        const layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
+        window.currentLayoutWidth = layoutWidth; // Store for potential reuse (e.g., threshold bar)
 
-            // 2. Get leaves and sort them
-            const leaves = root.leaves();
-            let sortedLeaves = [...leaves];
+        // Assign structural X positions based on even spacing across the calculated layoutWidth
+        const structuralLeaves = root.leaves();
+        structuralLeaves.sort((a, b) => a.parent.id - b.parent.id); // Basic structural sort might be needed if d3.cluster doesn't guarantee order
+        const structuralLeafSpacing = numLeaves > 0 ? layoutWidth / numLeaves : 0;
+        structuralLeaves.forEach((leaf, i) => {
+            leaf.structuralX = (i * structuralLeafSpacing) + (structuralLeafSpacing / 2); // Store structural X
+        });
+
+        // Propagate structural X up the tree (average children's structural X)
+        root.eachAfter(node => {
+            // Store the structurally calculated Y coordinate as well
+            node.structuralY = node.y; // d3.cluster already calculated 'y'
+
+            if (node.children && node.children.length > 0) {
+                const validChildrenX = node.children
+                    .filter(d => typeof d.structuralX === 'number' && isFinite(d.structuralX))
+                    .map(d => d.structuralX);
+                if (validChildrenX.length > 0) {
+                    node.structuralX = d3.mean(validChildrenX);
+                } else {
+                    node.structuralX = 0; // Fallback if children have no valid X
+                    console.warn(`Node ${node.data.id || '(internal)'} has children with invalid 'structuralX'.`);
+                }
+            } else if (typeof node.structuralX !== 'number' || !isFinite(node.structuralX)) {
+                node.structuralX = 0; // Fallback for leaves if needed
+                console.warn(`Leaf node ${node.data.cluster_id || '(no ID)'} missing structuralX.`);
+            }
+        });
+        console.log(`Structural layout calculated. Width: ${layoutWidth}, Leaf spacing: ${structuralLeafSpacing}`);
+        // --- End Structural Layout Calculation ---
+
+        window.lastTreeRoot = root; // Store the processed hierarchy
+
+        // --- 2. Determine Heatmap Order based on Selected Metric ---
+        let heatmapClusterIds = [];
+        let heatmapLeaves = [...root.leaves()]; // Start with all leaves
+
+        if (selectedMetric !== 'Default') {
             const currentSortOrder = (window.heatmapSortOrders && window.heatmapSortOrders[selectedMetric]) ? window.heatmapSortOrders[selectedMetric] : null;
-
             if (currentSortOrder && currentSortOrder.length > 0) {
-                console.log(`Using heatmap '${selectedMetric}' sort order.`);
-                // Use heatmap sort order
+                console.log(`Sorting heatmap leaves by metric: ${selectedMetric}`);
                 const orderMap = new Map(currentSortOrder.map((id, index) => [String(id), index]));
-                sortedLeaves.sort((a, b) => {
+                heatmapLeaves.sort((a, b) => {
                     const aClusterId = String(a.data.cluster_id).trim();
                     const bClusterId = String(b.data.cluster_id).trim();
                     const aIndex = orderMap.get(aClusterId);
                     const bIndex = orderMap.get(bClusterId);
+                    // Primary sort: by metric order
                     if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
-                    if (aIndex !== undefined) return -1;
+                    if (aIndex !== undefined) return -1; // Undefined index goes last
                     if (bIndex !== undefined) return 1;
-                    // Fallback sort (numeric if possible)
-                    const idA = parseInt(aClusterId, 10); const idB = parseInt(bClusterId, 10);
-                    if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
-                    return aClusterId.localeCompare(bClusterId); // String fallback
+                    // Secondary sort: by structural X as fallback
+                    return a.structuralX - b.structuralX;
                 });
             } else {
-                // Fallback sort (numeric if possible, else string)
-                console.warn(`Sort order for metric '${selectedMetric}' unavailable, using fallback structural order.`);
-                sortedLeaves.sort((a,b) => {
-                    const idA = parseInt(String(a.data.cluster_id).trim(), 10);
-                    const idB = parseInt(String(b.data.cluster_id).trim(), 10);
-                    if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
-                    return String(a.data.cluster_id).trim().localeCompare(String(b.data.cluster_id).trim());
-                });
+                console.warn(`Sort order for metric '${selectedMetric}' unavailable. Using structural order for heatmap.`);
+                // Fallback to structural order if metric data is missing
+                heatmapLeaves.sort((a, b) => a.structuralX - b.structuralX);
             }
-
-            // 3. Calculate layout width based on sorted leaf spacing
-            const numLeaves = sortedLeaves.length;
-            const requiredWidth = numLeaves * minLeafSpacing;
-            const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
-            layoutWidth = Math.max(requiredWidth, widthAvailableInContainer);
-            window.currentLayoutWidth = layoutWidth; // Store final width
-
-            // 4. Manually assign x coordinates to leaves
-            const leafSpacing = numLeaves > 1 ? layoutWidth / (numLeaves - 1) : layoutWidth / 2;
-            sortedLeaves.forEach((leaf, i) => { leaf.x = i * leafSpacing; });
-
-            // 5. Manually calculate internal node x positions (average of children)
-            root.eachAfter(node => {
-                if (!node.children || node.children.length === 0) return;
-                node.x = d3.mean(node.children, d => d.x); // Use d3.mean for clarity
-            });
-            console.log(`Manual layout width for ${selectedMetric}: ${layoutWidth}`);
+        } else {
+            console.log("Using structural order for heatmap leaves (Default selected).");
+            // Sort by the pre-calculated structural X for the default case
+            heatmapLeaves.sort((a, b) => a.structuralX - b.structuralX);
         }
 
-        // <<< STORE THE PROCESSED ROOT WITH COORDINATES >>>
-        window.lastTreeRoot = root;
-        // <<< END STORING ROOT >>>
+        // Extract cluster IDs in the determined heatmap order
+        heatmapClusterIds = heatmapLeaves.map(leaf => {
+            if (leaf.data && leaf.data.cluster_id !== undefined) {
+                return String(leaf.data.cluster_id);
+            } else {
+                console.warn("Leaf node missing cluster_id:", leaf);
+                return null;
+            }
+        }).filter(id => id !== null); // Filter out nulls
+
+        console.log(`Heatmap order determined. ${heatmapClusterIds.length} clusters.`);
+        if (heatmapClusterIds.length === 0 && numLeaves > 0) {
+            console.error("No valid cluster IDs for heatmap, though leaves exist!");
+        }
+        // --- End Heatmap Order Determination ---
 
         // --- Rendering Code ---
-        // <<< START VIEWBOX CALCULATION >>>
-        const viewBoxWidth = window.currentLayoutWidth + margin.left + margin.right;
-        const viewBoxHeight = height + margin.top + margin.bottom;
+        const totalVisualHeight = dendrogramHeight + heatmapSpacing + heatmapTotalHeight;
+        const viewBoxWidth = layoutWidth + margin.left + margin.right; // Use layoutWidth
+        const viewBoxHeight = totalVisualHeight + margin.top + margin.bottom;
+
         svg.attr("viewBox", `0 0 ${viewBoxWidth} ${viewBoxHeight}`)
         .attr("preserveAspectRatio", "xMidYMid meet");
-        // <<< END VIEWBOX CALCULATION >>>
 
-        const svgContent = svg.append("g"); // Group for zoomable content
+        const svgContent = svg.append("g"); // Main group for zoom/pan
 
-        // Draw Links
+        // --- Draw Links using STRUCTURAL coordinates ---
         svgContent.selectAll(".link")
-            .data(root.links()) // Use links from the *processed* root
+            .data(root.links())
             .join("path")
             .attr("class", "link")
             .attr("d", d => {
-                // Add validation for coordinates just in case layout produced non-numbers
-                const sourceX = typeof d.source.x === 'number' && isFinite(d.source.x) ? d.source.x : 0;
-                const sourceY = typeof d.source.y === 'number' && isFinite(d.source.y) ? d.source.y : 0;
-                const targetX = typeof d.target.x === 'number' && isFinite(d.target.x) ? d.target.x : 0;
-                const targetY = typeof d.target.y === 'number' && isFinite(d.target.y) ? d.target.y : 0;
+                // Use structuralX and structuralY
+                const sourceX = typeof d.source.structuralX === 'number' && isFinite(d.source.structuralX) ? d.source.structuralX : 0;
+                const sourceY = typeof d.source.structuralY === 'number' && isFinite(d.source.structuralY) ? d.source.structuralY : 0;
+                const targetX = typeof d.target.structuralX === 'number' && isFinite(d.target.structuralX) ? d.target.structuralX : 0;
+                const targetY = typeof d.target.structuralY === 'number' && isFinite(d.target.structuralY) ? d.target.structuralY : 0;
                 const midY = (sourceY + targetY) / 2;
-                const validMidY = typeof midY === 'number' && isFinite(midY) ? midY : sourceY;
-                // Apply margin.left and margin.top offset to rendering coordinates
+                const validMidY = typeof midY === 'number' && isFinite(midY) ? midY : sourceY; // Fallback midY
+                // Apply margin offset here
                 return `M${sourceX + margin.left},${sourceY + margin.top}V${validMidY + margin.top}H${targetX + margin.left}V${targetY + margin.top}`;
             })
             .attr("fill", "none").attr("stroke", "#ccc").attr("stroke-width", 1.5);
 
-        // Draw Node groups
+        // --- Draw Node groups using STRUCTURAL coordinates ---
         const node = svgContent.selectAll(".node")
-            .data(root.descendants()) // Use descendants from the *processed* root
+            .data(root.descendants())
             .join("g")
             .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf"))
             .attr("transform", d => {
-                // Add validation for coordinates
-                const x = typeof d.x === 'number' && isFinite(d.x) ? d.x : 0;
-                const y = typeof d.y === 'number' && isFinite(d.y) ? d.y : 0;
-                // Apply margin.left and margin.top offset here as well
+                // Use structuralX and structuralY
+                const x = typeof d.structuralX === 'number' && isFinite(d.structuralX) ? d.structuralX : 0;
+                const y = typeof d.structuralY === 'number' && isFinite(d.structuralY) ? d.structuralY : 0;
+                // Apply margin offset here
                 return `translate(${x + margin.left},${y + margin.top})`;
             });
 
-        // Draw Circles
+        // Draw Circles (no change needed here, position comes from parent 'g')
         node.append("circle").attr("r", 4).attr("fill", d => d.children ? "#555" : "#999");
 
-        // Draw Labels
-        node.append("text")
-            .attr("dy", "0.31em")
-            .attr("y", d => d.children ? -10 : 10)
-            .attr("text-anchor", d => d.children ? "middle" : "start")
-            .attr("font-size", "9px")
-            .attr("fill", "#333")
-            .text(d => d.data.id || "") // Use node ID from original data
-            .style("user-select", "none")
-            .filter(d => !d.children)
-                .attr("transform", "translate(4, 0) rotate(45)");
 
-        // --- Zoom and Pan ---
-        // <<< START CORRECTED INITIAL TRANSFORM CALCULATION >>>
-        let dx = 0; // Default translation
-        let dy = 0;
-        let initialScale = 1; // Default scale
+        // --- Tree-Attached Heatmap Drawing (Using METRIC/DEFAULT Order) ---
+        console.log("Drawing tree-attached heatmap...");
+        if (heatmapClusterIds.length > 0 && window.fullHeatmapData && Object.keys(window.fullHeatmapData).length > 0 && features && features.length > 0) {
+            // 1. Create Data Lookup Map (same as before)
+            const clusterDataLookup = new Map();
+            let dataFoundInLookup = false;
+            features.forEach(metricLabel => {
+                const metricData = window.fullHeatmapData[metricLabel] || [];
+                if (!Array.isArray(metricData)) { metricData = []; } // Ensure array
+                metricData.forEach(item => {
+                    if (item && item.cluster !== undefined && item.value !== undefined) {
+                        const clusterId = String(item.cluster);
+                        if (!clusterDataLookup.has(clusterId)) { clusterDataLookup.set(clusterId, {}); }
+                        const value = typeof item.value === 'number' && !isNaN(item.value) ? item.value : null;
+                        clusterDataLookup.get(clusterId)[metricLabel] = value;
+                        clusterDataLookup.get(clusterId)[`${metricLabel}_anomaly`] = item.clusterAnomaly;
+                        dataFoundInLookup = true;
+                    }
+                });
+            });
+            if (!dataFoundInLookup) console.warn("Cluster data lookup map is empty.");
 
-        try {
-            // Get bounds *after* rendering the content AND applying margins
-            const bounds = svgContent.node().getBBox();
 
-            if (bounds.width > 0 && bounds.height > 0) {
-                 // Calculate scales needed to fit bounds into the VIEWBOX dimensions
-                 const scaleX = viewBoxWidth / bounds.width;
-                 const scaleY = viewBoxHeight / bounds.height;
+            // 2. Prepare Flattened Data for D3 Binding (same as before)
+            const heatmapFeatureData = [];
+            // *** Use heatmapClusterIds to ensure order preservation ***
+            heatmapClusterIds.forEach(clusterId => {
+                const clusterMetrics = clusterDataLookup.get(clusterId) || {};
+                features.forEach(metricLabel => {
+                    heatmapFeatureData.push({
+                        cluster_id: clusterId,
+                        feature: metricLabel,
+                        value: clusterMetrics[metricLabel] ?? null,
+                        anomaly: clusterMetrics[`${metricLabel}_anomaly`] // Include anomaly status
+                    });
+                });
+            });
+            console.log(`Prepared heatmapFeatureData for binding: ${heatmapFeatureData.length} items.`);
 
-                 // Use the smaller scale factor to ensure the entire tree fits ('meet')
-                 // Apply a slight padding (e.g., 95%)
-                 initialScale = Math.min(scaleX, scaleY) * 0.95;
 
-                 // Ensure initial scale is not excessively small (minimum zoom) or large (max zoom)
-                 initialScale = Math.max(0.1, Math.min(initialScale, 2)); // Example limits
+            // 3. Create Color Scales (same as before)
+            const colorScales = {};
+            const minIntensity = 0.05;
+            const customBluesInterpolator = t => d3.interpolateBlues(minIntensity + Math.max(0, Math.min(1, t)) * (1 - minIntensity));
+            const anomalyOverrideColor = "orange";
 
-                 // Calculate translation needed to center the SCALED bounds within the VIEWBOX
-                 dx = (viewBoxWidth / 2) - ((bounds.x + bounds.width / 2) * initialScale);
-                 dy = (viewBoxHeight / 2) - ((bounds.y + bounds.height / 2) * initialScale);
+            features.forEach(metricLabel => {
+                const metricData = window.fullHeatmapData[metricLabel] || [];
+                const numericValues = metricData.map(d => d.value).filter(v => typeof v === 'number' && !isNaN(v));
+                let scale;
+                if (numericValues.length > 0) {
+                    const rowMax = d3.max(numericValues);
+                    const domain = [0, rowMax === 0 ? 1e-9 : rowMax];
+                    scale = d3.scaleSequential(customBluesInterpolator).domain(domain).clamp(true);
+                } else {
+                    scale = d3.scaleSequential(d3.interpolateGreys).domain([0, 1]);
+                }
+                colorScales[metricLabel] = scale;
+            });
 
-                 // Basic sanity check for calculated values
-                 if (isNaN(dx)) dx = 0;
-                 if (isNaN(dy)) dy = 0;
-                 if (isNaN(initialScale) || initialScale <= 0) initialScale = 1;
+            // 4. Heatmap Scales (X based on heatmapClusterIds order, Y based on features)
+            const heatmapContentWidth = layoutWidth; // Heatmap spans the calculated layout width
+            const xScale = d3.scaleBand()
+                            .domain(heatmapClusterIds) // Use the ordered cluster IDs
+                            .range([margin.left, margin.left + heatmapContentWidth]) // Map to the visual area
+                            .paddingInner(0); // No padding between heatmap cells
 
+            const heatmapStartY = dendrogramHeight + heatmapSpacing + margin.top;
+            const heatmapEndY = heatmapStartY + heatmapTotalHeight;
+            const featureScale = d3.scaleBand()
+                                .domain(features) // Order of features (rows)
+                                .range([heatmapStartY, heatmapEndY])
+                                .paddingInner(0.1);
+
+            // Log scale info for debugging
+            console.log("Heatmap xScale Domain:", xScale.domain().slice(0, 5), "..."); // Show first few
+            console.log("Heatmap xScale Range:", xScale.range());
+            console.log("Heatmap xScale Bandwidth:", xScale.bandwidth());
+            console.log("Heatmap featureScale Domain:", featureScale.domain());
+            console.log("Heatmap featureScale Range:", featureScale.range());
+            console.log("Heatmap featureScale Bandwidth:", featureScale.bandwidth());
+
+            if (xScale.bandwidth() <= 0 || featureScale.bandwidth() <= 0) {
+                console.error("Heatmap scales have zero or negative bandwidth!");
+                svgContent.append("text").attr("x", margin.left + layoutWidth / 2).attr("y", heatmapStartY + heatmapRowHeight).attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#d00").text("Error: Invalid heatmap scale.");
             } else {
-                console.warn("Could not get valid bounds for initial zoom calculation. Using defaults.");
-                dx = margin.left; // Fallback: Use margins
-                dy = margin.top;
-                initialScale = 1;
+                // 5. Draw Heatmap Rects (using the metric-ordered xScale)
+                svgContent.selectAll(".heatmap-cell")
+                .data(heatmapFeatureData) // Data includes cluster_id, feature, value, anomaly
+                .join("rect")
+                .attr("class", "heatmap-cell")
+                .attr("x", d => xScale(d.cluster_id)) // Position based on the metric-ordered scale
+                .attr("width", xScale.bandwidth())
+                .attr("y", d => featureScale(d.feature))
+                .attr("height", featureScale.bandwidth())
+                .each(function(d) { // Calculate and store original fill based on value/anomaly
+                    const scale = colorScales[d.feature];
+                    let originalFill;
+                    if (d.anomaly === 'anomaly') {
+                        originalFill = anomalyOverrideColor;
+                    } else if (scale && d.value !== null && typeof d.value === 'number' && isFinite(d.value)) {
+                        originalFill = scale(d.value);
+                    } else {
+                        originalFill = "#eee"; // Fallback grey
+                    }
+                    d3.select(this).attr("data-original-fill", originalFill);
+                })
+                .attr("fill", function(d) { // Set initial fill based on highlight status
+                    const originalFill = d3.select(this).attr("data-original-fill");
+                    const initialHighlightColor = clusterHighlightColors.get(String(d.cluster_id));
+                    return initialHighlightColor || originalFill;
+                })
+                .style("stroke", "#fff")
+                .style("stroke-width", 0.2)
+                .style("cursor", "pointer")
+                // --- Click and Hover Handlers (remain the same) ---
+                .on("click", function(event, d) {
+                    event.stopPropagation();
+                    const clickedClusterID = String(d.cluster_id);
+                    const originalColor = d3.select(this).attr("data-original-fill");
+                    let targetHighlightColor;
+
+                    if (clusterHighlightColors.has(clickedClusterID)) {
+                        // Deselect
+                        console.log(`Deselecting cluster ${clickedClusterID} from tree-heatmap.`);
+                        clusterHighlightColors.delete(clickedClusterID);
+                        targetHighlightColor = originalColor;
+
+                        // Update tree-attached heatmap cells
+                        svgContent.selectAll('.heatmap-cell')
+                            .filter(cell_d => String(cell_d.cluster_id) === clickedClusterID)
+                            .attr('fill', originalColor);
+
+                        // Update main heatmap cells
+                        d3.selectAll('rect.cell[data-cluster="' + clickedClusterID + '"]')
+                            .each(function() {
+                                const mainCellOriginalColor = d3.select(this).attr("data-original-fill");
+                                d3.select(this).transition().duration(100).attr('fill', mainCellOriginalColor);
+                            });
+
+                    } else {
+                        // Select
+                        console.log(`Selecting cluster ${clickedClusterID} from tree-heatmap.`);
+                        targetHighlightColor = generateUniqueHighlightColor();
+                        clusterHighlightColors.set(clickedClusterID, targetHighlightColor);
+                        visualizeClusterInSidebar(clickedClusterID, targetHighlightColor);
+
+                        // Update tree-attached heatmap cells
+                        svgContent.selectAll('.heatmap-cell')
+                            .filter(cell_d => String(cell_d.cluster_id) === clickedClusterID)
+                            .attr('fill', targetHighlightColor);
+
+                        // Update main heatmap cells
+                        d3.selectAll('rect.cell[data-cluster="' + clickedClusterID + '"]')
+                            .transition().duration(100)
+                            .attr('fill', targetHighlightColor);
+                    }
+                    // Update tree leaf highlights
+                    highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+                })
+                .on("mouseover", function(event, d) {
+                    tooltip.html(`Cluster: ${d.cluster_id}<br>${d.feature}: ${d.value === null ? 'N/A' : d.value.toFixed(2)}`)
+                            .style("display", "block").style("left", (event.pageX + 10) + "px").style("top", (event.pageY + 10) + "px").style("opacity", 1);
+                })
+                .on("mouseout", function() {
+                    tooltip.style("opacity", 0).style("display", "none");
+                });
+
+                // 6. Add Heatmap Feature Labels (same as before)
+                svgContent.selectAll(".heatmap-feature-label")
+                .data(features)
+                .join("text")
+                .attr("class", "heatmap-feature-label")
+                .attr("x", margin.left - 5)
+                .attr("y", d => featureScale(d) + featureScale.bandwidth() / 2)
+                .attr("text-anchor", "end")
+                .attr("dominant-baseline", "middle")
+                .attr("font-size", "9px")
+                .attr("fill", "#333")
+                .text(d => d);
+            } // End else block for valid scale bandwidths
+        } else {
+            // Handle cases where heatmap cannot be drawn
+            console.warn("Skipping tree-attached heatmap: Conditions not met.");
+            svgContent.append("text")
+                .attr("x", margin.left + layoutWidth / 2)
+                .attr("y", heatmapStartY + heatmapRowHeight)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "10px")
+                .attr("fill", "#aaa")
+                .text("Heatmap data not available.");
+        }
+        // --- END Tree-Attached Heatmap Drawing ---
+
+
+        // --- Zoom and Pan (using initial transform calculated earlier) ---
+        let dx = 0, dy = 0, initialScale = 1;
+        try {
+            // Recalculate bounds based on the actual drawn content in svgContent
+            const bounds = svgContent.node().getBBox();
+            if (bounds && bounds.width > 0 && bounds.height > 0) {
+                const scaleX = viewBoxWidth / bounds.width;
+                const scaleY = viewBoxHeight / bounds.height;
+                // Use Math.min to fit *within* the viewbox, slightly zoomed out
+                initialScale = Math.min(scaleX, scaleY) * 0.95;
+                // Clamp scale
+                initialScale = Math.max(0.05, Math.min(initialScale, 5)); // Limit max initial zoom slightly
+
+                // Center the scaled content
+                dx = (viewBoxWidth / 2) - ((bounds.x + bounds.width / 2) * initialScale);
+                dy = (viewBoxHeight / 2) - ((bounds.y + bounds.height / 2) * initialScale);
+
+                // Final sanity checks
+                if (isNaN(dx)) dx = 0;
+                if (isNaN(dy)) dy = 0;
+                if (isNaN(initialScale) || initialScale <= 0) initialScale = 1;
+            } else {
+                console.warn("Could not get valid bounds for initial zoom calculation.");
+                // Fallback: Use margins and scale 1
+                dx = margin.left; dy = margin.top; initialScale = 1;
             }
         } catch (e) {
-             console.error("Error calculating tree bounds for initial zoom:", e);
-             dx = margin.left; // Fallback on error
-             dy = margin.top;
-             initialScale = 1;
+            console.error("Error calculating tree bounds for initial zoom:", e);
+            dx = margin.left; dy = margin.top; initialScale = 1;
         }
 
-        // Store the calculated (or default) initial transform
+        // Store the calculated initial transform for resetting zoom later
         initialTreeTransform = d3.zoomIdentity.translate(dx, dy).scale(initialScale);
-        console.log("Calculated Initial Transform:", initialTreeTransform);
-        // <<< END CORRECTED INITIAL TRANSFORM CALCULATION >>>
 
         const zoomBehavior = d3.zoom()
-            .scaleExtent([0.05, 10]) // Define zoom limits
-             // Define the area within which the user can pan
-            .translateExtent([[0, 0], [viewBoxWidth, viewBoxHeight]])
+            .scaleExtent([0.05, 10]) // Min/max zoom levels
+            // Optional: Restrict panning area if desired
+            // .translateExtent([[0, 0], [viewBoxWidth, viewBoxHeight]])
             .on("zoom.main", (event) => {
+                // Apply the transform to the main content group
                 svgContent.attr("transform", event.transform);
-                // Trigger threshold update after the SVG content has been transformed
+                // Update the threshold bar position dynamically during zoom/pan
                 const thresholdSlider = document.getElementById('thresholdSlider');
                 if (thresholdSlider) {
-                    requestAnimationFrame(() => { // Ensures D3 transform is rendered
-                        thresholdSlider.dispatchEvent(new Event('input'));
-                    });
+                    // Use requestAnimationFrame to avoid performance issues
+                    requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
                 }
             });
 
-        window.inlineZoom = zoomBehavior;
-        svg.call(zoomBehavior)
-            // Apply the calculated initial transform immediately
-            .call(zoomBehavior.transform, initialTreeTransform)
-            .on("dblclick.zoom", null); // Disable double-click zoom reset (use button)
+        window.inlineZoom = zoomBehavior; // Store zoom behavior for later use (reset)
 
+        // Apply zoom behavior to the SVG and set the initial transform
+        svg.call(zoomBehavior)
+        .call(zoomBehavior.transform, initialTreeTransform)
+        .on("dblclick.zoom", null); // Disable double-click zoom
 
         // --- Final Steps ---
         document.getElementById("treeControls").style.display = "flex";
-        window.lastTreeData = data; // Store raw data
-        highlightTreeClusters(new Set(clusterHighlightColors.keys())); // Apply any existing highlights
+        window.lastTreeData = data; // Store raw data used for this render
 
-        // Apply initial threshold state *after* drawing and storing the processed root
+        // --- ADDED: Initialize state after initial/successful render ---
+        try {
+            previousClusterCount = leafCount; // Update global count state
+            previousClusterHash = JSON.stringify(data); // Update global hash state
+            console.log("Initial dendrogram state set. Count:", previousClusterCount); // Log for confirmation
+        } catch(e) {
+            console.error("Error stringifying initial tree data for hash:", e);
+            // Reset state if hashing fails to avoid inconsistent comparisons later
+            previousClusterCount = null;
+            previousClusterHash = null;
+        }
+        // --- END ADDED ---
+
+
+        highlightTreeClusters(new Set(clusterHighlightColors.keys())); // Apply initial highlights
+
+        // Trigger initial threshold calculation after rendering
         const initialSlider = document.getElementById('thresholdSlider');
         if (initialSlider) {
-            requestAnimationFrame(() => { // Wait for render cycle
-                // Ensure the processed root exists before triggering the initial threshold calc
+            requestAnimationFrame(() => {
                 if (window.lastTreeRoot && d3.select("#inlineDendrogramSvg g").node()) {
-                    console.log("Triggering initial threshold calculation after draw.");
                     initialSlider.dispatchEvent(new Event('input'));
                 } else {
-                    console.warn("Initial threshold trigger skipped: Processed root node or SVG content not available yet.");
-                    d3.select("#threshold-bar").style("display", "none"); // Hide bar if it cannot be calculated
+                    d3.select("#threshold-bar").style("display", "none");
                 }
             });
         }
@@ -2552,7 +2789,8 @@
         showLoading(); // Show main loading overlay
 
         // Fetch new hierarchy data with the specified resolution
-        fetch(`<span class="math-inline">\{API\_BASE\_URL\}/hierarchical\_clusters?resolution\=</span>{resolution}`)
+        // --- CORRECTED FETCH CALL ---
+        fetch(`${API_BASE_URL}/hierarchical_clusters?resolution=${resolution}`)
             .then(response => {
                     if (!response.ok) {
                         // Try to parse error message from backend JSON response
@@ -2576,7 +2814,7 @@
 
                     // --- Update Tree Info Span ---
                     if (treeInfoSpan) {
-                        treeInfoSpan.textContent = `(${currentLeafCount} leaf nodes)`;
+                        treeInfoSpan.textContent = `${currentLeafCount} Clusters`;
                     }
                     // --- End Update ---
 
@@ -2643,6 +2881,9 @@
         }
     }
     // --- END Dendrogram JS Functions ---
-  </script>
+  
+
+    
+</script>
 </body>
 </html>
