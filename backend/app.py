@@ -25,8 +25,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Global variable to store our processed dataframe across endpoints
-global_df = None
 # Precompute internal subnets with their ranges to quickly classify IP addresses
 internal_subnets = [
     ip_network('172.28.0.0/16'),
@@ -69,13 +67,45 @@ def parse_payload_vectorized(payload_series):
 # Compute clusters using Louvain community detection on a graph of Source and Destination pairs
 def compute_clusters(df, resolution=2.5):
     G = nx.Graph()
-    groups = df.groupby(["Source", "Destination"])
+    # Filter out self-connections BEFORE grouping
+    df_filtered = df[df["Source"] != df["Destination"]].copy() # Added this line
+    if df_filtered.empty: # Handle case where only self-connections exist
+        print("Warning: No non-self-connections found for clustering.")
+        # Return an empty partition or handle as appropriate
+        # For now, let's assign all nodes to a default cluster 'N/A' or '0'
+        # This part might need adjustment based on desired behavior for pure self-connection data
+        partition = {node: '0' for node in pd.concat([df['Source'], df['Destination']]).unique() if pd.notna(node)}
+        return partition
+
+    # Group by Source/Destination using the filtered DataFrame
+    groups = df_filtered.groupby(["Source", "Destination"])
     for (src, dst), group in groups:
+        # Basic check for non-null src/dst (already implicitly handled by groupby but good practice)
         if pd.notna(src) and pd.notna(dst):
-            weight = group.shape[0]
+            # No need to check src != dst here anymore, as df_filtered ensures it
+            weight = group.shape[0] # Use number of connections as weight
             G.add_edge(src, dst, weight=weight)
-    partition = community_louvain.best_partition(G, weight='weight', resolution=resolution, random_state=42)
-    return partition
+
+    # Handle nodes that might only appear in self-connections (and were filtered out)
+    # or nodes that don't form edges in the filtered graph. Assign them a default cluster.
+    all_nodes = pd.concat([df['Source'], df['Destination']]).unique()
+    partition = {}
+    if G.number_of_nodes() > 0: # Only run Louvain if graph has nodes/edges
+         # Run Louvain community detection on the graph without self-loops
+         try:
+             partition = community_louvain.best_partition(G, weight='weight', resolution=resolution)
+         except Exception as e:
+              print(f"Error during Louvain clustering: {e}. Proceeding without partition.")
+              partition = {} # Fallback to empty partition on error
+
+    # Ensure all nodes from the original dataframe get a cluster ID
+    # Nodes not in the partition (e.g., isolated nodes or those only in self-loops) get 'N/A'
+    final_partition = {
+        str(node): str(partition.get(node, 'N/A'))
+        for node in all_nodes if pd.notna(node)
+    }
+
+    return final_partition
 
 def load_attack_pairs(path: str = r"backend\GroundTruth.csv") -> set:
     """Returns a set of (src,dst) tuples for each attack row, both directions."""
@@ -101,7 +131,18 @@ def compute_entropy(series):
     return -np.sum(p * np.log(p))
 
 def process_csv_to_df(csv_text):
-    """Processes raw CSV text into a pandas DataFrame with calculated features."""
+    """
+    Processes raw CSV text into a pandas DataFrame with computed features.
+
+    Args:
+        csv_text (str): The CSV data as a string.
+
+    Returns:
+        pd.DataFrame: The processed DataFrame with added columns for analysis.
+
+    Raises:
+        ValueError: If required columns 'Source' or 'Destination' are missing.
+    """
     df = pd.read_csv(StringIO(csv_text), dtype=str)
     if not all(col in df.columns for col in ["Source", "Destination"]):
         error_msg = "Missing required column: Source or Destination"
@@ -109,144 +150,200 @@ def process_csv_to_df(csv_text):
         raise ValueError(error_msg)
 
     # If already processed (contains extra computed columns), return as is.
-    # NOTE: This check might need adjustment if columns change significantly
-    processed_cols = ["Source", "Destination", "Payload", "SourcePort", "DestinationPort", "Flags",
-                      "Seq", "Ack", "Win", "Len", "TSval", "TSecr",
-                      "SourceClassification", "DestinationClassification", "ClusterID",
-                      "ConnectionID", "BurstID", "IsSuspiciousAck", "ClusterEntropy", "Anomaly"]
-    if all(col in df.columns for col in processed_cols):
-        # Still ensure Time is datetime if it exists and is not already
-        if "Time" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["Time"]):
-             try:
-                 df["Time"] = pd.to_datetime(df["Time"], errors='coerce')
-             except Exception as e:
-                 logging.warning(f"Could not parse Time column in already processed data: {e}")
+    # Checking a subset of processed columns might be sufficient
+    processed_cols_subset = ["SourceClassification", "DestinationClassification",
+                             "ClusterID", "ConnectionID", "ClusterAnomaly"]
+    if all(col in df.columns for col in processed_cols_subset):
+        logging.info("DataFrame appears to be already processed. Skipping reprocessing.")
         return df
 
-    # Rename column if needed
-    if "Info" in df.columns:
+    # Rename column if needed ('Info' often used instead of 'Payload' in Wireshark exports)
+    if "Info" in df.columns and "Payload" not in df.columns:
         df.rename(columns={"Info": "Payload"}, inplace=True)
 
     # Process the Payload column if present
     if "Payload" in df.columns:
-        df["Payload"] = df["Payload"].fillna("").str.replace(',', '/', regex=False)
-        extracted = parse_payload_vectorized(df["Payload"]) # Assumes parse_payload_vectorized exists
+        # Fill NaNs and replace commas to avoid issues during parsing/display
+        df["Payload"] = df["Payload"].fillna("").astype(str).str.replace(',', '/', regex=False)
+        extracted = parse_payload_vectorized(df["Payload"])
         df = pd.concat([df, extracted], axis=1)
 
-        # Compute flag-based columns if Flags exists
+        # Compute flag-based columns if Flags exists from payload parsing
         if "Flags" in df.columns:
-            flags_series = df["Flags"].astype(str) # Ensure string type
-            df["IsSYN"] = flags_series.str.contains("S", regex=False).astype(int) # More robust check
-            df["IsRST"] = flags_series.str.contains("R", regex=False).astype(int)
-            df["IsACK"] = flags_series.str.contains("A", regex=False).astype(int)
-            df["IsPSH"] = flags_series.str.contains("P", regex=False).astype(int)
+            # Ensure Flags column is treated as string and handle potential NaNs
+            flags_str = df["Flags"].fillna("").astype(str)
+            df["IsSYN"] = flags_str.str.contains("SYN", na=False).astype(int)
+            df["IsRST"] = flags_str.str.contains("RST", na=False).astype(int)
+            df["IsACK"] = flags_str.str.contains("ACK", na=False).astype(int)
+            df["IsPSH"] = flags_str.str.contains("PSH", na=False).astype(int)
+            # --- Placeholder for IsRetransmission ---
+            # Actual retransmission detection often requires comparing Seq numbers
+            # against expected Ack numbers within a connection, which is more complex.
+            # We'll add a placeholder column for now if needed by filters.
+            if 'isRetransmissionOnly' in request.get_json() if request else False: # Check if filter needs it
+                 df["IsRetransmission"] = 0 # Default to 0/False; implement proper logic if needed
+            # --- End Placeholder ---
 
-    # Compute normalized NodeWeight based on connection counts
+    # Compute normalized NodeWeight based on connection counts (Source+Destination pairs)
+    # Fill NaN Source/Destination with placeholders if necessary before grouping
+    df[['Source', 'Destination']] = df[['Source', 'Destination']].fillna('Unknown_IP')
     connection_counts = df.groupby(["Source", "Destination"])["Source"].transform("count")
     if not connection_counts.empty and connection_counts.max() != connection_counts.min():
-         # Handle potential NaN/Inf values before normalization
-         min_count = connection_counts.min()
-         max_count = connection_counts.max()
-         range_count = max_count - min_count
-         if range_count > 0: # Avoid division by zero
-             node_weights = (connection_counts - min_count) / range_count
-         else:
-             node_weights = pd.Series(0.5, index=connection_counts.index) # Assign default if range is zero
+        # Normalize weights between 0 and 1
+        node_weights = (connection_counts - connection_counts.min()) / (connection_counts.max() - connection_counts.min())
+    elif not connection_counts.empty:
+         # If all counts are the same, assign a default weight (e.g., 1.0 or 0.5)
+         node_weights = pd.Series(1.0, index=connection_counts.index)
     else:
-        # Assign default weight if no connections or all counts are the same
-        node_weights = pd.Series(0.5, index=df.index)
-    df["NodeWeight"] = node_weights.fillna(0.5) # Fill any remaining NaNs
+         # Handle empty connection_counts (e.g., if df was empty initially)
+         node_weights = pd.Series(dtype=float) # Empty series
+    df["NodeWeight"] = node_weights.reindex(df.index).fillna(0.5) # Align and fill NaNs
 
     # Classify IPs as internal or external
-    df["SourceClassification"] = df["Source"].apply(classify_ip_vector) # Assumes classify_ip_vector exists
+    df["SourceClassification"] = df["Source"].apply(classify_ip_vector)
     df["DestinationClassification"] = df["Destination"].apply(classify_ip_vector)
 
-    # Create a composite ConnectionID
+    # Create a composite ConnectionID for grouping related packets
     df["ConnectionID"] = (df["Source"].astype(str) + ":" + df["SourcePort"].fillna("N/A").astype(str) + "-" +
-                         df["Destination"].astype(str) + ":" + df["DestinationPort"].fillna("N/A").astype(str))
+                          df["Destination"].astype(str) + ":" + df["DestinationPort"].fillna("N/A").astype(str))
 
-    # Convert Time to datetime and perform numeric conversions
+    # Convert Time to datetime and handle potential errors
+    # Ensure 'Time' column exists before trying conversion
     if "Time" in df.columns:
-        try:
-            # Try ISO 8601 with microseconds first
-            df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S.%f", errors='coerce')
-        except ValueError:
-            try:
-                # Fallback to pandas default parser (more flexible but potentially slower)
-                df["Time"] = pd.to_datetime(df["Time"], errors='coerce')
-            except Exception as e:
-                logging.error(f"Error converting Time column to datetime: {e}")
-                df["Time"] = pd.NaT # Assign NaT if conversion fails
+        df["Time"] = pd.to_datetime(df["Time"], errors='coerce') # Coerce errors to NaT
     else:
-        df["Time"] = pd.NaT # Add Time column as NaT if it doesn't exist
+        # If Time column is missing, maybe create a dummy one or log a warning
+        logging.warning("Time column missing. Timing features will be unavailable.")
+        df['Time'] = pd.NaT # Assign NaT to all rows
 
-    # Convert other numeric columns
-    df["Length"] = pd.to_numeric(df["Length"], errors='coerce')
-    for col in ["Seq", "Ack", "Win", "Len", "TSval", "TSecr"]:
+    # Convert numeric columns safely
+    numeric_cols = ["Length", "Seq", "Ack", "Win", "Len", "TSval", "TSecr"]
+    for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
+        else:
+            df[col] = np.nan # Add column as NaN if it's missing
 
     # Compute time differences and derived features (handle potential NaT in Time)
-    df["InterArrivalTime"] = df.groupby("ConnectionID")["Time"].diff().dt.total_seconds()
-    df["BytesPerSecond"] = df["Length"] / df["InterArrivalTime"]
-    # Replace infinite values resulting from division by zero (or near zero) InterArrivalTime
-    df["BytesPerSecond"] = df["BytesPerSecond"].replace([np.inf, -np.inf], np.nan).fillna(0) # Fill NaN BytesPerSecond with 0
-    df["IsLargePacket"] = df["Length"] > 1000
-    df["PayloadLength"] = df["Len"] # Already converted to numeric
+    # Calculate InterArrivalTime only if Time column is valid datetime
+    if pd.api.types.is_datetime64_any_dtype(df["Time"]):
+        # Sort by ConnectionID and Time to ensure correct diff calculation
+        df = df.sort_values(by=["ConnectionID", "Time"])
+        # Use transform for potentially better performance on large groups
+        df["InterArrivalTime"] = df.groupby("ConnectionID")["Time"].transform(lambda x: x.diff().dt.total_seconds())
+        df["InterArrivalTime"] = df["InterArrivalTime"].fillna(0) # Fill first packet's NaN IAT with 0
+    else:
+        df["InterArrivalTime"] = 0.0 # Set to 0 if Time is not valid
 
-    # Burst ID calculation (handle NaT in Time/InterArrivalTime)
-    # Fill NaNs in InterArrivalTime before comparison to avoid errors
-    df["BurstID"] = df.groupby("ConnectionID")["InterArrivalTime"].transform(lambda x: (x.fillna(0) >= 0.01).cumsum())
+    # BytesPerSecond Calculation
+    # Ensure Length is numeric before division
+    df["Length"] = pd.to_numeric(df["Length"], errors='coerce').fillna(0)
+    # Avoid division by zero or by NaN InterArrivalTime
+    df["BytesPerSecond"] = df.apply(lambda row: row["Length"] / row["InterArrivalTime"] if row["InterArrivalTime"] and row["InterArrivalTime"] > 0 else 0, axis=1)
+    # Replace any resulting infinities (though the check above should prevent them)
+    df["BytesPerSecond"] = df["BytesPerSecond"].replace([np.inf, -np.inf], 0)
 
-    # Suspicious ACK calculation (handle potential NaNs)
-    if "Seq" in df.columns and "Ack" in df.columns:
+    df["IsLargePacket"] = (df["Length"] > 1000).astype(int) # Boolean -> Int (0 or 1)
+    df["PayloadLength"] = df["Len"].fillna(0) # Use 'Len' if available, else 0
+
+    # Burst ID calculation (based on InterArrivalTime threshold)
+    if "InterArrivalTime" in df.columns:
+         df["BurstID"] = df.groupby("ConnectionID")["InterArrivalTime"].transform(lambda x: (x.fillna(0) >= 0.01).cumsum())
+    else:
+         df["BurstID"] = 0 # Default if no IAT
+
+    # Suspicious ACK check (requires Seq and Ack)
+    if "Seq" in df.columns and "Ack" in df.columns and pd.api.types.is_datetime64_any_dtype(df["Time"]):
+        # Need previous Seq number within the same connection
         df["PrevSeq"] = df.groupby("ConnectionID")["Seq"].shift(1)
+        # Check if Ack is less than the previous Seq (potential sign of issues)
         df["IsSuspiciousAck"] = df.apply(
-            lambda row: pd.notnull(row["Ack"]) and pd.notnull(row["PrevSeq"]) and row["Ack"] < row["PrevSeq"],
+            lambda row: 1 if pd.notnull(row["PrevSeq"]) and pd.notnull(row["Ack"]) and row["Ack"] < row["PrevSeq"] else 0,
             axis=1
         )
-        df.drop(columns=["PrevSeq"], inplace=True)
+        df.drop(columns=["PrevSeq"], inplace=True) # Remove temporary column
     else:
-        df["IsSuspiciousAck"] = False # Set to False if Seq/Ack not present
+        df["IsSuspiciousAck"] = 0 # Default if columns missing or time unsorted
 
     # Compute clusters using Louvain community detection
-    node_cluster = compute_clusters(df, resolution=2.5) # Assumes compute_clusters exists
-    # Ensure ClusterID is string and handle nodes not in partition
-    df["ClusterID"] = df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
+    # Ensure df is not empty before clustering
+    if not df.empty:
+        try:
+            node_cluster = compute_clusters(df, resolution=2.5) # Use default resolution
+            # Map cluster IDs back to the DataFrame, handling potential missing nodes
+            df["ClusterID"] = df["Source"].apply(lambda x: str(node_cluster.get(str(x), 'N/A')))
+        except Exception as e:
+             print(f"Error during initial clustering: {e}. Assigning 'N/A' to ClusterID.")
+             df["ClusterID"] = 'N/A' # Fallback cluster ID on error
+    else:
+        df["ClusterID"] = 'N/A' # Assign N/A if DataFrame is empty
 
     # Calculate average entropy per cluster based on Protocol, SourcePort, and DestinationPort
     cluster_entropy = {}
-    if not df.empty: # Check if DataFrame is not empty before grouping
+    # Check if DataFrame and ClusterID column are valid before grouping
+    if not df.empty and "ClusterID" in df.columns:
         for cluster, group in df.groupby("ClusterID"):
+            # Skip N/A cluster if needed, or handle it explicitly
+            if cluster == 'N/A': continue
+
             ent_protocol = 0
             ent_srcport = 0
             ent_dstport = 0
-            # Check for column existence and non-empty group before calculating entropy
+
+            # Check for column existence and non-empty, non-NA group before calculating entropy
             if "Protocol" in group.columns and not group["Protocol"].dropna().empty:
                 ent_protocol = compute_entropy(group["Protocol"].dropna())
             if "SourcePort" in group.columns and not group["SourcePort"].dropna().empty:
                 ent_srcport = compute_entropy(group["SourcePort"].dropna())
             if "DestinationPort" in group.columns and not group["DestinationPort"].dropna().empty:
                 ent_dstport = compute_entropy(group["DestinationPort"].dropna())
+
             # Average the non-zero entropies
             valid_entropies = [e for e in [ent_protocol, ent_srcport, ent_dstport] if e > 0]
             cluster_entropy[cluster] = np.mean(valid_entropies) if valid_entropies else 0
-
+    # Map computed entropies back to the DataFrame
     df["ClusterEntropy"] = df["ClusterID"].map(cluster_entropy).fillna(0) # Fill NaN entropy with 0
 
-    # ---- Anomaly flagging ----
-    attack_pairs_cache = load_attack_pairs() # Assumes load_attack_pairs exists
+    # ----  Anomaly flagging  ----
+    # MODIFIED line: Only flag as anomaly based on ground truth if Source != Destination
     df["Anomaly"] = df.apply(
-        lambda r: "anomaly" if (str(r["Source"]), str(r["Destination"])) in attack_pairs_cache else "normal",
+        lambda r: "anomaly" if (r["Source"] != r["Destination"]) and ((str(r["Source"]), str(r["Destination"])) in attack_pairs_cache) else "normal",
         axis=1
     )
-    if not df.empty: # Check if DataFrame is not empty before grouping
+    # --- End Modification ---
+
+    # Calculate ClusterAnomaly based on the Anomaly flags within each cluster
+    # Ensure DataFrame is not empty before grouping
+    if not df.empty and "ClusterID" in df.columns:
         df["ClusterAnomaly"] = df.groupby("ClusterID")["Anomaly"].transform(
             lambda s: "anomaly" if (s == "anomaly").any() else "normal"
         )
     else:
-        df["ClusterAnomaly"] = "normal" # Default if df is empty
+        # Assign default 'normal' if DataFrame is empty or ClusterID missing
+        df["ClusterAnomaly"] = "normal"
 
+    # Ensure specific columns expected by frontend exist, even if calculation failed
+    expected_cols = ["Source", "Destination", "Payload", "SourcePort", "DestinationPort", "Flags",
+                     "Seq", "Ack", "Win", "Len", "TSval", "TSecr", "Protocol", "Length", "Time",
+                     "SourceClassification", "DestinationClassification", "ClusterID",
+                     "ConnectionID", "BurstID", "IsSuspiciousAck", "IsLargePacket", "NodeWeight",
+                     "ClusterEntropy", "Anomaly", "ClusterAnomaly",
+                     "IsSYN", "IsRST", "IsACK", "IsPSH", "InterArrivalTime", "BytesPerSecond", "PayloadLength"]
+                     # Add "IsRetransmission" if the placeholder was added
+    if "IsRetransmission" in df.columns:
+        expected_cols.append("IsRetransmission")
+
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = None # Or np.nan, or 0 depending on expected type
+
+    # Optional: Convert specific columns to appropriate types before returning
+    # Example: df['Length'] = df['Length'].astype(float) # If you need numeric type guarantee
+
+    # Reorder columns for consistency (optional)
+    # df = df[expected_cols + [c for c in df.columns if c not in expected_cols]]
+
+    logging.info(f"CSV processing complete. DataFrame shape: {df.shape}")
     return df
 
 def process_csv(csv_text):
@@ -358,6 +455,31 @@ def filter_and_aggregate():
         agg = grouped.apply(packets_per_second)
     elif metric == "Total Data Sent":
         agg = df.groupby("ClusterID")["Length"].sum()
+    elif metric == "Start Time":
+        # Ensure Time is datetime
+        df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+        # Find the minimum time per cluster (returns timestamps)
+        # For heatmap display, maybe convert to seconds since epoch or relative time?
+        # Let's convert to seconds since the overall minimum time for numerical representation
+        overall_min_time = df['Time'].min()
+        agg = df.groupby("ClusterID")["Time"].min()
+        # Calculate seconds since the very first packet in the dataset
+        agg = (agg - overall_min_time).dt.total_seconds()
+        agg = agg.fillna(0) # Handle clusters with no valid time data
+
+    elif metric == "Duration":
+        # Ensure Time is datetime
+        df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+        grouped = df.groupby("ClusterID")["Time"]
+        agg = (grouped.max() - grouped.min()).dt.total_seconds()
+        agg = agg.fillna(0) # Clusters with one packet have 0 duration
+
+    elif metric == "Average Inter-Arrival Time":
+        # Ensure InterArrivalTime is numeric
+        df["InterArrivalTime"] = pd.to_numeric(df["InterArrivalTime"], errors='coerce')
+        # Calculate the mean inter-arrival time per cluster
+        agg = df.groupby("ClusterID")["InterArrivalTime"].mean()
+        agg = agg.fillna(0) # Handle clusters where mean cannot be calculated
     else:
         df[metric] = pd.to_numeric(df[metric], errors='coerce').fillna(0)
         agg = df.groupby("ClusterID")[metric].sum()
@@ -383,6 +505,145 @@ def filter_and_aggregate():
         # ---------------------------------------------------
     return jsonify(filtered_pivot)
 
+@app.route('/hierarchical_clusters', methods=['GET'])
+def hierarchical_clusters():
+    global global_df
+    if global_df is None:
+        # If no data loaded, maybe return an empty structure or error
+        # Returning minimal structure to avoid client-side errors
+        return jsonify({"id": "root", "dist": 0, "children": []})
+
+    # --- Recalculate clusters based on optional resolution ---
+    # Use resolution from query param or default
+    resolution = 2.5 # Default resolution
+    try:
+        resolution_param = request.args.get("resolution")
+        if resolution_param is not None:
+            resolution = float(resolution_param)
+            if resolution <= 0:
+                raise ValueError("Resolution must be positive")
+            print(f"Using custom resolution: {resolution}") # For debugging
+    except (TypeError, ValueError) as e:
+        print(f"Invalid resolution parameter, using default 2.5: {e}")
+        resolution = 2.5 # Fallback to default
+
+    # Recompute clusters and update global_df (important!)
+    # Ensure compute_clusters function is available in the scope
+    try:
+        node_cluster = compute_clusters(global_df, resolution=resolution)
+        global_df["ClusterID"] = global_df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
+
+        # Recalculate entropy after re-clustering
+        # Ensure compute_entropy function is available
+        cluster_entropy = {}
+        if not global_df.empty: # Check if DataFrame is not empty before grouping
+            for cluster, group in global_df.groupby("ClusterID"):
+                ent_protocol = 0
+                ent_srcport = 0
+                ent_dstport = 0
+                # Check for column existence and non-empty group before calculating entropy
+                if "Protocol" in group.columns and not group["Protocol"].dropna().empty:
+                    ent_protocol = compute_entropy(group["Protocol"].dropna())
+                if "SourcePort" in group.columns and not group["SourcePort"].dropna().empty:
+                    ent_srcport = compute_entropy(group["SourcePort"].dropna())
+                if "DestinationPort" in group.columns and not group["DestinationPort"].dropna().empty:
+                    ent_dstport = compute_entropy(group["DestinationPort"].dropna())
+                # Average the non-zero entropies
+                valid_entropies = [e for e in [ent_protocol, ent_srcport, ent_dstport] if e > 0]
+                cluster_entropy[cluster] = np.mean(valid_entropies) if valid_entropies else 0
+
+        global_df["ClusterEntropy"] = global_df["ClusterID"].map(cluster_entropy).fillna(0) # Fill NaN entropy with 0
+
+
+         # Also re-calculate ClusterAnomaly based on the potentially new clusters
+         # Ensure load_attack_pairs function is available
+        attack_pairs = load_attack_pairs() # Ensure latest attack pairs are loaded
+        global_df["Anomaly"] = global_df.apply(
+             lambda r: "anomaly" if (str(r["Source"]), str(r["Destination"])) in attack_pairs else "normal", axis=1)
+        if not global_df.empty: # Check if DataFrame is not empty before grouping
+             global_df["ClusterAnomaly"] = global_df.groupby("ClusterID")["Anomaly"].transform(
+                 lambda s: "anomaly" if (s == "anomaly").any() else "normal"
+             )
+        else:
+             global_df["ClusterAnomaly"] = "normal" # Default if df is empty
+
+        print(f"Recomputed clusters with resolution {resolution}. {global_df['ClusterID'].nunique()} clusters found.") # Debugging
+    except Exception as e:
+        print(f"Error during re-clustering or entropy calculation: {e}")
+        # Handle error appropriately, maybe return last known good state or error message
+        return jsonify({"error": f"Failed to recluster: {e}"}), 500
+    # --- End Recalculation ---
+
+
+    # Proceed with hierarchical clustering based on the *new* clusters
+    stats = (
+        global_df
+        .groupby('ClusterID')
+        .agg(total_packets=('ClusterID', 'size'),
+             # Use the newly computed entropy
+             avg_entropy=('ClusterEntropy', 'mean'))
+        .reset_index()
+    )
+
+    # Need a stable order that linkage can use. Default groupby might not be sorted.
+    # Sort by ClusterID numerically if possible, otherwise string sort.
+    try:
+        stats['ClusterID_num'] = pd.to_numeric(stats['ClusterID'])
+        stats = stats.sort_values('ClusterID_num').reset_index(drop=True)
+    except ValueError:
+        stats = stats.sort_values('ClusterID').reset_index(drop=True)
+
+
+    # Prepare data for linkage (ensure no NaNs)
+    linkage_data = stats[['total_packets', 'avg_entropy']].fillna(0).to_numpy()
+
+    if linkage_data.shape[0] < 2:
+         print("Not enough clusters (<2) to perform hierarchical clustering.")
+         # Return a minimal structure if only one cluster exists
+         cluster_id = stats.loc[0, 'ClusterID'] if not stats.empty else "N/A"
+         return jsonify({"id": f"Cluster {cluster_id}", "cluster_id": cluster_id, "dist": 0})
+
+
+    # Perform hierarchical clustering
+    try:
+        # Using average linkage as in the source file
+        Z = linkage(linkage_data, method='average')
+        root, _ = to_tree(Z, rd=True) # rd=True to get node objects
+    except Exception as e:
+        print(f"Error during hierarchical clustering: {e}")
+        return jsonify({"error": f"Hierarchical clustering failed: {e}"}), 500
+
+
+    # Function to convert the SciPy tree node to the desired dictionary format
+    def node_to_dict(node):
+        if node.is_leaf():
+            # Get the original index from the sorted stats DataFrame
+            # node.id corresponds to the row index in the linkage_data, which matches the sorted stats index
+            try:
+                cluster_id = stats.loc[node.id, 'ClusterID']
+                return {
+                    "id": f"Cluster {cluster_id}",  # Leaf node ID includes cluster number
+                    "cluster_id": str(cluster_id),  # Store the actual cluster ID as string
+                    "dist": float(node.dist)
+                }
+            except IndexError:
+                 print(f"Error: Leaf node id {node.id} out of bounds for stats DataFrame (size: {len(stats)}).")
+                 # Fallback or error representation
+                 return {"id": f"Unknown Leaf {node.id}", "cluster_id": "Error", "dist": float(node.dist)}
+        else:
+            # Recursive call for non-leaf nodes
+            left = node_to_dict(node.get_left())
+            right = node_to_dict(node.get_right())
+            return {
+                # Non-leaf nodes don't have a specific cluster ID in the label/id
+                "id": f"Internal_{node.id}", # Use SciPy's internal node ID
+                "dist": float(node.dist),
+                "children": [left, right]
+            }
+
+    # Convert the tree and return as JSON
+    tree_dict = node_to_dict(root)
+    return jsonify(tree_dict)
 
 # Endpoint to return network data for a given cluster
 @app.route('/cluster_network', methods=['GET'])
@@ -514,76 +775,61 @@ def get_cluster_table():
     html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
     return html
 
-# Endpoint to process CSV data: parses, processes, and stores in global_df.
 # GroundTruth.csv is automatically read from the same folder.
+# Endpoint to process CSV data: parses, processes, and stores in global_df.
 @app.route('/process_csv', methods=['POST'])
 def process_csv_endpoint():
     """ Endpoint to process uploaded CSV data. """
-    global global_df, global_start_time, global_end_time, global_duration_seconds # Declare globals
+    global global_df, global_start_time, global_end_time, global_duration_seconds # Ensure globals are modified
 
     try:
         data = request.get_json()
         if not data or "csv_text" not in data:
+             logging.warning("Process CSV request missing 'csv_text'.")
              return jsonify({"error": "No CSV data provided."}), 400
+
         csv_text = data.get("csv_text", "")
         if not csv_text.strip():
+             logging.warning("Process CSV request received empty 'csv_text'.")
              return jsonify({"error": "CSV data is empty."}), 400
 
         # Process to DataFrame using the dedicated function
-        df = process_csv_to_df(csv_text) # This handles internal processing and error raising
+        df = process_csv_to_df(csv_text) # process_csv_to_df does the main work
         global_df = df # Store the processed DataFrame globally
+        logging.info(f"CSV processed into DataFrame with shape: {global_df.shape}")
 
         # --- Calculate Time Information ---
-        if "Time" in global_df.columns and pd.api.types.is_datetime64_any_dtype(global_df["Time"]) and not global_df["Time"].isnull().all():
-            min_time = global_df["Time"].min()
-            max_time = global_df["Time"].max()
+        global_start_time = None # Reset before calculation
+        global_end_time = None
+        global_duration_seconds = None
 
-            if pd.notnull(min_time) and pd.notnull(max_time):
-                global_start_time = min_time.isoformat() # Use ISO format for JSON
+        if "Time" in global_df.columns and pd.api.types.is_datetime64_any_dtype(global_df["Time"]):
+            valid_times = global_df["Time"].dropna()
+            if not valid_times.empty:
+                min_time = valid_times.min()
+                max_time = valid_times.max()
+                global_start_time = min_time.isoformat()
                 global_end_time = max_time.isoformat()
                 global_duration_seconds = (max_time - min_time).total_seconds()
+                logging.info(f"Time info calculated: Start={global_start_time}, End={global_end_time}, Duration={global_duration_seconds}s")
             else:
-                # Handle cases where min/max might be NaT even if not all are NaT
-                global_start_time = None
-                global_end_time = None
-                global_duration_seconds = None
+                logging.warning("Time column contains only NaT values.")
         else:
-            # Reset if Time column is missing, not datetime, or all NaT
-            global_start_time = None
-            global_end_time = None
-            global_duration_seconds = None
+            logging.warning("Time column missing, not datetime type, or could not be parsed correctly during processing.")
         # --- End Time Calculation ---
 
-        # Return a simple success confirmation
-        return jsonify({"message": "CSV processed successfully."}), 200
+        # Return a success confirmation JSON
+        return jsonify({"message": f"CSV processed successfully. {len(global_df)} rows loaded."}), 200
 
-    except ValueError as ve: # Catch specific errors from process_csv_to_df
+    except ValueError as ve: # Catch specific errors like missing columns
         logging.error(f"Value Error during CSV processing: {ve}")
-        global_start_time, global_end_time, global_duration_seconds = None, None, None # Reset globals
-        return jsonify({"error": str(ve)}), 400
+        global_df, global_start_time, global_end_time, global_duration_seconds = None, None, None, None # Reset globals
+        return jsonify({"error": str(ve)}), 400 # Return specific error
     except Exception as e:
-        logging.exception(f"Unexpected error processing CSV: {e}") # Log full traceback for unexpected errors
-        global_start_time, global_end_time, global_duration_seconds = None, None, None # Reset globals
-        return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
-
-@app.route('/time_info', methods=['GET'])
-def get_time_info():
-    """Returns the calculated start time, end time, and duration."""
-    # Check if globals were successfully populated
-    if global_df is None or global_start_time is None or global_end_time is None or global_duration_seconds is None:
-        # Check if it's just because no data was loaded yet
-        if global_df is None:
-             return jsonify({"error": "No data has been processed yet."}), 404
-        else:
-             # Data loaded, but time info likely missing/invalid in CSV
-             return jsonify({"error": "Time information could not be determined from the data."}), 404
-
-    return jsonify({
-        "start_time": global_start_time,
-        "end_time": global_end_time,
-        "duration_seconds": global_duration_seconds
-    })
-
+        logging.exception(f"Unexpected error processing CSV") # Log full traceback
+        global_df, global_start_time, global_end_time, global_duration_seconds = None, None, None, None # Reset globals
+        return jsonify({"error": "An unexpected server error occurred during CSV processing."}), 500
+    
 # New endpoint for downloading the processed CSV file
 @app.route('/download_csv', methods=['GET'])
 def download_csv():
@@ -620,6 +866,22 @@ def protocol_percentages():
     percentages = {proto: round(count / total * 100, 5)
                    for proto, count in protocol_counts.items() if proto}
     return jsonify(percentages)
+
+@app.route('/time_info', methods=['GET'])
+def get_time_info():
+    """Returns the calculated start time, end time, and duration."""
+    # Check if globals were successfully populated
+    if global_df is None or global_start_time is None or global_end_time is None or global_duration_seconds is None:
+        if global_df is None:
+             return jsonify({"error": "No data has been processed yet."}), 404
+        else:
+             return jsonify({"error": "Time information could not be determined from the data."}), 404
+
+    return jsonify({
+        "start_time": global_start_time,
+        "end_time": global_end_time,
+        "duration_seconds": global_duration_seconds
+    })
 
 @app.route('/get_edge_table', methods=['GET'])
 def get_edge_table():
@@ -726,115 +988,6 @@ def get_multi_edge_table():
     html += "</tbody></table>"
     html += f"<p id='table-summary' data-total='{total}'>Showing rows {start + 1} to {min(end, total)} of {total}.</p>"
     return html
-
-@app.route('/hierarchical_clusters', methods=['GET'])
-def hierarchical_clusters():
-    global global_df
-    if global_df is None:
-        # If no data loaded, maybe return an empty structure or error
-        # Returning minimal structure to avoid client-side errors
-        return jsonify({"id": "root", "dist": 0, "children": []})
-
-    # --- Recalculate clusters based on optional resolution ---
-    # Use resolution from query param or default
-    resolution = 2.5
-    try:
-        resolution_param = request.args.get("resolution")
-        if resolution_param is not None:
-            resolution = float(resolution_param)
-            if resolution <= 0:
-                raise ValueError("Resolution must be positive")
-            print(f"Using custom resolution: {resolution}") # For debugging
-    except (TypeError, ValueError) as e:
-        print(f"Invalid resolution parameter, using default 2.5: {e}")
-        resolution = 2.5
-
-    # Recompute clusters and update global_df (important!)
-    try:
-        node_cluster = compute_clusters(global_df, resolution=resolution)
-        global_df["ClusterID"] = global_df["Source"].apply(lambda x: str(node_cluster.get(x, 'N/A')))
-        # Recalculate entropy after re-clustering
-        cluster_entropy = {}
-        for cluster, group in global_df.groupby("ClusterID"):
-            ent_protocol = compute_entropy(group["Protocol"]) if "Protocol" in group.columns else 0
-            ent_srcport = compute_entropy(group["SourcePort"]) if "SourcePort" in group.columns else 0
-            ent_dstport = compute_entropy(group["DestinationPort"]) if "DestinationPort" in group.columns else 0
-            cluster_entropy[cluster] = (ent_protocol + ent_srcport + ent_dstport) / 3
-        global_df["ClusterEntropy"] = global_df["ClusterID"].map(cluster_entropy)
-         # Also re-calculate ClusterAnomaly based on the potentially new clusters
-        attack_pairs = load_attack_pairs() # Ensure latest attack pairs are loaded
-        global_df["Anomaly"] = global_df.apply(
-             lambda r: "anomaly" if (r["Source"], r["Destination"]) in attack_pairs else "normal", axis=1)
-        global_df["ClusterAnomaly"] = global_df.groupby("ClusterID")["Anomaly"].transform(
-             lambda s: "anomaly" if (s == "anomaly").any() else "normal")
-        print(f"Recomputed clusters with resolution {resolution}. {global_df['ClusterID'].nunique()} clusters found.") # Debugging
-    except Exception as e:
-        print(f"Error during re-clustering or entropy calculation: {e}")
-        # Handle error appropriately, maybe return last known good state or error message
-        return jsonify({"error": f"Failed to recluster: {e}"}), 500
-    # --- End Recalculation ---
-
-
-    # Proceed with hierarchical clustering based on the *new* clusters
-    stats = (
-        global_df
-        .groupby('ClusterID')
-        .agg(total_packets=('ClusterID', 'size'),
-             # Use the newly computed entropy
-             avg_entropy=('ClusterEntropy', 'mean'))
-        .reset_index()
-    )
-
-    # Need a stable order that linkage can use. Default groupby might not be sorted.
-    # Sort by ClusterID numerically if possible, otherwise string sort.
-    try:
-        stats['ClusterID_num'] = pd.to_numeric(stats['ClusterID'])
-        stats = stats.sort_values('ClusterID_num').reset_index(drop=True)
-    except ValueError:
-        stats = stats.sort_values('ClusterID').reset_index(drop=True)
-
-
-    # Prepare data for linkage (ensure no NaNs)
-    linkage_data = stats[['total_packets', 'avg_entropy']].fillna(0).to_numpy()
-
-    if linkage_data.shape[0] < 2:
-         print("Not enough clusters (<2) to perform hierarchical clustering.")
-         # Return a minimal structure if only one cluster exists
-         cluster_id = stats.loc[0, 'ClusterID'] if not stats.empty else "N/A"
-         return jsonify({"id": f"Cluster {cluster_id}", "cluster_id": cluster_id, "dist": 0})
-
-
-    # Perform hierarchical clustering
-    try:
-        Z = linkage(linkage_data, method='average') # Using average linkage
-        root, _ = to_tree(Z, rd=True)
-    except Exception as e:
-        print(f"Error during hierarchical clustering: {e}")
-        return jsonify({"error": f"Hierarchical clustering failed: {e}"}), 500
-
-
-    # Function to convert the SciPy tree node to the desired dictionary format
-    def node_to_dict(node):
-        if node.is_leaf():
-            # Use the index from the *sorted* stats DataFrame
-            cluster_id = stats.loc[node.id, 'ClusterID']
-            return {
-                "id": f"Cluster {cluster_id}",  # Leaf node ID includes cluster number
-                "cluster_id": str(cluster_id),  # Store the actual cluster ID
-                "dist": float(node.dist)
-            }
-        # Recursive call for non-leaf nodes
-        left = node_to_dict(node.get_left())
-        right = node_to_dict(node.get_right())
-        return {
-            "id": "",  # Non-leaf nodes don't have a specific cluster ID in the label
-            "dist": float(node.dist),
-            "children": [left, right]
-        }
-
-    # Convert the tree and return as JSON
-    tree_dict = node_to_dict(root)
-    return jsonify(tree_dict)
 
 def convert_nan_to_none(obj):
     """
