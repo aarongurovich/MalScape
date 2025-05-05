@@ -506,16 +506,16 @@ visibility: hidden !important;
         <h3 style="margin-bottom: 10px; font-size: 14px;">Sidebar Graph Sizing</h3>
 
         <label for="sidebarNodeSizeMin" style="font-size: 12px; display: block; margin-bottom: 2px;">Min Node Size:</label>
-        <input type="number" id="sidebarNodeSizeMin" placeholder="5" step="1" min="1" value="10" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+        <input type="number" id="sidebarNodeSizeMin" placeholder="10" step="1" min="1" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
 
         <label for="sidebarNodeSizeMax" style="font-size: 12px; display: block; margin-bottom: 2px;">Max Node Size:</label>
-        <input type="number" id="sidebarNodeSizeMax" placeholder="40" step="1" min="1" value="40" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+        <input type="number" id="sidebarNodeSizeMax" placeholder="30" step="1" min="1" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
 
         <label for="sidebarEdgeWidthMin" style="font-size: 12px; display: block; margin-bottom: 2px;">Min Edge Width:</label>
-        <input type="number" id="sidebarEdgeWidthMin" placeholder="0.5" step="0.1" min="0.1" value="1" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+        <input type="number" id="sidebarEdgeWidthMin" placeholder="1" step="0.1" min="0.1" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
 
         <label for="sidebarEdgeWidthMax" style="font-size: 12px; display: block; margin-bottom: 2px;">Max Edge Width:</label>
-        <input type="number" id="sidebarEdgeWidthMax" placeholder="8" step="0.1" min="0.1" value="6" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
+        <input type="number" id="sidebarEdgeWidthMax" placeholder="8" step="0.1" min="0.1" style="width: 90%; padding: 4px 6px; font-size: 11px; margin-bottom: 8px;">
     </div>
     
   </div>
@@ -650,7 +650,7 @@ visibility: hidden !important;
             <label for="reorderTreeCheckbox" style="font-weight: normal; font-size: 13px;">Reorder Tree Structure</label>
         </div>
         <label for="resolutionInput">Louvain Resolution:</label>
-        <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="default 2.5" style="margin-bottom: 0; vertical-align: middle; width: 70px; padding: 6px 8px;">
+        <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="2.5" style="margin-bottom: 0; vertical-align: middle; width: 70px; padding: 6px 8px;">
         <button onclick="reclusterAndRedraw()" style="padding: 6px 12px;">Apply Resolution</button>
         <button onclick="resetInlineZoom()" style="padding: 6px 12px;">Reset Zoom</button>
         <label for="thresholdSlider">Visual Threshold:</label>
@@ -671,16 +671,6 @@ visibility: hidden !important;
     <div style="margin-top: 20px;">
         <button id="loadMoreBtn" title="Load more data (not implemented).">Load More</button>
         <button id="refreshNetworkBtn" style="display: none; background-color:#4299e1; color:white; margin-left: 8px;" title="Refresh network graph (not implemented).">Refresh Network</button>
-    </div>
-    <div id="sizeControls" style="display: none; margin-top: 16px;" title="Adjust node and edge sizes in the main graph.">
-      <label for="edgeWidthMin">Min Edge Width:</label>
-      <input type="number" id="edgeWidthMin" placeholder="1" step="0.1" min="0.1" value="1">
-      <label for="edgeWidthMax">Max Edge Width:</label>
-      <input type="number" id="edgeWidthMax" placeholder="10" step="0.1" min="0.1" value="10">
-      <label for="nodeSizeMin">Min Node Size:</label>
-      <input type="number" id="nodeSizeMin" placeholder="15" step="1" min="1" value="15">
-      <label for="nodeSizeMax">Max Node Size:</label>
-      <input type="number" id="nodeSizeMax" placeholder="60" step="1" min="1" value="60">
     </div>
     <div id="cy" title="Main network graph view (not fully implemented)."></div>
   </div>
@@ -1305,7 +1295,11 @@ visibility: hidden !important;
                 const edgesToAdd = data.edges.map(edge => {
                     const protocol = edge.data.Protocol || 'Unknown';
                     if (!protocolColorMap[protocol]) {
-                        protocolColorMap[protocol] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                        let randomColor;
+                        do {
+                            randomColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                        } while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase()); // Ensure not the selection color
+                        protocolColorMap[protocol] = randomColor;
                     }
                     const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
                     return {
@@ -1357,10 +1351,34 @@ visibility: hidden !important;
         sidebarCy.removeListener('click');
         sidebarCy.removeListener('tap');
 
+        // Replace the existing 'mouseover' 'node' listener within bindSidebarGraphEvents
         sidebarCy.on('mouseover', 'node', (event) => {
             const node = event.target;
+            const nodeData = node.data(); // Get node data
+
+            // Calculate packets in/out from connected edges
+            let packetsIn = 0;
+            let packetsOut = 0;
+            node.connectedEdges().forEach(edge => {
+                const edgeData = edge.data();
+                const count = edgeData.processCount || 0; // Default to 0 if undefined
+                if (edgeData.target === nodeData.id) {
+                    packetsIn += count;
+                }
+                if (edgeData.source === nodeData.id) {
+                    packetsOut += count;
+                }
+            });
+
+            // Update tooltip content to include the counts
             tooltip.style("display", "block")
-                   .html(`Node: ${node.data('label')}<br>Class: ${node.data('Classification') || 'N/A'}<br>Cluster: ${node.data('clusterID')}`)
+                   .html(
+                       `Node: ${nodeData.label || nodeData.id}<br>` +
+                       `Class: ${nodeData.Classification || 'N/A'}<br>` +
+                       `Cluster: ${nodeData.clusterID}<br>` +
+                       `Packets In: ${packetsIn}<br>` + // Added line
+                       `Packets Out: ${packetsOut}`     // Added line
+                    )
                    .style("left", (event.originalEvent.pageX + 10) + "px")
                    .style("top", (event.originalEvent.pageY + 10) + "px");
         });
@@ -1394,7 +1412,13 @@ visibility: hidden !important;
                 edge.unselect();
             } else {
                 selectedSidebarEdges.add(edgeKey);
-                edge.style({ 'line-color': SELECTED_EDGE_COLOR, 'target-arrow-color': SELECTED_EDGE_COLOR, 'width': SELECTED_EDGE_WIDTH, 'z-index': SELECTED_EDGE_ZINDEX });
+                const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount')); // Get original width
+                edge.style({
+                    'line-color': SELECTED_EDGE_COLOR,
+                    'target-arrow-color': SELECTED_EDGE_COLOR,
+                    'width': originalWidth, // Use original width
+                    'z-index': SELECTED_EDGE_ZINDEX
+                });
                 edge.select();
             }
             updateSidebarTableForSelectedEdges();
@@ -1434,7 +1458,13 @@ visibility: hidden !important;
                     if(!edge.scratch('_protocolColor')){
                         edge.scratch('_protocolColor', edge.style('line-color'));
                     }
-                    edge.style({ 'line-color': SELECTED_EDGE_COLOR, 'target-arrow-color': SELECTED_EDGE_COLOR, 'width': SELECTED_EDGE_WIDTH, 'z-index': SELECTED_EDGE_ZINDEX });
+                    const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount')); // Get original width
+                    edge.style({
+                        'line-color': SELECTED_EDGE_COLOR,
+                        'target-arrow-color': SELECTED_EDGE_COLOR,
+                        'width': originalWidth, // Use original width
+                        'z-index': SELECTED_EDGE_ZINDEX
+                    });
                 });
                  clickedNode.select();
                 selectedNodeId = clickedNodeId;
@@ -1471,55 +1501,113 @@ visibility: hidden !important;
     }
 
     function applySidebarSizeControls() {
-        if (!sidebarCy) return;
+        if (!sidebarCy || sidebarCy.elements().length === 0) {
+            console.log("Sidebar graph not ready or empty, skipping size update.");
+            return;
+        }
 
-        const minNS = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMin').value) || 10, 1);
-        const maxNS = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMax').value) || 40, minNS + 1);
-        const minEW = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMin').value) || 1, 0.1);
-        const maxEW = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMax').value) || 6, minEW + 0.1);
+        // --- Define Fixed Target Ranges ---
+        const targetMinNS = 10; // Fixed minimum node size
+        const targetMaxNS = 30; // Fixed maximum node size
+        const targetMinEW = 1;  // Fixed minimum edge width
+        const targetMaxEW = 8;  // Fixed maximum edge width
+        // --- End Fixed Target Ranges ---
 
-        console.log(`Applying sidebar sizes: Node(${minNS}-${maxNS}), Edge(${minEW}-${maxEW})`);
+        // --- Ignore Input Fields (Optional: Remove corresponding HTML later) ---
+        /*
+        // These values are no longer read as the ranges are fixed above.
+        const minNS_input = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMin').value) || 10, 1);
+        const maxNS_input = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMax').value) || 40, minNS_input + 1);
+        const minEW_input = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMin').value) || 1, 0.1);
+        const maxEW_input = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMax').value) || 6, minEW_input + 0.1);
+        */
+        // --- End Ignore Input Fields ---
+
+        console.log(`Applying sidebar sizes: Node(${targetMinNS}-${targetMaxNS}), Edge(${targetMinEW}-${targetMaxEW}) using normalization.`);
 
         sidebarCy.batch(() => {
-            const nodeWeights = sidebarCy.nodes().map(n => n.data('NodeWeight') ?? n.degree());
-            const minNodeWeight = nodeWeights.length > 0 ? Math.min(...nodeWeights) : 0;
-            const maxNodeWeight = nodeWeights.length > 0 ? Math.max(...nodeWeights) : 1;
-            const nodeWeightRange = (maxNodeWeight - minNodeWeight) || 1;
+            // --- Node Size Normalization ---
+            const nodes = sidebarCy.nodes();
+            if (nodes.length > 0) {
+                // Use NodeWeight if available, otherwise fallback to degree
+                const nodeWeights = nodes.map(n => n.data('NodeWeight') ?? n.degree());
+                const actualMinNodeWeight = Math.min(...nodeWeights);
+                const actualMaxNodeWeight = Math.max(...nodeWeights);
+                const nodeWeightRange = (actualMaxNodeWeight - actualMinNodeWeight);
 
-            sidebarCy.nodes().forEach(n => {
-                const weight = n.data('NodeWeight') ?? n.degree();
-                let size = minNS + (maxNS - minNS) * ((weight - minNodeWeight) / nodeWeightRange);
-                size = Math.max(minNS, Math.min(size, maxNS));
-                n.style({ 'width': size, 'height': size });
-            });
+                nodes.forEach(n => {
+                    const weight = n.data('NodeWeight') ?? n.degree();
+                    let normalizedWeight = 0; // Default for single node or all same weight
+                    if (nodeWeightRange > 0) {
+                        normalizedWeight = (weight - actualMinNodeWeight) / nodeWeightRange;
+                    } else if (nodes.length > 0) {
+                        // If range is 0 but nodes exist, all have same weight. Assign mid-range size? Or min? Let's use min.
+                         normalizedWeight = 0; // Map to min size if all weights are identical
+                    }
 
-            const edgeCounts = sidebarCy.edges().map(e => e.data('processCount') || 1);
-            if (edgeCounts.length > 0) {
-                const minCount = Math.min(...edgeCounts);
-                const maxCount = Math.max(...edgeCounts);
-                const countRange = (maxCount - minCount) || 1;
+                    // Scale normalized weight (0-1) to target range
+                    let size = targetMinNS + normalizedWeight * (targetMaxNS - targetMinNS);
+                    size = Math.max(targetMinNS, Math.min(size, targetMaxNS)); // Clamp just in case
 
-                sidebarCy.edges().forEach(e => {
+                    // Apply style only if node is not currently selected
+                    if(n.id() !== selectedNodeId) {
+                        n.style({ 'width': size, 'height': size });
+                    }
+                    // Store the calculated size in scratchpad if needed elsewhere (optional)
+                    // n.scratch('_calculatedSize', size);
+                });
+            }
+            // --- End Node Size Normalization ---
+
+            // --- Edge Width Normalization ---
+            const edges = sidebarCy.edges();
+            if (edges.length > 0) {
+                const edgeCounts = edges.map(e => e.data('processCount') || 1); // Use 1 as min count if undefined
+                const actualMinCount = Math.max(1, Math.min(...edgeCounts)); // Ensure min count is at least 1
+                const actualMaxCount = Math.max(actualMinCount, Math.max(...edgeCounts)); // Ensure max is >= min
+                const countRange = (actualMaxCount - actualMinCount);
+
+                edges.forEach(e => {
                     const count = e.data('processCount') || 1;
-                    let width = minEW + (maxEW - minEW) * ((count - minCount) / countRange);
-                    width = Math.max(minEW, Math.min(width, maxEW));
+                    let normalizedCount = 0; // Default for single edge or all same count
+                     if (countRange > 0) {
+                        // Ensure count is within the actual observed range before normalizing
+                        const clampedCount = Math.max(actualMinCount, Math.min(count, actualMaxCount));
+                        normalizedCount = (clampedCount - actualMinCount) / countRange;
+                    } else if (edges.length > 0) {
+                        // If range is 0, all edges have the same count. Assign min width.
+                        normalizedCount = 0; // Map to min width
+                    }
 
+                    // Scale normalized count (0-1) to target range
+                    let width = targetMinEW + normalizedCount * (targetMaxEW - targetMinEW);
+                    width = Math.max(targetMinEW, Math.min(width, targetMaxEW)); // Clamp
+
+                    // Store the calculated width for non-selected state
                     e.scratch('_originalWidth', width);
+
+                    // Apply style, considering selection state
                     const edgeKey = `${e.data('source')}|${e.data('target')}|${e.data('Protocol')}`;
                     const nodeIsSelected = selectedNodeId && (e.source().id() === selectedNodeId || e.target().id() === selectedNodeId);
                     const edgeIsSelected = selectedSidebarEdges.has(edgeKey);
 
                     if (!nodeIsSelected && !edgeIsSelected) {
-                         e.style('width', width);
+                        e.style('width', width); // Apply calculated width
                     } else {
-                        e.style('width', SELECTED_EDGE_WIDTH);
+                         // Keep selected style if edge or connected node is selected
+                         e.style('width', SELECTED_EDGE_WIDTH);
                     }
                 });
             }
-        });
+            // --- End Edge Width Normalization ---
+        }); // End batch update
+
+        // Re-apply layout to adjust spacing if needed after size changes (optional)
+        // applySidebarLayout();
     }
 
     function updateSidebarTableForSelectedEdges() {
+        // --- Handle Node Selection First ---
         if (selectedNodeId && sidebarCy) {
             const node = sidebarCy.getElementById(selectedNodeId);
             if (node && node.length > 0) {
@@ -1529,39 +1617,57 @@ visibility: hidden !important;
                     protocol: edge.data('Protocol')
                 }));
                  if (connectedEdgeData.length > 0) {
+                    console.log(`Node ${selectedNodeId} selected, loading its multi-edge table.`);
                     loadSidebarMultiEdgeTable(connectedEdgeData, 1);
                  } else {
+                    console.log(`Node ${selectedNodeId} selected, but has no connections.`);
                     sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p><p style="padding:10px; text-align:center; color:#6c757d;">Selected node has no connections.</p>';
                     sidebarTableContainer.style.display = 'block';
                     sidebarTablePagination.style.display = 'none';
-                    sidebarSearchContainer.style.display = 'none';
+                    sidebarSearchContainer.style.display = 'none'; // Hide search for empty table
                  }
-                 sidebarInfoDiv.style.display = 'none';
-                 return;
+                 sidebarInfoDiv.style.display = 'none'; // Hide default info
+                 return; // Exit function after handling node selection
             } else {
-                selectedNodeId = null;
+                 // Node ID was selected but node not found (maybe removed), reset selection
+                 console.warn(`Selected node ${selectedNodeId} not found, resetting selection state.`);
+                 selectedNodeId = null; // Resetting here, deselectCurrentNode might have been called already
             }
         }
 
+        // --- Handle Edge Selection (if no node is selected) ---
         if (selectedSidebarEdges.size > 0) {
             const edgeList = Array.from(selectedSidebarEdges).map(key => {
                 const parts = key.split('|');
                 return { source: parts[0], destination: parts[1], protocol: parts[2] };
             });
+            console.log(`Edges selected, loading multi-edge table for ${edgeList.length} edges.`);
             loadSidebarMultiEdgeTable(edgeList, 1);
-            sidebarInfoDiv.style.display = 'none';
+            sidebarInfoDiv.style.display = 'none'; // Hide default info
         }
+        // --- Handle No Node/Edge Selection (Fallback) ---
         else {
-            if (currentSidebarTableClusterId) {
-                loadSidebarClusterTable(currentSidebarTableClusterId, 1);
+            console.log("No node or edge selected. Checking for remaining added clusters...");
+            // --- MODIFIED FALLBACK LOGIC ---
+            if (addedSidebarClusters.size > 0) {
+                // If clusters remain in the sidebar, show table for the first one
+                const firstRemainingClusterId = addedSidebarClusters.values().next().value;
+                console.log(`Loading table for first remaining cluster: ${firstRemainingClusterId}`);
+                loadSidebarClusterTable(firstRemainingClusterId, 1);
+                sidebarInfoDiv.style.display = 'none'; // Hide default info if showing cluster table
             } else {
-                sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>';
-                sidebarTableContainer.style.display = 'none';
-                sidebarTablePagination.style.display = 'none';
-                sidebarSearchContainer.style.display = 'none';
-                sidebarInfoDiv.innerHTML = 'Click nodes or edges in the graph to filter the table below, or click a heatmap cell.';
-                sidebarInfoDiv.style.display = 'block';
+                // If no clusters remain, clear table and show default info message
+                console.log("No clusters remain in the sidebar. Clearing table and showing info message.");
+                sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>'; // Clear table content
+                sidebarTableContainer.style.display = 'none'; // Hide table container
+                sidebarTablePagination.style.display = 'none'; // Hide pagination
+                sidebarSearchContainer.style.display = 'none'; // Hide search
+                sidebarInfoDiv.innerHTML = 'Click a cell on the heatmap to add its cluster. Click nodes or edges in the graph to highlight and filter the table below.'; // Default message
+                sidebarInfoDiv.style.display = 'block'; // Show info message
+                currentSidebarTableClusterId = null; // Ensure no stale cluster ID remains
+                sidebarTableMode = 'cluster'; // Reset mode
             }
+            // --- END MODIFIED FALLBACK LOGIC ---
         }
     }
 
@@ -1690,8 +1796,11 @@ visibility: hidden !important;
             // Assign colors if they don't exist
             protocols.forEach(proto => {
                 if (proto && !protocolColorMap[proto]) {
-                    // Simple random color generation, consider a more robust palette if needed
-                    protocolColorMap[proto] = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                    let randomColor;
+                    do {
+                        randomColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+                    } while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase()); // Ensure not the selection color
+                    protocolColorMap[proto] = randomColor;
                 }
             });
             if (!protocolColorMap['Unknown']) {
@@ -2927,35 +3036,71 @@ visibility: hidden !important;
                             .filter(cell_d => String(cell_d.cluster_id) === clickedClusterID);
 
                         // --- Bring selected/deselected cells to front ---
-                        // Raise the elements to ensure their stroke draws on top
                         if (!cellsForCluster.empty()) {
-                        cellsForCluster.raise();
+                            cellsForCluster.raise();
                         }
                         // --- End Bring to front ---
 
                         // Toggle highlight state
                         if (clusterHighlightColors.has(clickedClusterID)) {
-                            // --- DESELECT: Remove Outline ---
+                            // === DESELECT LOGIC ===
+                            console.log(`Deselecting Cluster ${clickedClusterID} from heatmap.`);
                             clusterHighlightColors.delete(clickedClusterID); // Remove from map
-                            // Animate stroke back to default AFTER raising (optional, raise is instant)
+
+                            // Animate stroke back to default
                             cellsForCluster.transition().duration(100)
-                                .style('stroke', defaultStrokeColor)       // Reset stroke color
-                                .style('stroke-width', defaultStrokeWidth); // Reset stroke width
+                                .style('stroke', defaultStrokeColor)
+                                .style('stroke-width', defaultStrokeWidth);
                             console.log(`Removed highlight outline for Cluster ${clickedClusterID}`);
 
+                            // --- NEW: Remove elements from sidebar graph ---
+                            if (sidebarCy) {
+                                const selector = `[clusterID = "${clickedClusterID}"]`; // Selector for nodes and edges
+                                const elesToRemove = sidebarCy.elements(selector);
+                                if (elesToRemove.length > 0) {
+                                    sidebarCy.remove(elesToRemove);
+                                    console.log(`Removed ${elesToRemove.length} elements for cluster ${clickedClusterID} from sidebar.`);
+                                }
+                            }
+                            addedSidebarClusters.delete(clickedClusterID); // Remove from tracking set
+                            console.log(`Removed Cluster ${clickedClusterID} from addedSidebarClusters.`);
+
+                            // --- NEW: Update sidebar state after removal ---
+                            if (sidebarCy && sidebarCy.elements().length > 0) {
+                                // If elements remain, update sizes, legend, and table
+                                console.log("Updating sidebar controls, legend, and table after removal.");
+                                applySidebarSizeControls(); // Recalculate sizes based on remaining
+                                updateLegend(sidebarCy.edges()); // Update legend based on remaining
+                                updateSidebarTableForSelectedEdges(); // Update table based on remaining selections/clusters
+                            } else {
+                                // If no elements remain, clear everything (including table/info)
+                                console.log("Sidebar is now empty, clearing visualization.");
+                                clearSidebarVisualization(); // Use full clear if graph is empty
+                                updateLegend(); // Show global legend
+                                // Sidebar might still be open, let user close it or add new clusters
+                            }
+                             // If the currently selected node/edge was part of the removed cluster, deselect it
+                            if (selectedNodeId && !sidebarCy.getElementById(selectedNodeId)?.length) { // Safer check for node existence
+                                console.log(`Selected node ${selectedNodeId} was removed, resetting selection.`);
+                                deselectCurrentNode(); // deselectCurrentNode sets selectedNodeId to null
+                                updateSidebarTableForSelectedEdges(); // Refresh table again after node deselect
+                            }
+                            // --- End NEW sidebar updates ---
+
                         } else {
-                            // --- SELECT: Add Outline ---
+                            // === SELECT LOGIC ===
+                            console.log(`Selecting Cluster ${clickedClusterID} from heatmap.`);
                             const targetHighlightColor = generateUniqueHighlightColor();
                             clusterHighlightColors.set(clickedClusterID, targetHighlightColor); // Add to map
-                            visualizeClusterInSidebar(clickedClusterID, targetHighlightColor); // Trigger sidebar update
+                            visualizeClusterInSidebar(clickedClusterID, targetHighlightColor); // Trigger sidebar add/update
 
-                            // Animate stroke to highlight state AFTER raising
+                            // Animate stroke to highlight state
                             cellsForCluster.transition().duration(100)
-                                .style('stroke', targetHighlightColor)     // Set highlight stroke color
-                                .style('stroke-width', highlightStrokeWidth); // Set highlight stroke width
+                                .style('stroke', targetHighlightColor)
+                                .style('stroke-width', highlightStrokeWidth);
                             console.log(`Applied highlight outline ${targetHighlightColor} to Cluster ${clickedClusterID}`);
                         }
-                        // Update the highlights on the tree leaf circles (still uses fill)
+                        // Update the highlights on the tree leaf circles (fill color change)
                         highlightTreeClusters(new Set(clusterHighlightColors.keys()));
                     })
                     .on("mouseover", function(event, d) { // Tooltip & temporary border highlight on hover
@@ -3009,13 +3154,8 @@ visibility: hidden !important;
                         }
 
                         // Restore the determined stroke width and color
-                        // Using transition can make it smoother, but direct style ensures it applies
                         cell.style("stroke", targetStrokeColor)
                             .style("stroke-width", targetStrokeWidth);
-
-                        // It's good practice to clear temporary attributes if you were using them
-                        // cell.attr('data-hover-temp-stroke', null);
-                        // cell.attr('data-hover-temp-stroke-width', null);
                     });
 
                 // --- Draw Heatmap Feature Labels (Y-axis) & Highlight Selected Metric ---
