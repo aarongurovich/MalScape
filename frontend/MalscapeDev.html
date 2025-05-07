@@ -8,486 +8,575 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-* { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #333; background-color: #f8f9fa; overflow-x: hidden; }
-body { display: flex; }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #333; background-color: #f8f9fa; overflow-x: hidden; }
+        body { display: flex; }
 
-#legend-container {
-    width: 220px;
-    background-color: #fff;
-    border-right: 1px solid #dee2e6;
-    padding: 16px 12px;
-    height: 100vh;
-    overflow-y: auto;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-    position: fixed;
-    left: -220px;
-    top: 0;
-    z-index: 1050;
-    transition: left 0.3s ease;
-}
-#legend-container.visible {
-    left: 0;
-}
+        #legend-container {
+            width: 220px;
+            background-color: #fff;
+            border-right: 1px solid #dee2e6;
+            padding: 16px 12px;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            position: fixed;
+            left: -220px; /* Initially hidden */
+            top: 0;
+            z-index: 1050;
+            transition: left 0.3s ease;
+        }
+        #legend-container.visible {
+            left: 0;
+        }
 
-#sidebar {
-    width: 0;
-    height: 100vh;
-    background-color: #f1f3f5;
-    border-right: 1px solid #dee2e6;
-    padding: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    transition: width 0.3s ease, padding 0.3s ease, left 0.3s ease, background-color 0.3s ease;
-    position: fixed;
-    top: 0;
-    left: 0;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-    z-index: 1100;
-    display: flex;
-    flex-direction: column;
-}
-#sidebar.open {
-    width: 500px;
-    padding: 20px;
-    left: 220px;
-}
-#sidebar-content {
-    opacity: 0;
-    transition: opacity 0.3s ease 0.1s;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    position: relative;
-}
-#sidebar.open #sidebar-content {
-    opacity: 1;
-    overflow: visible;
-}
-#sidebar-cy {
-    width: 100%;
-    height: 40%;
-    min-height: 250px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    background-color: #fff;
-    margin-top: 10px;
-    flex-shrink: 0;
-}
+        #sidebar {
+            width: 0; /* Initially hidden */
+            height: 100vh;
+            background-color: #f1f3f5;
+            border-right: 1px solid #dee2e6;
+            padding: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            transition: width 0.3s ease, padding 0.3s ease, left 0.3s ease, background-color 0.3s ease;
+            position: fixed;
+            top: 0;
+            left: 0; /* Will be adjusted by legend visibility */
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+        }
+        #sidebar.open {
+            width: 500px;
+            padding: 20px;
+            left: 220px; /* When legend is visible */
+        }
+        #sidebar-content {
+            opacity: 0;
+            transition: opacity 0.3s ease 0.1s;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+        #sidebar.open #sidebar-content {
+            opacity: 1;
+            overflow: visible;
+        }
+        #sidebar-cy {
+            width: 100%;
+            height: 40%; /* Initial height, can be overridden in fullscreen */
+            min-height: 250px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background-color: #fff;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
 
-#sidebar-toggle {
-    position: fixed;
-    top: 50%;
-    left: 0;
-    transform: translateY(-50%);
-    z-index: 1200;
-    background-color: #4299e1;
-    color: white;
-    border: none;
-    padding: 15px 8px;
-    border-radius: 0 6px 6px 0;
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
-    transition: background-color 0.2s ease, left 0.3s ease;
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-}
-#sidebar-toggle:hover {
-    background-color: #3182ce;
-}
+        #sidebar-toggle {
+            position: fixed;
+            top: 50%;
+            left: 0px; /* Start at edge */
+            transform: translateY(-50%);
+            z-index: 1200;
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            padding: 15px 8px;
+            border-radius: 0 6px 6px 0;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+            transition: background-color 0.2s ease, left 0.3s ease;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+        #sidebar-toggle:hover {
+            background-color: #3182ce;
+        }
 
-#main-container {
-    flex: 1;
-    padding: 24px;
-    height: 100vh;
-    overflow-y: auto;
-    transition: margin-left 0.3s ease;
-    margin-left: 0;
-    padding-left: 40px;
-}
+        #main-container {
+            flex: 1;
+            padding: 24px;
+            height: 100vh;
+            overflow-y: auto;
+            transition: margin-left 0.3s ease;
+            margin-left: 0px; /* Adjusted by JS based on sidebar state */
+            padding-left: 40px; /* Space for the toggle button */
+        }
 
-#nodeSizeMin, #nodeSizeMax, #edgeWidthMin, #edgeWidthMax { width: 200px; }
-h2 { color: #2c3e50; margin-top: 0; margin-bottom: 24px; font-size: 28px; font-weight: 600; border-bottom: 2px solid #4299e1; padding-bottom: 8px; display: inline-block; }
-h3 { color: #2c3e50; font-size: 16px; margin-top: 0; margin-bottom: 12px; font-weight: 600; }
-#sidebar h3 { font-size: 18px; margin-bottom: 10px; flex-shrink: 0; }
+        /* General Element Styling */
+        h2 { color: #2c3e50; margin-top: 0; margin-bottom: 24px; font-size: 28px; font-weight: 600; border-bottom: 2px solid #4299e1; padding-bottom: 8px; display: inline-block; }
+        h3 { color: #2c3e50; font-size: 16px; margin-top: 0; margin-bottom: 12px; font-weight: 600; }
+        #sidebar h3 { font-size: 18px; margin-bottom: 10px; flex-shrink: 0; }
 
-.control-group { margin-bottom: 20px; padding: 16px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-.sidebar-control {
-    padding: 8px 0;
-    margin-bottom: 5px;
-    background: none;
-    box-shadow: none;
-    border-radius: 0;
-    flex-shrink: 0;
-}
-.sidebar-control label {
-    font-size: 13px;
-    margin-right: 5px;
-}
+        .control-group { margin-bottom: 20px; padding: 16px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .sidebar-control {
+            padding: 8px 0;
+            margin-bottom: 5px;
+            background: none;
+            box-shadow: none;
+            border-radius: 0;
+            flex-shrink: 0;
+        }
+        .sidebar-control label {
+            font-size: 13px;
+            margin-right: 5px;
+        }
 
-mark {
-background-color: yellow;
-color: black;
-padding: 0.1em;
-border-radius: 3px;
-}
+        mark {
+            background-color: yellow;
+            color: black;
+            padding: 0.1em;
+            border-radius: 3px;
+        }
 
-label { display: inline-block; margin-right: 8px; font-weight: 500; color: #4a5568; }
-input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; margin-right: 12px; margin-bottom: 8px; transition: border-color 0.2s; }
-input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus { border-color: #4299e1; outline: none; box-shadow: 0 0 0 3px rgba(66,153,225,0.15); }
-button { background-color: #4299e1; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; margin-right: 8px; }
-button:hover { background-color: #3182ce; }
-#loadMoreBtn { display: none; margin-top: 16px; background-color: #38a169; }
-#loadMoreBtn:hover { background-color: #2f855a; }
-#cy { width: 100%; height: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 24px; margin-bottom: 24px; background-color: #fff; display: none; }
+        label { display: inline-block; margin-right: 8px; font-weight: 500; color: #4a5568; }
+        input[type="text"], input[type="file"], input[type="range"], select, input[type="number"] {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            margin-right: 12px;
+            margin-bottom: 8px;
+            transition: border-color 0.2s;
+            vertical-align: middle; /* Added for better alignment */
+        }
+        input[type="checkbox"] {
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+        input[type="text"]:focus, input[type="range"]:focus, select:focus, input[type="number"]:focus {
+            border-color: #4299e1;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
+        }
+        button {
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-right: 8px;
+            vertical-align: middle; /* Added for better alignment */
+        }
+        button:hover { background-color: #3182ce; }
 
-#table-container { margin-top: 24px; margin-bottom: 24px; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: none; max-height: 300px; overflow-y: auto; }
-#table-container table { width: 100%; border-collapse: collapse; table-layout: auto; }
-#table-container th, #table-container td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; text-align: left; white-space: nowrap; }
-#table-pagination { display: none; margin-top: 8px; text-align: center; }
-#table-pagination input { width: 60px; text-align: center; }
-#tooltip { position: absolute; display: none; background: rgba(255, 255, 255, 0.95); border-radius: 4px; padding: 8px 12px; font-size: 13px; color: #2d3748; pointer-events: none; z-index: 2000; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px; line-height: 1.5; border: 1px solid #dee2e6; }
-.color-box { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; border: 1px solid #ccc; }
-#legend { font-size: 12px; line-height: 1.4; table-layout: fixed; width: 100%;}
-#legend th, #legend td { padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
-#legend td:first-child, #legend th:first-child { width: 45%; }
-#legend td:nth-child(2), #legend th:nth-child(2) { width: 25%; }
-#legend td:last-child, #legend th:last-child { width: 30%; text-align: right;}
-#backToHeatmap { margin: 20px 0; padding: 8px 16px; font-size: 14px; display: none; }
-#edgeFilterPanel { position: absolute; top: 80px; right: 20px; width: 320px; padding: 12px; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: none; z-index: 999; }
-#edgeFilterPanel h4 { margin-top: 0; margin-bottom: 8px; font-size: 16px; font-weight: 600; color: #2c3e50; }
-#edgeFilterPanel label { display: block; margin-top: 8px; font-weight: 500; color: #4a5568; }
-#edgeFilterPanel input { margin-bottom: 8px; width: 100%; }
-#loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; flex-direction: column; }
-.spinner { border: 8px solid #f3f3f3; border-top: 8px solid #4299e1; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 16px; }
-.loading-text { font-size: 18px; color: #333; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-#resetSidebarBtn { background-color: #6c757d; margin-top: 5px; margin-bottom: 10px; width: 100%; flex-shrink: 0; }
-#resetSidebarBtn:hover { background-color: #5a6268; }
+        #loadMoreBtn { display: none; margin-top: 16px; background-color: #38a169; }
+        #loadMoreBtn:hover { background-color: #2f855a; }
+        #cy { width: 100%; height: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 24px; margin-bottom: 24px; background-color: #fff; display: none; }
 
-#sidebar-table-search-container {
-    padding: 10px 0 5px 0;
-    flex-shrink: 0;
-    display: none;
-}
-#sidebar-table-search-container label {
-    font-weight: 600;
-    font-size: 13px;
-    margin-right: 5px;
-}
-#sidebarTableSearchInput {
-    width: calc(100% - 100px);
-    padding: 5px 8px;
-    font-size: 12px;
-}
+        /* Table Styling */
+        #table-container, #sidebar-table-container {
+            margin-top: 15px; /* Consistent margin */
+            margin-bottom: 15px;
+            border-radius: 8px; /* Consistent radius */
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: none; /* Initially hidden */
+            overflow: auto; /* Changed from overflow-y for potential wide tables */
+            border: 1px solid #dee2e6; /* Added border for definition */
+        }
+        #table-container { max-height: 300px; } /* For main table */
+        #sidebar-table-container { flex-grow: 1; position: relative; } /* For sidebar table */
 
-#sidebar-table-container {
-    margin-top: 15px;
-    flex-grow: 1;
-    overflow: auto;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    background-color: #fff;
-    display: none;
-    position: relative;
-}
-#sidebar-table-container table {
-    font-size: 11px;
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: auto;
-}
-#sidebar-table-container th {
-    background-color: #f1f3f5;
-    padding: 8px 10px;
-    text-align: left;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    white-space: nowrap;
-}
-#sidebar-table-container td {
-    padding: 8px 10px;
-    white-space: normal;
-    word-break: break-word;
-    border: none;
-    border-bottom: 1px solid #e9ecef;
-    vertical-align: top;
-    line-height: 1.4;
-}
-#sidebar-table-container tr:last-child td { border-bottom: none; }
-#sidebar-table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
-#sidebar-table-container tbody tr:hover { background-color: #e9ecef; cursor: pointer; }
+        #table-container table, #sidebar-table-container table { width: 100%; border-collapse: collapse; table-layout: auto; }
 
-#sidebar-table-container th,
-#sidebar-table-container td {
-min-width: 150px;
-word-break: break-word;
-}
-#sidebar-table-pagination {
-    text-align: center;
-    margin-top: 8px;
-    display: none;
-    flex-shrink: 0;
-}
-#sidebar-table-pagination button { padding: 4px 8px; font-size: 12px; }
-#sidebar-table-pagination input { width: 45px; font-size: 12px; padding: 4px 6px; }
+        #table-container th, #table-container td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; text-align: left; white-space: nowrap; }
 
-#sidebar-table-no-results {
-    text-align: center;
-    padding: 10px;
-    color: #6c757d;
-    display: none;
-}
-
-#sidebarFullscreenBtn {
-    position: absolute;
-    top: 0px;
-    right: 15px;
-    width: auto;
-    padding: 4px 8px;
-    font-size: 18px;
-    line-height: 1;
-    z-index: 1150;
-    background-color: #6c757d;
-    color: white;
-    border: 1px solid #5a6268;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
-    margin: 0;
-}
-#sidebarFullscreenBtn:hover {
-    background-color: #5a6268;
-    border-color: #4e555b;
-}
+        #sidebar-table-container th {
+            background-color: #f1f3f5;
+            padding: 8px 10px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            white-space: nowrap;
+            font-size: 11px;
+        }
+        #sidebar-table-container td {
+            padding: 8px 10px;
+            white-space: normal;
+            word-break: break-word;
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: top;
+            line-height: 1.4;
+            font-size: 11px;
+        }
+        #sidebar-table-container tr:last-child td { border-bottom: none; }
+        #sidebar-table-container tbody tr:nth-child(even) { background-color: #f8f9fa; }
+        #sidebar-table-container tbody tr:hover { background-color: #e9ecef; cursor: pointer; }
+        #sidebar-table-container th, #sidebar-table-container td { min-width: 120px; word-break: break-word; } /* Adjusted min-width */
 
 
-#legend-container.fullscreen-active {
-    display: block !important;
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    height: 100vh !important;
-    width: 220px !important;
-    z-index: 1999 !important;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-    border-right: 1px solid #dee2e6;
-    background-color: #fff;
-    overflow-y: auto;
-}
-
-#sidebar.fullscreen #sidebar-cy {
-flex: 1 1 60%;
-min-height: 150px !important;
-height: auto !important;
-margin-top: 0 !important;
-border-radius: 6px 0 0 6px;
-border: 1px solid #dee2e6;
-}
-
-#sidebar.fullscreen h3,
-#sidebar.fullscreen #resetSidebarBtn,
-#sidebar.fullscreen #sidebar-info,
-#sidebar.fullscreen #sidebar-table-pagination {
-display: none !important;
-visibility: hidden !important;
-}
-
-#sidebar.fullscreen #sidebar-table-search-container {
-display: block !important;
-visibility: visible !important;
-}
+        #table-pagination, #sidebar-table-pagination { display: none; margin-top: 8px; text-align: center; flex-shrink: 0;}
+        #table-pagination input, #sidebar-table-pagination input { width: 60px; text-align: center; }
+        #sidebar-table-pagination button { padding: 4px 8px; font-size: 12px; }
+        #sidebar-table-pagination input { width: 45px; font-size: 12px; padding: 4px 6px; }
 
 
-#sidebar.fullscreen #sidebar-cy {
-flex: 1 1 65%;
-min-height: 150px !important;
-height: auto !important;
-margin-top: 0 !important;
-border-radius: 6px 0 0 6px;
-border: 1px solid #dee2e6;
-}
+        #sidebar-table-no-results { text-align: center; padding: 10px; color: #6c757d; display: none; }
+        #tooltip { position: absolute; display: none; background: rgba(255, 255, 255, 0.95); border-radius: 4px; padding: 8px 12px; font-size: 13px; color: #2d3748; pointer-events: none; z-index: 2000; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px; line-height: 1.5; border: 1px solid #dee2e6; }
+        .color-box { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; border: 1px solid #ccc; }
 
-#sidebar.fullscreen #sidebar-table-container {
-flex: 1 1 30%;
-min-height: 100px;
-height: auto !important;
-margin-top: 10px !important;
-display: block;
-border-radius: 6px;
-border: 1px solid #dee2e6;
-}
+        /* Legend Styling */
+        #legend { font-size: 12px; line-height: 1.4; table-layout: fixed; width: 100%;}
+        #legend th, #legend td { padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+        #legend td:first-child, #legend th:first-child { width: 45%; }
+        #legend td:nth-child(2), #legend th:nth-child(2) { width: 25%; }
+        #legend td:last-child, #legend th:last-child { width: 30%; text-align: right;}
 
-body.sidebar-fullscreen #main-container,
-body.sidebar-fullscreen #sidebar-toggle {
-display: none !important;
-visibility: hidden !important;
-}
-/* --- BEGIN ADDED Dendrogram CSS --- */
-#dendrogramCard {
-    display: none; /* Initially hidden */
-    background: #fff;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    padding: 20px;
-    border-radius: 12px;
-    margin: 20px 0;
-    border: 1px solid #e2e8f0;
-}
-#inline-dendrogram-container {
-    margin-bottom: 10px;
-    width: 100%;
-    height: 400px; /* Default height */
-    overflow: hidden;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    position: relative;
-}
-#inlineDendrogramSvg {
-    width: 100%;
-    height: 100%;
-    display: block;
-    cursor: grab;
-}
-#inlineDendrogramSvg:active {
-    cursor: grabbing;
-}
-#treeControls {
-    margin-top: 15px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-#treeControls label {
-    margin-bottom: 0;
-}
-#treeControls input[type="number"] {
-    margin-bottom: 0;
-    vertical-align: middle;
-    width: 70px;
-    padding: 6px 8px;
-}
-#treeControls button {
-    padding: 6px 12px;
-}
-#treeControls select {
-    padding: 6px 8px;
-    margin-bottom: 0;
-}
-#reclusterMessage {
-    color: #e53e3e;
-    font-size: 13px;
-    margin-top: 8px;
-    font-weight: 500;
-    width: 100%; /* Ensure it takes full width */
-}
-.tree-height-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
-}
-.tree-height-controls button {
-    background: none;
-    border: 1px solid #cbd5e0;
-    color: #4a5568;
-    padding: 4px 10px;
-    cursor: pointer;
-}
-.tree-height-controls button:hover {
-    background-color: #edf2f7;
-    border-color: #a0aec0;
-}
-.custom-height-link {
-    background: none;
-    border: none;
-    color: #4299e1;
-    cursor: pointer;
-    font-size: 13px;
-    text-decoration: underline;
-    padding: 0;
-    margin-left: 5px;
-}
-.custom-height-link:hover {
-    color: #3182ce;
-}
-.show-tree-button {
-    padding: 6px 12px;
-    font-size: 14px;
-    background-color: #28a745;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.show-tree-button:hover {
-    background-color: #218838;
-}
-.small-utility-button {
-    padding: 3px 8px;
-    font-size: 12px;
-    background-color: #6c757d;
-    border-radius: 4px;
-    color: white;
-    border: none;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.small-utility-button:hover {
-    background-color: #5a6268;
-}
-/* Dendrogram node/link styles */
-.node--leaf circle {
-    fill: #999;
-    stroke: none;
-}
-.node--internal circle {
-    fill: #555;
-    stroke: none;
-}
-.link {
-  fill: none;
-  stroke: #ccc;
-  stroke-width: 1.5px;
-}
-.node--leaf circle.highlighted {
-    /* Color is set dynamically by JS */
-    r: 6 !important;
-    stroke: #555;
-    stroke-width: 0.5px;
-}
-.node.grayed-out > circle {
-    fill: #d3d3d3 !important;
-    stroke: #bbb !important;
-    opacity: 0.6;
-}
-.node.grayed-out > text { /* If using text labels later */
-    fill: #aaa !important;
-    opacity: 0.7;
-}
-#threshold-bar {
-    stroke: rgba(220, 53, 69, 0.7);
-    stroke-width: 2;
-    stroke-dasharray: 5 3;
-    pointer-events: none;
-}
-.heatmap-cell { /* Tree-attached heatmap cells */
-    cursor: pointer;
-}
-.heatmap-feature-label {
-     font-size: 9px;
-     fill: #333;
-     text-anchor: end;
-     dominant-baseline: middle;
-}
-/* --- END ADDED Dendrogram CSS --- */
+        #backToHeatmap { margin: 20px 0; padding: 8px 16px; font-size: 14px; display: none; }
+
+        /* Edge Filter Panel */
+        #edgeFilterPanel { position: absolute; top: 80px; right: 20px; width: 320px; padding: 12px; background-color: #fff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: none; z-index: 999; }
+        #edgeFilterPanel h4 { margin-top: 0; margin-bottom: 8px; font-size: 16px; font-weight: 600; color: #2c3e50; }
+        #edgeFilterPanel label { display: block; margin-top: 8px; font-weight: 500; color: #4a5568; }
+        #edgeFilterPanel input { margin-bottom: 8px; width: 100%; }
+
+        /* Loading Overlay */
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        .spinner { border: 8px solid #f3f3f3; border-top: 8px solid #4299e1; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 16px; }
+        .loading-text { font-size: 18px; color: #333; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Sidebar Specific Buttons */
+        #resetSidebarBtn { background-color: #6c757d; margin-top: 5px; margin-bottom: 10px; width: 100%; flex-shrink: 0; }
+        #resetSidebarBtn:hover { background-color: #5a6268; }
+        #sidebar-table-search-container { padding: 10px 0 5px 0; flex-shrink: 0; display: none; }
+        #sidebar-table-search-container label { font-weight: 600; font-size: 13px; margin-right: 5px; }
+        #sidebarTableSearchInput { width: calc(100% - 100px); padding: 5px 8px; font-size: 12px; margin-right: 0; }
+
+
+        /* Sidebar Fullscreen Styles */
+        #sidebarFullscreenBtn {
+            position: absolute;
+            top: 5px; /* Adjusted for better placement */
+            right: 10px; /* Adjusted for better placement */
+            width: auto;
+            padding: 4px 8px;
+            font-size: 18px;
+            line-height: 1;
+            z-index: 1150;
+            background-color: #6c757d;
+            color: white;
+            border: 1px solid #5a6268;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+            margin: 0;
+        }
+        #sidebarFullscreenBtn:hover { background-color: #5a6268; border-color: #4e555b; }
+
+        #legend-container.fullscreen-active {
+            display: block !important; position: fixed !important; left: 0 !important; top: 0 !important;
+            height: 100vh !important; width: 220px !important; z-index: 1999 !important;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1); border-right: 1px solid #dee2e6;
+            background-color: #fff; overflow-y: auto;
+        }
+
+        #sidebar.fullscreen { /* Styles for sidebar when it IS the fullscreen element */
+            padding: 10px !important; /* Reduce padding in fullscreen */
+            position: fixed !important; top: 0 !important; left: 0 !important; /* Ensure it covers viewport */
+            width: 100vw !important; height: 100vh !important;
+            border-right: none !important;
+            z-index: 2000 !important;
+            overflow: hidden !important; /* Prevent main scrollbar in fullscreen */
+        }
+        #sidebar.fullscreen #sidebar-content {
+            flex-direction: row; /* Graph and table side-by-side */
+            gap: 10px;
+        }
+        #sidebar.fullscreen #sidebar-cy {
+            flex: 1 1 60%; /* Graph takes more space */
+            min-height: 150px !important; height: 100% !important; /* Full height of content area */
+            margin-top: 0 !important; border-radius: 6px; border: 1px solid #dee2e6;
+        }
+        #sidebar.fullscreen #sidebar-table-container {
+            flex: 1 1 40%; /* Table takes less space */
+            min-height: 100px; height: 100% !important; /* Full height of content area */
+            margin-top: 0 !important; display: flex !important; flex-direction: column;
+            border-radius: 6px; border: 1px solid #dee2e6;
+        }
+        #sidebar.fullscreen #sidebar-table-container table {
+            flex-grow: 1; /* Allows table to fill available space in its container */
+            display: block; /* Needed for overflow-y to work on table wrapper */
+            overflow-y: auto;
+        }
+        #sidebar.fullscreen #sidebar-table-search-container { display: block !important; visibility: visible !important; padding-bottom: 10px; }
+        #sidebar.fullscreen #sidebar-table-pagination { display: block !important; padding-top: 5px; }
+        /* Hide elements not needed in fullscreen */
+        #sidebar.fullscreen h3,
+        #sidebar.fullscreen #resetSidebarBtn,
+        #sidebar.fullscreen #sidebar-info,
+        #sidebar.fullscreen .sidebar-control /* Hides layout select in fullscreen */
+         { display: none !important; visibility: hidden !important; }
+
+        body.sidebar-fullscreen #main-container,
+        body.sidebar-fullscreen #sidebar-toggle { display: none !important; visibility: hidden !important; }
+
+        /* --- Dendrogram Card and Controls CSS --- */
+        #dendrogramCard {
+            display: none; /* Initially hidden */
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border: 1px solid #e2e8f0;
+        }
+
+        #dendrogramCard .dendro-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        #dendrogramCard .dendro-header h3 { /* Target h3 within .dendro-header */
+            margin-bottom: 0; /* Adjust if needed */
+        }
+
+        #dendrogramCard .dendro-header button { /* Styles for Reset Zoom button in this header */
+            padding: 6px 12px;
+            margin-left: auto; /* Pushes it to the right */
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            /* Ensure this doesn't conflict with general button styles by being more specific if needed */
+        }
+        #dendrogramCard .dendro-header button:hover {
+            background-color: #5a6268;
+        }
+
+        #inline-dendrogram-container {
+            margin-bottom: 10px;
+            width: 100%;
+            height: 400px; /* Default height, JS can override */
+            overflow: hidden;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            position: relative;
+        }
+
+        #inlineDendrogramSvg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+        #inlineDendrogramSvg:active {
+            cursor: grabbing;
+        }
+
+        #treeControls.tree-controls-sections {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 0px; /* Sections will have padding, direct gap not needed */
+            padding-top: 10px;
+            margin-top: 15px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .control-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            border-right: 1px solid #e2e8f0;
+            flex-basis: auto; /* Let content size influence basis */
+            /* flex-grow is set per child below */
+        }
+        .control-section:last-child {
+            border-right: none;
+        }
+
+        /* Adjust flex-grow for better distribution */
+        #treeControls.tree-controls-sections .control-section:nth-child(1) { /* Order Heatmap By */
+            flex-grow: 3; /* Takes more relative space */
+            min-width: 280px; /* Example min-width */
+        }
+        #treeControls.tree-controls-sections .control-section:nth-child(2) { /* Louvain Resolution */
+            flex-grow: 2; /* Takes less relative space */
+            min-width: 240px; /* Example min-width */
+        }
+        #treeControls.tree-controls-sections .control-section:nth-child(3) { /* Threshold options */
+            flex-grow: 4; /* Takes most relative space */
+            min-width: 320px; /* Example min-width */
+        }
+
+
+        .control-section label {
+            margin-bottom: 0;
+            white-space: nowrap;
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .control-section input[type="number"],
+        .control-section select {
+            padding: 6px 8px; /* Consistent padding */
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            margin-bottom: 0; /* Override default if any */
+            vertical-align: middle;
+        }
+
+        .control-section input[type="number"] {
+            width: 70px; /* Specific width for resolution input */
+        }
+        .control-section input[type="range"]{ /* Specific styling for range slider in sections */
+            margin-right: 5px; /* Reduce margin if needed */
+            padding: 0; /* Range inputs often don't need padding */
+        }
+         #thresholdValue { /* For the percentage span */
+            min-width: 35px;
+            display: inline-block;
+            text-align: right;
+            font-size: 14px;
+            vertical-align: middle;
+        }
+
+
+        .control-section input[type="checkbox"] {
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+        .control-section input[type="checkbox"] + label {
+            font-weight: normal;
+            font-size: 13px;
+            color: #4a5568; /* Ensure label color consistency */
+        }
+
+        .control-section button {
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            padding: 6px 12px; /* Consistent padding */
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 0; /* Override default if any */
+            vertical-align: middle;
+        }
+        .control-section button:hover {
+            background-color: #3182ce;
+        }
+        .control-section #resetGroupingBtn {
+            background-color: #f56565;
+        }
+        .control-section #resetGroupingBtn:hover {
+            background-color: #e53e3e;
+        }
+
+        #reclusterMessage {
+            color: #e53e3e;
+            font-size: 13px;
+            margin-top: 10px; /* Adjusted margin */
+            width: 100%;
+            font-weight: 500;
+            min-height: 1em; /* Prevent layout shift */
+        }
+
+        /* Disabled states for controls within treeControls */
+        #treeControls .control-section button:disabled,
+        #treeControls .control-section input:disabled,
+        #treeControls .control-section select:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        #treeControls .control-section button:disabled {
+            background-color: #a0aec0 !important; /* Use important if needed to override general button style */
+        }
+        #treeControls .control-section button:disabled:hover {
+            background-color: #a0aec0 !important;
+        }
+        #treeControls .control-section input:disabled {
+            background-color: #e9ecef; /* Lighter background for disabled input */
+        }
+
+
+        /* Dendrogram SVG specific styles */
+        .node--leaf circle { fill: #999; stroke: none; }
+        .node--internal circle { fill: #555; stroke: none; }
+        .node--group circle { fill: #a0a0a0; stroke: #555; stroke-width: 1px; }
+        .link { fill: none; stroke: #ccc; stroke-width: 1.5px; }
+        .node--leaf circle.highlighted { r: 6 !important; stroke: #555; stroke-width: 0.5px; /* Color set by JS */ }
+        .node.grayed-out > circle { fill: #d3d3d3 !important; stroke: #bbb !important; opacity: 0.6; }
+        .node.grayed-out > text { fill: #aaa !important; opacity: 0.7; }
+        #threshold-bar { stroke: rgba(220, 53, 69, 0.7); stroke-width: 2; stroke-dasharray: 5 3; pointer-events: none; }
+        .heatmap-cell { cursor: pointer; stroke: #fff; stroke-width: 0.2; /* Default, JS overrides */ }
+        .heatmap-feature-label { font-size: 9px; fill: #333; text-anchor: end; dominant-baseline: middle; }
+
+        /* Responsive adjustments for Dendrogram Controls */
+        @media (max-width: 1200px) { /* Broader breakpoint for stacking sections earlier */
+            #treeControls.tree-controls-sections {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .control-section {
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 10px;
+                flex-basis: auto !important; /* Reset basis */
+                flex-grow: 1 !important;    /* Allow all to grow equally when stacked */
+                min-width: 0 !important;     /* Reset min-width */
+                flex-wrap: wrap; /* Allow items within section to wrap */
+            }
+            .control-section:last-child { border-bottom: none; }
+        }
+
+        @media (max-width: 768px) {
+            #dendrogramCard .dendro-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            #dendrogramCard .dendro-header button {
+                margin-top: 10px;
+                margin-left: 0;
+                align-self: flex-start;
+            }
+            .control-section { /* Items within sections stack */
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .control-section > * { /* Make items take more width */
+                margin-bottom: 8px; /* Add some space when stacked */
+            }
+            .control-section input[type="range"] { width: 100%; max-width: 280px; }
+            .control-section select, .control-section input[type="number"], .control-section button {
+                width: auto; /* Allow natural width or set a sensible min-width */
+                min-width: 150px;
+            }
+            .control-section div { /* For the checkbox + label container */
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -599,65 +688,71 @@ visibility: hidden !important;
       </div>
     </div>
     <div id="dendrogramCard" style="display: none; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid #e2e8f0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
             <div>
                 <h3>Hierarchical Cluster Tree</h3>
                 <span id="treeInfoSpan" style="font-size: 12px; color: #555; margin-left: 10px;"></span>
                 <span id="timeInfoSpan" style="font-size: 12px; color: #555; margin-left: 15px;"></span>
             </div>
+            <button onclick="resetInlineZoom()" style="padding: 6px 12px; margin-left: auto;">Reset Zoom</button>
         </div>
         <div id="inline-dendrogram-container" style="margin-bottom: 10px; width: 100%; height: 400px; overflow: hidden; border: 1px solid #dee2e6; border-radius: 6px; position: relative;">
-        <svg id="inlineDendrogramSvg" style="width: 100%; height: 100%; display: block; cursor: grab;"></svg>
+            <svg id="inlineDendrogramSvg" style="width: 100%; height: 100%; display: block; cursor: grab;"></svg>
         </div>
-        <div id="treeControls" style="margin-top: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <label for="dendrogramSortMetricSelect">Order Heatmap By:</label>
-        <select id="dendrogramSortMetricSelect" style="padding: 6px 8px; margin-bottom: 0;">
-            <option value="Default" selected>Default (Structure)</option>
-            
-            <optgroup label="Basic Counts">
-                <option value="Count">Count</option>
-                <option value="Unique IPs">Unique IPs</option>
-                <option value="Unique Sources">Unique Sources</option>
-                <option value="Unique Destinations">Unique Destinations</option>
-            </optgroup>
-
-            <optgroup label="Packet/Payload Size">
-                <option value="Length">Packet Length</option>
-                <option value="Len">Payload Length</option>
-                <option value="Payload Size Variance">Payload Size Variance</option>
-            </optgroup>
-
-            <optgroup label="Timing/Rate">
-                <option value="Start Time">Start Time</option>
-                <option value="Duration">Duration</option>
-                <option value="Average Inter-Arrival Time">Avg Inter-Arrival Time</option>
-                <option value="Packets per Second">Packets per Second</option>
-            </optgroup>
-
-            <optgroup label="Data Volume">
-                 <option value="Total Data Sent">Total Data Sent</option>
-             </optgroup>
-
-            <optgroup label="TCP Flags">
-                <option value="% SYN packets">% SYN packets</option>
-                <option value="% RST packets">% RST packets</option>
-                <option value="% ACK packets">% ACK packets</option>
-                <option value="% PSH packets">% PSH packets</option>
-            </optgroup>
-        </select>
-        <div style="display: inline-block; margin-left: 5px; vertical-align: middle;">
-            <input type="checkbox" id="reorderTreeCheckbox" style="vertical-align: middle; margin-right: 4px;">
-            <label for="reorderTreeCheckbox" style="font-weight: normal; font-size: 13px;">Reorder Tree Structure</label>
+    
+        <div id="treeControls" class="tree-controls-sections" style="margin-top: 15px;">
+            <div class="control-section">
+                <label for="dendrogramSortMetricSelect">Order Heatmap By:</label>
+                <select id="dendrogramSortMetricSelect" style="padding: 6px 8px; margin-bottom: 0;">
+                    <option value="Default" selected>Default (Structure)</option>
+                    <optgroup label="Basic Counts">
+                        <option value="Count">Count</option>
+                        <option value="Unique IPs">Unique IPs</option>
+                        <option value="Unique Sources">Unique Sources</option>
+                        <option value="Unique Destinations">Unique Destinations</option>
+                    </optgroup>
+                    <optgroup label="Packet/Payload Size">
+                        <option value="Length">Packet Length</option>
+                        <option value="Len">Payload Length</option>
+                        <option value="Payload Size Variance">Payload Size Variance</option>
+                    </optgroup>
+                    <optgroup label="Timing/Rate">
+                        <option value="Start Time">Start Time</option>
+                        <option value="Duration">Duration</option>
+                        <option value="Average Inter-Arrival Time">Avg Inter-Arrival Time</option>
+                        <option value="Packets per Second">Packets per Second</option>
+                    </optgroup>
+                    <optgroup label="Data Volume">
+                        <option value="Total Data Sent">Total Data Sent</option>
+                    </optgroup>
+                    <optgroup label="TCP Flags">
+                        <option value="% SYN packets">% SYN packets</option>
+                        <option value="% RST packets">% RST packets</option>
+                        <option value="% ACK packets">% ACK packets</option>
+                        <option value="% PSH packets">% PSH packets</option>
+                    </optgroup>
+                </select>
+                <div style="display: inline-block; margin-left: 5px; vertical-align: middle;">
+                    <input type="checkbox" id="reorderTreeCheckbox" style="vertical-align: middle; margin-right: 4px;">
+                    <label for="reorderTreeCheckbox" style="font-weight: normal; font-size: 13px;">Reorder Tree Structure</label>
+                </div>
+            </div>
+    
+            <div class="control-section">
+                <label for="resolutionInput">Louvain Resolution:</label>
+                <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="2.5" style="margin-bottom: 0; vertical-align: middle; width: 70px; padding: 6px 8px;">
+                <button onclick="reclusterAndRedraw()" style="padding: 6px 12px;">Apply Resolution</button>
+            </div>
+    
+            <div class="control-section">
+                <label for="thresholdSlider">Visual Threshold:</label>
+                <input type="range" id="thresholdSlider" min="0" max="100" value="100" style="width: 150px; vertical-align: middle;">
+                <span id="thresholdValue" style="min-width: 35px; display: inline-block; text-align: right;">100%</span>
+                <button id="applyThresholdBtn" style="padding: 6px 12px;" title="Group clusters below the current threshold line">Apply Threshold</button>
+                <button id="resetGroupingBtn" style="padding: 6px 12px; background-color: #f56565;" title="Revert tree to its original state before thresholding">Reset Grouping</button>
+            </div>
         </div>
-        <label for="resolutionInput">Louvain Resolution:</label>
-        <input type="number" id="resolutionInput" value="2.5" step="0.1" min="0.1" placeholder="2.5" style="margin-bottom: 0; vertical-align: middle; width: 70px; padding: 6px 8px;">
-        <button onclick="reclusterAndRedraw()" style="padding: 6px 12px;">Apply Resolution</button>
-        <button onclick="resetInlineZoom()" style="padding: 6px 12px;">Reset Zoom</button>
-        <label for="thresholdSlider">Visual Threshold:</label>
-        <input type="range" id="thresholdSlider" min="0" max="100" value="100" style="width: 150px; vertical-align: middle;">
-        <span id="thresholdValue">100%</span>
-        <div id="reclusterMessage" style="width: 100%; margin-top: 5px; color: #e53e3e; font-size: 13px; font-weight: 500;"></div>
-        </div>
+        <div id="reclusterMessage" style="width: 100%; margin-top: 10px; color: #e53e3e; font-size: 13px; font-weight: 500; min-height: 1em;"></div>
     </div>
     <div id="table-search-container" style="display:none; margin-bottom: 12px; margin-top: 24px;" title="Search main table payload.">
       <label for="tableSearchInput"><strong>Search Payload:</strong></label>
@@ -695,6 +790,10 @@ visibility: hidden !important;
     const SELECTED_EDGE_WIDTH = 3.5;
     const SELECTED_EDGE_ZINDEX = 999;
 
+    window.currentGroupingApplied = false;
+    window.lastAppliedThreshold = 100;
+    window.originalTreeData = null;
+    window.currentGrouping = null;
     let previousClusterCount = null;
     let previousClusterHash = null;
     let currentDendrogramHeight = 400;
@@ -1239,15 +1338,18 @@ visibility: hidden !important;
     }
 
     function visualizeClusterInSidebar(clusterID, nodeColor) {
-        if (addedSidebarClusters.has(clusterID)) {
-             console.log(`Cluster ${clusterID} is already visualized.`);
-             if (sidebarCy) {
+        // Check if the cluster's nodes are ALREADY in the sidebar graph
+        // And also if it's in addedSidebarClusters (for cases where elements might have been removed but ID persisted)
+        if (sidebarCy && sidebarCy.nodes(`[clusterID = "${clusterID}"]`).length > 0 && addedSidebarClusters.has(clusterID)) {
+             console.log(`Cluster ${clusterID} is already present in sidebar graph. Re-focusing.`);
+             if (sidebarCy) { // Double check sidebarCy just in case
                  sidebarCy.nodes(`[clusterID = "${clusterID}"]`).animate({ style: { 'opacity': 0.5 } }, { duration: 200 }).animate({ style: { 'opacity': 1 } }, { duration: 200 });
              }
              if (currentSidebarTableClusterId !== clusterID || sidebarTableMode !== 'cluster') {
                  loadSidebarClusterTable(clusterID, 1);
              }
-             deselectCurrentNode();
+             deselectCurrentNode(); // Deselect any currently selected node or edge
+             // Clear individually selected edges if any
              if (selectedSidebarEdges.size > 0 && sidebarCy) {
                   sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
                   .forEach(edge => {
@@ -1262,26 +1364,30 @@ visibility: hidden !important;
              return;
         }
 
+        // If not already visualized (or elements not found), proceed to fetch and render
         toggleSidebar(true);
-        showSidebarLoading(true, false);
+        showSidebarLoading(true, false); // Show graph loading, not table loading
         sidebarInfoDiv.innerHTML = `Loading network for Cluster ${clusterID}...`;
         sidebarInfoDiv.style.display = 'block';
 
         fetch(`${API_BASE_URL}/cluster_network?cluster_id=${clusterID}`)
-            .then(response => { if (!response.ok) throw new Error(`Network error (${response.status})`); return response.json(); })
+            .then(response => { if (!response.ok) throw new Error(`Network error (${response.status}) for Cluster ${clusterID}`); return response.json(); })
             .then(data => {
-                showSidebarLoading(false, false);
+                showSidebarLoading(false, false); // Hide loading indicators
 
                 if (!data || (!data.nodes || data.nodes.length === 0)) {
                     console.log(`No network data for Cluster ${clusterID}.`);
-                    if (!sidebarCy) {
+                    if (!sidebarCy) { // Initialize sidebarCy if it doesn't exist
                         sidebarCy = cytoscape({ container: document.getElementById('sidebar-cy'), style: CYTOSCAPE_STYLE });
-                        bindSidebarGraphEvents();
+                        bindSidebarGraphEvents(); // Bind events only once on initialization
                     }
+                    // Even if no graph data, mark as "added" to prevent re-fetch spam, load table
                     addedSidebarClusters.add(clusterID);
                     loadSidebarClusterTable(clusterID, 1);
-                    updateLegend(sidebarCy?.edges());
+                    updateLegend(sidebarCy?.edges()); // Update legend (will likely be empty or global)
                     deselectCurrentNode();
+                    sidebarInfoDiv.innerHTML = `Cluster ${clusterID}: No network data to display.`;
+                    sidebarInfoDiv.style.display = 'block';
                     return;
                 }
 
@@ -1298,13 +1404,13 @@ visibility: hidden !important;
                         let randomColor;
                         do {
                             randomColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
-                        } while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase()); // Ensure not the selection color
+                        } while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase());
                         protocolColorMap[protocol] = randomColor;
                     }
                     const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
                     return {
                         group: 'edges',
-                        data: { ...edge.data, clusterID: clusterID },
+                        data: { ...edge.data, clusterID: clusterID }, // Ensure edges also carry clusterID if needed
                         style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor },
                         scratch: { _protocolColor: edgeColor }
                     };
@@ -1316,28 +1422,29 @@ visibility: hidden !important;
                         elements: { nodes: nodesToAdd, edges: edgesToAdd },
                         style: CYTOSCAPE_STYLE
                     });
-                    bindSidebarGraphEvents();
-                    applySidebarSizeControls();
-                    applySidebarLayout();
-                    sidebarCy.fit(null, 30);
+                    bindSidebarGraphEvents(); // Bind events after initialization
                 } else {
-                    sidebarCy.add(nodesToAdd.concat(edgesToAdd));
-                    applySidebarSizeControls();
-                    applySidebarLayout();
-                    sidebarCy.fit(null, 30);
+                    sidebarCy.add(nodesToAdd.concat(edgesToAdd)); // Add to existing instance
                 }
+                
+                addedSidebarClusters.add(clusterID); // Add to tracking set AFTER successful fetch and element prep
 
-                addedSidebarClusters.add(clusterID);
-                sidebarInfoDiv.style.display = 'none';
+                applySidebarSizeControls();
+                applySidebarLayout(); // Apply layout
+                sidebarCy.fit(null, 30); // Fit to view
+                sidebarInfoDiv.style.display = 'none'; // Hide info message
+
                 updateLegend(sidebarCy.edges());
                 loadSidebarClusterTable(clusterID, 1);
-                deselectCurrentNode();
+                deselectCurrentNode(); // Deselect any previous node/edge selection
             })
             .catch(error => {
                 console.error(`Error visualizing cluster ${clusterID} in sidebar:`, error);
                 showSidebarLoading(false, false);
                 sidebarInfoDiv.innerHTML = `Error loading graph data for Cluster ${clusterID}.`;
                 sidebarInfoDiv.style.display = 'block';
+                // Still attempt to load table even if graph fails, and mark as "added" to avoid spam
+                addedSidebarClusters.add(clusterID);
                 loadSidebarClusterTable(clusterID, 1);
                 deselectCurrentNode();
             });
@@ -2213,14 +2320,13 @@ visibility: hidden !important;
         // Recenter is handled by the fullscreenchange listener after this
      }
 
-    document.addEventListener('DOMContentLoaded', async () => { // Add async keyword
+     document.addEventListener('DOMContentLoaded', async () => { // Add async keyword
         tooltip = d3.select("#tooltip");
 
-        // --- Element References (Ensure these match your HTML) ---
+        // --- Element References ---
         const fileInput = document.getElementById('fileInput');
         const downloadButton = document.getElementById('downloadButton');
         const applyFiltersBtn = document.getElementById('applyFiltersBtn');
-        // const goPageBtn = document.getElementById('goPageBtn'); // Main table pagination (if used)
         const sidebar = document.getElementById('sidebar');
         const sidebarToggleBtn = document.getElementById('sidebar-toggle');
         const mainContainer = document.getElementById('main-container');
@@ -2233,67 +2339,48 @@ visibility: hidden !important;
         const sidebarSearchInput = document.getElementById('sidebarTableSearchInput');
         const sidebarInfoDiv = document.getElementById('sidebar-info');
         const sidebarFullscreenBtn = document.getElementById('sidebarFullscreenBtn');
-        const nodeSizeMin = document.getElementById('nodeSizeMin'); // Main Graph sizing (if used)
-        const nodeSizeMax = document.getElementById('nodeSizeMax'); // Main Graph sizing (if used)
-        const edgeWidthMin = document.getElementById('edgeWidthMin'); // Main Graph sizing (if used)
-        const edgeWidthMax = document.getElementById('edgeWidthMax'); // Main Graph sizing (if used)
         const sidebarNodeSizeMin = document.getElementById('sidebarNodeSizeMin');
         const sidebarNodeSizeMax = document.getElementById('sidebarNodeSizeMax');
         const sidebarEdgeWidthMin = document.getElementById('sidebarEdgeWidthMin');
         const sidebarEdgeWidthMax = document.getElementById('sidebarEdgeWidthMax');
-        // const applyEdgeFilterBtn = document.getElementById('applyEdgeFilterBtn'); // Main Graph filter (if used)
-        // const clearEdgeFilterBtn = document.getElementById('clearEdgeFilterBtn'); // Main Graph filter (if used)
-        // REMOVED: hideTreeBtn, showTreeBtn variable declarations
         const metricSelect = document.getElementById('dendrogramSortMetricSelect');
         const thresholdSlider = document.getElementById('thresholdSlider');
         const thresholdValueSpan = document.getElementById('thresholdValue');
         const sidebarLayoutSelect = document.getElementById('sidebarLayoutSelect');
-        // Add other references as needed (e.g., filter inputs)
+        const applyThresholdBtn = document.getElementById('applyThresholdBtn');
+        const reorderTreeCheckbox = document.getElementById('reorderTreeCheckbox');
+        const resetGroupingBtn = document.getElementById('resetGroupingBtn'); // Get reset button
 
-        // --- Initial Setup Calls (Reordered and Awaited) ---
+        // --- Initial Setup Calls ---
         try {
             showLoading(); // Show overall loading indicator
-
-            // Run non-dependent updates first
-            updateLegend();
-
-            // 1. Fetch heatmap data (required by dendrogram)
+            updateLegend(); // Run non-dependent updates first
             console.log("Initial load: Fetching heatmap data...");
             await updateHeatmap(); // Wait for heatmap data
             console.log("Initial load: Heatmap data fetched.");
-
-            // 2. Fetch and render dendrogram (now uses populated window.fullHeatmapData)
             console.log("Initial load: Loading inline dendrogram...");
-            await loadInlineDendrogram(); // Wait for dendrogram
+            await loadInlineDendrogram(); // This sets originalTreeData & resets grouping
             console.log("Initial load: Dendrogram loaded.");
-
-            // 3. Fetch time info
             console.log("Initial load: Updating time info...");
             await updateTimeInfoDisplay(); // Wait for time info
             console.log("Initial load: Time info updated.");
-
-            // Show/Hide 'Show Tree' button based on loaded data (REMOVED, as button is removed)
-            // if (showTreeBtn) { ... }
-
+            updateControlsState(); // Set initial button disabled states
         } catch (error) {
             console.error("Error during initial page load sequence:", error);
-            // Display a user-friendly error message
             const dendroCard = document.getElementById('dendrogramCard');
-            if(dendroCard) { // Check if card exists
-                dendroCard.innerHTML = `<p style="color:red; padding: 20px;">Error loading initial data: ${error.message || 'Unknown error'}. The backend might not have previous data loaded. Please try uploading a CSV file.</p>`;
-                dendroCard.style.display = 'block'; // Ensure it's visible to show error
+            if(dendroCard) {
+                dendroCard.innerHTML = `<p style="color:red; padding: 20px;">Error loading initial data: ${error.message || 'Unknown error'}. Please try uploading a CSV file.</p>`;
+                dendroCard.style.display = 'block';
             } else {
-                alert(`Error loading initial data: ${error.message || 'Unknown error'}. Please try uploading a CSV file.`); // Fallback
+                alert(`Error loading initial data: ${error.message || 'Unknown error'}. Please try uploading a CSV file.`);
             }
-            // const showTreeBtn = document.getElementById('showTreeBtn'); // Removed
-            // if(showTreeBtn) showTreeBtn.style.display = 'none'; // Removed
         } finally {
             hideLoading(); // Always hide loading indicator
         }
 
         // --- Event Listeners ---
 
-        // File Input & Processing (Handles its own async loading sequence now)
+        // File Input & Processing
         if(fileInput) {
             fileInput.addEventListener('change', function(event) {
                 const file = event.target.files[0];
@@ -2302,13 +2389,12 @@ visibility: hidden !important;
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         const csvText = e.target.result;
-                        // Make backend call to process
                         fetch(`${API_BASE_URL}/process_csv`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ csv_text: csvText }),
                         })
-                        .then(response => { // Handle backend response first
+                        .then(response => {
                             if (!response.ok) {
                                 return response.json().catch(() => response.text()).then(err => {
                                     let errorMsg = err.error || err || `Processing failed (${response.status})`;
@@ -2317,102 +2403,99 @@ visibility: hidden !important;
                             }
                             return response.json();
                         })
-                        .then(async (confirmationData) => { // If backend OK, now make this async
+                        .then(async (confirmationData) => {
                             console.log('CSV processed successfully:', confirmationData.message);
-                            protocolColorMap = {}; // Reset colors
+                            protocolColorMap = {}; // Reset colors for new data
                             try {
-                                // Call updates in sequence using await
-                                updateLegend();
-                                await updateHeatmap();
+                                updateLegend(); // Update legend first
+                                await updateHeatmap(); // Fetch new heatmap data
+                                // Load dendrogram - this sets originalTreeData and resets grouping state
                                 await loadInlineDendrogram();
-                                await updateTimeInfoDisplay();
-
-                                // Reset sidebar/UI state
-                                clearSidebarVisualization();
-                                toggleSidebar(false);
-
-                                // Show/Hide 'Show Tree' button logic (REMOVED)
-                                // const showTreeBtn = document.getElementById('showTreeBtn');
-                                // if (showTreeBtn) { ... }
+                                await updateTimeInfoDisplay(); // Update time info for new file
+                                clearSidebarVisualization(); // Clear previous selections/graph
+                                toggleSidebar(false); // Ensure sidebar is closed
+                                // Grouping state reset is handled inside loadInlineDendrogram
+                                console.log("Grouping state reset handled within loadInlineDendrogram after file upload.");
+                                // Trigger visual update of threshold bar based on reset slider value
+                                if (thresholdSlider && window.lastTreeRoot) {
+                                     requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
+                                }
+                                updateControlsState(); // Update buttons after load
                             } catch (loadError) {
                                 console.error("Error loading visualizations after file processing:", loadError);
                                 alert(`Error updating display after file processing: ${loadError.message}`);
-                                // Potentially clear UI elements here on error too
-                                const dendroCard = document.getElementById('dendrogramCard');
-                                if(dendroCard) dendroCard.innerHTML = '<p style="color:red; padding: 20px;">Error updating display.</p>';
+                                const dendroCardElem = document.getElementById('dendrogramCard');
+                                if(dendroCardElem) dendroCardElem.innerHTML = '<p style="color:red; padding: 20px;">Error updating display.</p>';
                             } finally {
-                                hideLoading(); // Hide loading indicator AFTER all updates finish or fail
+                                hideLoading(); // Hide loading indicator
                             }
                         })
-                        .catch(error => { // Catch errors from backend processing OR frontend updates
-                            hideLoading();
+                        .catch(error => {
+                            hideLoading(); // Hide loading on error
                             console.error('Error processing file or updating display:', error);
                             alert(`Error: ${error.message}`);
-                            // Clear relevant parts of the UI on error
-                            const dendroCard = document.getElementById('dendrogramCard');
-                            if(dendroCard) dendroCard.innerHTML = '<p style="color: red; text-align: center;">Could not process CSV data or update display.</p>';
-                            // const showTreeBtn = document.getElementById('showTreeBtn'); // Removed
-                            // if(showTreeBtn) showTreeBtn.style.display = 'none'; // Removed
-                            const timeInfoSpan = document.getElementById('timeInfoSpan');
-                            if(timeInfoSpan) timeInfoSpan.textContent = '';
-                            updateLegend(); // Update legend (may show empty)
-                            clearSidebarVisualization();
-                        });
-                    }; // End reader.onload
+                            // Clear potentially stale visualizations
+                            const dendroCardElem = document.getElementById('dendrogramCard');
+                            if(dendroCardElem) dendroCardElem.innerHTML = '<p style="color: red; text-align: center;">Could not process CSV data or update display.</p>';
+                            const timeInfoSpanElem = document.getElementById('timeInfoSpan');
+                            if(timeInfoSpanElem) timeInfoSpanElem.textContent = '';
+                            window.originalTreeData = null; // Clear stored data
+                            window.lastTreeData = null;
+                            window.lastTreeRoot = null;
+                            window.fullHeatmapData = {};
+                            updateLegend(); // Reset legend
+                            clearSidebarVisualization(); // Clear sidebar
+                            updateControlsState(); // Ensure buttons are disabled if data fails
+                         });
+                    };
                     reader.onerror = function(e) {
                         console.error("Error reading file:", e);
                         alert("Error reading file.");
                         hideLoading();
-                    };
+                     };
                     reader.readAsText(file);
                 }
-                event.target.value = null; // Allow re-upload of the same file
+                // Reset file input to allow re-uploading the same file
+                event.target.value = null;
             });
         } else { console.error("File input not found."); }
 
         // Download Button
         if(downloadButton) {
             downloadButton.addEventListener('click', function() {
-                // Check if data seems loaded by checking time info (or another indicator)
-                fetch(`${API_BASE_URL}/time_info`).then(res => res.ok ? res.json() : Promise.reject('No data status'))
-                .then(data => {
-                    if(data && !data.error && data.start_time) { // Check if data seems valid
-                        window.location.href = `${API_BASE_URL}/download_csv`;
-                    } else {
-                        alert("No processed data available to download. Please upload a CSV file first.");
-                    }
-                }).catch(() => alert("Could not check data status. Please upload a CSV file first."));
+                // Check if original data exists (as proxy for loaded data)
+                if (window.originalTreeData) {
+                     window.location.href = `${API_BASE_URL}/download_csv`;
+                } else {
+                     alert("No processed data available to download. Please upload a CSV file first.");
+                }
             });
         } else { console.error("Download button not found."); }
 
         // Heatmap Filters Button
         if(applyFiltersBtn) {
-            applyFiltersBtn.addEventListener('click', async () => { // make async
+            applyFiltersBtn.addEventListener('click', async () => {
                 showLoading();
                 try {
                     console.log("Apply Filters: Updating heatmap data...");
-                    await updateHeatmap(); // Fetch new data based on filters
-                    console.log("Apply Filters: Redrawing dendrogram with updated data...");
-                    // Re-render the dendrogram to reflect potential changes in data values/colors in its heatmap
-                    if (window.lastTreeData) { // Check if tree structure exists
+                    await updateHeatmap();
+                    console.log("Apply Filters: Redrawing dendrogram heatmap with updated data...");
+                    if (window.lastTreeData) { // Use lastTreeData to redraw
                         showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
                     } else {
                         console.warn("Cannot redraw dendrogram heatmap after filter: Tree data not loaded.");
-                        // Decide if you want to attempt loading the tree structure again
-                        // await loadInlineDendrogram();
+                        await loadInlineDendrogram(); // Attempt to load if missing
                     }
-                // Re-apply highlights to tree leaves and attached heatmap cells
-                highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+                    highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+                    if (thresholdSlider && window.lastTreeRoot) { // Update threshold bar
+                         requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
+                    }
                 } catch (error) {
-                    console.error("Error applying filters and updating visualizations:", error);
-                    alert(`Error applying filters: ${error.message || 'Unknown error'}`);
-                } finally {
-                    hideLoading();
-                }
+                     console.error("Error applying filters and updating visualizations:", error);
+                     alert(`Error applying filters: ${error.message || 'Unknown error'}`);
+                 } finally { hideLoading(); }
             });
         } else { console.error("Apply Filters button not found."); }
-
-        // --- Other Listeners ---
 
         // Sidebar Toggle
         if(sidebarToggleBtn) {
@@ -2423,11 +2506,10 @@ visibility: hidden !important;
         if(resetSidebarBtn) {
             resetSidebarBtn.addEventListener('click', () => {
                 console.log("Reset Sidebar Button clicked.");
-                clearSidebarVisualization(); // Handles clearing graph, table, highlights
-                updateLegend(); // Update the legend to show global stats/colors
-                toggleSidebar(false);
+                clearSidebarVisualization();
+                updateLegend();
                 resetInlineZoom();
-                console.log("Sidebar reset complete via button, including tree zoom.");
+                console.log("Sidebar selections and highlights cleared. Tree view maintained.");
             });
         } else {
             console.error("Reset Sidebar Button not found!");
@@ -2443,16 +2525,14 @@ visibility: hidden !important;
             if (!document.fullscreenElement && isSidebarFullscreen) {
                 console.log("Fullscreen exited via event listener.");
                 cleanupFullscreenStyles();
-                // Ensure graph fits after exiting fullscreen and sidebar potentially resizing
                 if (sidebarCy) { setTimeout(() => { sidebarCy.resize(); sidebarCy.fit(null, 50); }, 400); }
             } else if (document.fullscreenElement === sidebar && !isSidebarFullscreen) {
-                // This case handles situations where fullscreen might be entered unexpectedly
                 console.warn("Fullscreen entered via event listener - attempting state sync.");
                 isSidebarFullscreen = true;
                 sidebar.classList.add('fullscreen');
                 legendContainer.classList.add('fullscreen-active');
                 document.body.classList.add('sidebar-fullscreen');
-                sidebarFullscreenBtn.innerHTML = '&#x274C;'; // Exit icon
+                sidebarFullscreenBtn.innerHTML = '&#x274C;';
                 sidebarFullscreenBtn.title = "Exit Sidebar Fullscreen";
                 if (sidebarCy) { setTimeout(() => { sidebarCy.resize(); sidebarCy.fit(null, 50); }, 100); }
             }
@@ -2468,9 +2548,9 @@ visibility: hidden !important;
             sidebarSearchInput.addEventListener('input', filterSidebarTable);
         } else { console.error("Sidebar table search input not found!"); }
 
-        // Sidebar Pagination
+        // Sidebar Pagination Button
         if(sidebarGoPageBtn) {
-            sidebarGoPageBtn.addEventListener('click', function () {
+             sidebarGoPageBtn.addEventListener('click', function () {
                 let pageInput = document.getElementById('sidebarCurrentPageInput');
                 let page = parseInt(pageInput.value, 10);
                 const totalPagesStr = document.getElementById('sidebarTotalPages').textContent;
@@ -2505,31 +2585,37 @@ visibility: hidden !important;
         if(sidebarEdgeWidthMax) sidebarEdgeWidthMax.addEventListener('input', applySidebarSizeControls);
 
         // --- Dendrogram Listeners ---
-        // REMOVED Event listener attachments for hideTreeBtn and showTreeBtn
 
+        // Metric Select for Heatmap/Tree Ordering
         if (metricSelect) {
             metricSelect.addEventListener('change', () => {
-                if (window.lastTreeData) {
-                    // Redraw the dendrogram, which will use the new metric to order the heatmap leaves
+                if (window.lastTreeData) { // Use lastTreeData as it reflects current view
                     showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
-                } else { console.warn("Cannot redraw dendrogram: No tree data available."); }
+                     highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+                     requestAnimationFrame(() => { // Update threshold bar
+                         if (thresholdSlider) thresholdSlider.dispatchEvent(new Event('input'));
+                     });
+                } else { console.warn("Cannot redraw dendrogram on metric change: No tree data available."); }
             });
         } else { console.error("Dendrogram sort select not found."); }
 
+        // Reorder Tree Checkbox
         if (reorderTreeCheckbox) {
             reorderTreeCheckbox.addEventListener('change', () => {
-                // Check if tree data exists before trying to redraw
-                if (window.lastTreeData) {
+                if (window.lastTreeData) { // Use lastTreeData for redraw
                     console.log(`Reorder checkbox changed to: ${reorderTreeCheckbox.checked}, redrawing dendrogram.`);
-                    // Simply call showInlineDendrogram again.
-                    // It will automatically read the current checkbox state and the current metric selection.
                     showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
+                     highlightTreeClusters(new Set(clusterHighlightColors.keys()));
+                     requestAnimationFrame(() => { // Update threshold bar
+                         if (thresholdSlider) thresholdSlider.dispatchEvent(new Event('input'));
+                     });
                 } else {
                     console.warn("Cannot redraw dendrogram on checkbox change: No tree data available.");
                 }
             });
         } else { console.error("Reorder tree checkbox not found."); }
 
+        // Threshold Slider Listener (Visual Updates Only)
         if (thresholdSlider && thresholdValueSpan) {
             thresholdSlider.addEventListener('input', () => {
                 const percentage = parseInt(thresholdSlider.value, 10);
@@ -2539,53 +2625,67 @@ visibility: hidden !important;
                 const svgNode = svg.node();
                 if (!svgNode) return;
                 const svgContent = svg.select("g");
-                const root = window.lastTreeRoot;
-                const treeLayoutWidth = window.currentLayoutWidth; // Get layout width used for drawing
-
-                // --- Use stored D3 layout height ---
-                const layoutHeight = window.currentD3LayoutHeight; // <<< GET STORED HEIGHT
+                const root = window.lastTreeRoot; // Use globally stored root for *layout* info
+                const layoutHeight = window.currentD3LayoutHeight;
+                const treeLayoutWidth = window.currentLayoutWidth;
 
                 if (!layoutHeight || layoutHeight <= 0 || !root || svgContent.empty() || treeLayoutWidth === undefined) {
-                    console.warn("Cannot update threshold bar: Missing layout data or invalid height.", { layoutHeight, rootExists: !!root, svgContentEmpty: svgContent.empty(), treeLayoutWidth });
-                    svg.select("#threshold-bar").style("display", "none"); // Hide bar if data is bad
+                    svg.select("#threshold-bar").style("display", "none");
                     return;
                 }
-                // --- End height retrieval ---
 
-                const thresholdLayoutY = layoutHeight * (percentage / 100); // Calculate Y based on actual layout height
+                const thresholdLayoutY = layoutHeight * (percentage / 100);
 
-                const allVisualNodes = svgContent.selectAll('.node');
-                if (allVisualNodes.empty()) {
-                    svg.select("#threshold-bar").style("display", "none"); return;
-                }
-
-                // Gray out nodes based on stored layout Y and thresholdLayoutY
-                allVisualNodes.each(function(d) {
+                // Gray out nodes based on structural Y
+                svgContent.selectAll('.node').each(function(d) {
                     if (d && typeof d.structuralY === 'number' && isFinite(d.structuralY)) {
-                        // Compare node's structural Y (relative to layoutHeight) with thresholdLayoutY
-                        d3.select(this).classed('grayed-out', d.structuralY > thresholdLayoutY + 1e-6);
+                         d3.select(this).classed('grayed-out', d.structuralY > thresholdLayoutY + 1e-6);
                     } else {
-                        d3.select(this).classed('grayed-out', false);
+                         d3.select(this).classed('grayed-out', false);
                     }
                 });
 
                 // Update visual threshold bar position based on current zoom/pan
-                const transform = d3.zoomTransform(svgNode);
-                // Y position needs the global margin.top offset added before zoom transform
-                const thresholdVisualY = ((thresholdLayoutY + margin.top) * transform.k) + transform.y;
-                // X position still uses layoutWidth and global margin.left offset
-                const barX1 = ((0 + margin.left) * transform.k) + transform.x;
-                const barX2 = ((treeLayoutWidth + margin.left) * transform.k) + transform.x;
+                try {
+                    const transform = d3.zoomTransform(svgNode);
+                    const thresholdVisualY = ((thresholdLayoutY + margin.top) * transform.k) + transform.y;
+                    // Calculate visible bar extent based on current layout width and transform
+                    const barX1 = margin.left * transform.k + transform.x;
+                    const barX2 = (margin.left + treeLayoutWidth) * transform.k + transform.x;
 
-                svg.select("#threshold-bar")
-                    .style("display", null)
-                    .attr("y1", thresholdVisualY).attr("y2", thresholdVisualY)
-                    .attr("x1", barX1).attr("x2", barX2);
-            }); // End input listener
-        } else { console.error("Threshold slider or value span not found."); }
+                    svg.select("#threshold-bar")
+                       .style("display", null)
+                       .attr("y1", thresholdVisualY).attr("y2", thresholdVisualY)
+                       .attr("x1", barX1).attr("x2", barX2);
+                } catch (e) {
+                    svg.select("#threshold-bar").style("display", "none");
+                }
+            });
 
-        // Listeners for resolution, reset zoom, custom height buttons are handled by onclick attributes in HTML
-        // Ensure the global functions reclusterAndRedraw(), resetInlineZoom(), showCustomHeightInput() exist
+            // Trigger initial visual state based on default/current slider value
+             requestAnimationFrame(() => {
+                if (window.lastTreeRoot) { thresholdSlider.dispatchEvent(new Event('input')); }
+             });
+
+        } else {
+            console.error("Threshold slider or value span not found!");
+        }
+
+        // Apply Threshold Button Listener
+        if (applyThresholdBtn) {
+             applyThresholdBtn.addEventListener('click', applyThresholdGrouping);
+        } else {
+             console.error("Apply Threshold button not found!");
+        }
+
+        // Reset Grouping Button Listener
+        if (resetGroupingBtn) {
+            resetGroupingBtn.addEventListener('click', resetGroupingAndRedraw);
+        } else {
+            console.error("Reset Grouping button not found!");
+        }
+
+        // Listeners for resolution, reset zoom buttons are handled by onclick attributes in HTML
 
     }); // End DOMContentLoaded
 
@@ -2593,34 +2693,31 @@ visibility: hidden !important;
     function showInlineDendrogram(data, svgH = 400) {
         console.log(`--- Debug showInlineDendrogram (Start) ---`);
 
-        // --- Get DOM References ---
         const containerDiv = document.getElementById("inline-dendrogram-container");
         const dendrogramCard = document.getElementById('dendrogramCard');
         const treeControls = document.getElementById('treeControls');
-        const reorderCheckbox = document.getElementById('reorderTreeCheckbox'); // Checkbox for reordering tree
-        const svg = d3.select("#inlineDendrogramSvg"); // Main SVG for dendrogram
-        const treeInfoSpan = document.getElementById('treeInfoSpan'); // Span to display cluster count
+        const reorderCheckbox = document.getElementById('reorderTreeCheckbox');
+        const svg = d3.select("#inlineDendrogramSvg");
+        const treeInfoSpan = document.getElementById('treeInfoSpan');
 
-        // --- Early exit if essential elements are missing ---
         if (!containerDiv || !dendrogramCard || !treeControls || !reorderCheckbox || !svg.node()) {
             console.error("One or more required elements (card, container, controls, checkbox, svg) not found!");
-             if(dendrogramCard) dendrogramCard.style.display = 'block'; // Still show card for error message
-             if(containerDiv) containerDiv.style.height = `${svgH}px`; // Set height
-             svg.selectAll("*").remove(); // Clear SVG
-             svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
-                .text("Error: Cannot calculate layout - missing elements."); // Display error in SVG
-             if(treeControls) treeControls.style.display = "none";
-             if (treeInfoSpan) treeInfoSpan.textContent = '';
-             window.lastTreeRoot = null;
+            if(dendrogramCard) dendrogramCard.style.display = 'block';
+            if(containerDiv) containerDiv.style.height = `${svgH}px`;
+            svg.selectAll("*").remove();
+            svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+                .text("Error: Cannot calculate layout - missing elements.");
+            if(treeControls) treeControls.style.display = "none";
+            if (treeInfoSpan) treeInfoSpan.textContent = '';
+            window.lastTreeRoot = null;
+            window.lastTreeData = null;
             return;
         }
 
-        // --- Make the card visible BEFORE measuring ---
         dendrogramCard.style.display = 'block';
         console.log("Set #dendrogramCard display to 'block'");
 
-        // --- Calculate Dynamic Height using Viewport ---
-        let calculatedHeight = svgH; // Start with fallback/passed value
+        let calculatedHeight = svgH;
         try {
             const viewportHeight = window.innerHeight;
             const cardRect = dendrogramCard.getBoundingClientRect();
@@ -2630,656 +2727,1034 @@ visibility: hidden !important;
             const cardPaddingTop = parseFloat(cardStyle.paddingTop);
             const cardPaddingBottom = parseFloat(cardStyle.paddingBottom);
             const controlsHeight = treeControls.offsetHeight;
-            const estimatedTopSectionHeight = 70; // Estimate for title/spacing above container
+            const estimatedTopSectionHeight = 70;
             const containerStyle = window.getComputedStyle(containerDiv);
             const containerMarginBottom = parseFloat(containerStyle.marginBottom) || 10;
-            const safetyMargin = 25; // Extra space at bottom
+            const safetyMargin = 25;
             const spaceBelowCardTop = viewportHeight - cardTopOffset - cardMarginBottom - safetyMargin;
             const availableHeight = spaceBelowCardTop - cardPaddingTop - estimatedTopSectionHeight - containerMarginBottom - controlsHeight - cardPaddingBottom;
-            calculatedHeight = Math.max(200, availableHeight); // Min height 200px
+            calculatedHeight = Math.max(200, availableHeight);
             console.log(`Dynamic Height Calculation: Available=${availableHeight.toFixed(2)}, Applied=${calculatedHeight.toFixed(2)}`);
         } catch (e) {
             console.error("Error during viewport height calculation:", e);
-            calculatedHeight = svgH; // Fallback to passed value or default
+            calculatedHeight = svgH;
         }
-        currentDendrogramHeight = calculatedHeight; // Store globally
+        currentDendrogramHeight = calculatedHeight;
         svgH = calculatedHeight;
         console.log(`Setting containerDiv height to calculated: ${svgH}px`);
         containerDiv.style.height = `${svgH}px`;
 
-        // --- D3 Setup & Constants ---
-        svg.selectAll("*").remove(); // Clear previous drawing
-        svg.append("line").attr("id", "threshold-bar") // Add threshold bar element
+        svg.selectAll("*").remove();
+        svg.append("line").attr("id", "threshold-bar")
            .attr("stroke", "rgba(220, 53, 69, 0.7)")
            .attr("stroke-width", 2)
            .attr("stroke-dasharray", "5 3")
            .style("pointer-events", "none")
-           .style("display", "none"); // Hide initially
-        if (treeInfoSpan) treeInfoSpan.textContent = ''; // Clear old info
+           .style("display", "none");
+        if (treeInfoSpan) treeInfoSpan.textContent = '';
 
-        // Constants for Styling
-        const highlightStrokeWidth = 1.5; // Width for selected outline on heatmap cells
-        const defaultStrokeColor = '#fff'; // Default outline color for heatmap cells
-        const defaultStrokeWidth = 0.2;   // Default outline width for heatmap cells
-        const anomalyOverrideColor = "orange"; // Fill color for anomalous cells
+        const highlightStrokeWidth = 1.5;
+        const defaultStrokeColor = '#fff';
+        const defaultStrokeWidth = 0.2;
+        const anomalyOverrideColor = "orange";
 
-        // --- Data Validation ---
         if (!data || data.id === undefined || data.dist === undefined) {
             console.error("Invalid or empty tree data received:", data);
             svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central").text("No hierarchical data available or error loading.");
-            if (treeControls) treeControls.style.display = "none"; // Hide controls if no data
+            if (treeControls) treeControls.style.display = "none";
             if (treeInfoSpan) treeInfoSpan.textContent = '';
-            window.lastTreeRoot = null; // Clear stored root
+            window.lastTreeRoot = null;
+            window.lastTreeData = null;
             return;
         }
 
-        // --- Basic Setup & Layout Calculations ---
-        const containerWidth = containerDiv.clientWidth || 600; // Get current width or default
-
-        // Define smaller internal margins for D3 layout calculations (space for tree branches)
+        const containerWidth = containerDiv.clientWidth || 600;
         const internalTopMargin = 15;
         const internalBottomMargin = 20;
         const dendrogramHeight = Math.max(150, svgH - internalTopMargin - internalBottomMargin);
-        const height = dendrogramHeight; // Use this for d3.cluster().size() height
-        window.currentD3LayoutHeight = height; // Store for threshold calculation
+        const height = dendrogramHeight;
+        window.currentD3LayoutHeight = height;
         console.log(`D3 Layout Height (tree vertical space): ${height.toFixed(2)}`);
 
-        // Prepare heatmap features and dimensions
         const features = (typeof metrics !== 'undefined' && Array.isArray(metrics)) ? metrics.map(m => m.label) : [];
         const numHeatmapFeatures = features.length;
-        const heatmapRowHeight = 15; // Fixed height for each heatmap row
-        const heatmapSpacing = 5;   // Space between dendrogram leaves and heatmap top
+        const heatmapRowHeight = 15;
+        const heatmapSpacing = 5;
         const heatmapTotalHeight = (heatmapRowHeight * numHeatmapFeatures);
-        const heatmapStartY = dendrogramHeight + heatmapSpacing + margin.top; // Y position where heatmap starts
-        const heatmapEndY = heatmapStartY + heatmapTotalHeight; // Y position where heatmap ends
+        const heatmapStartY = dendrogramHeight + heatmapSpacing + margin.top;
+        const heatmapEndY = heatmapStartY + heatmapTotalHeight;
 
-        // --- Hierarchy and Initial Layout (Structural Y) ---
-        const root = d3.hierarchy(data); // Create D3 hierarchy from input data
-        const leafCount = root.leaves().length;
-        if (treeInfoSpan) { treeInfoSpan.textContent = `${leafCount} Clusters`; } // Display leaf count
+        const root = d3.hierarchy(data);
+        const currentLeaves = root.leaves();
+        const leafCount = currentLeaves.length;
+        if (treeInfoSpan) {
+            if (window.currentGroupingApplied && typeof window.originalLeafCount === 'number' && window.originalLeafCount > 0) {
+                 treeInfoSpan.textContent = `${leafCount} Clusters (Original ${window.originalLeafCount})`;
+            } else {
+                 treeInfoSpan.textContent = `${leafCount} Clusters`;
+            }
+        }
 
-        // D3 cluster layout (determines initial node Y positions based on distance and X based on structure)
-        const treeLayout = d3.cluster().size([1, height]); // Height controls vertical spread (Y)
-        treeLayout(root); // Apply layout to the root node and descendants
+        const treeLayout = d3.cluster().size([1, height]);
+        treeLayout(root);
 
-        // --- Store Structural Y position ---
-        root.each(node => { // Iterate through all nodes (root, internal, leaves)
-            node.structuralY = node.y; // Store initial Y calculated by d3.cluster
-            // Handle potential NaN/undefined Y (fallback to parent or 0)
+        root.each(node => {
+            node.structuralY = node.y;
             if (typeof node.structuralY !== 'number' || !isFinite(node.structuralY)) {
                 node.structuralY = (node.parent && typeof node.parent.structuralY === 'number' && isFinite(node.parent.structuralY)) ? node.parent.structuralY : 0;
             }
-            node.finalY = node.structuralY; // Final Y position used for drawing is always the structural Y
+            node.finalY = node.structuralY;
         });
 
-        // --- Calculate and Store Structural X positions (Based on initial D3 layout order) ---
-        const structuralLeaves = [...root.leaves()].sort((a, b) => a.x - b.x); // Sort leaves by initial layout X (0-1 range)
-        const structuralClusterIds = structuralLeaves
-            .map(leaf => (leaf.data && leaf.data.cluster_id !== undefined && leaf.data.cluster_id !== null) ? String(leaf.data.cluster_id) : null)
-            .filter(id => id !== null); // Get cluster IDs in the initial structural order
+        const structuralLeaves = [...currentLeaves].sort((a, b) => a.x - b.x);
+        const structuralClusterOrGroupIds = structuralLeaves
+            .map(leaf => leaf.data?.cluster_id)
+            .filter(id => id !== undefined && id !== null)
+            .map(String);
 
-        const minLeafSpacingStructural = 20; // Minimum horizontal space per leaf for structural layout
-        const requiredWidthStructural = structuralClusterIds.length * minLeafSpacingStructural;
+        const minLeafSpacingStructural = 20;
+        const requiredWidthStructural = structuralClusterOrGroupIds.length * minLeafSpacingStructural;
         const widthAvailableInContainer = Math.max(300, containerWidth - margin.left - margin.right);
-        // Determine the width needed for the structural layout (at least required or available width)
         const structuralLayoutWidth = Math.max(requiredWidthStructural, widthAvailableInContainer);
 
-        // Create an X scale based on the structural order and calculated width
         const structuralXScale = d3.scaleBand()
-            .domain(structuralClusterIds) // Domain is cluster IDs in structural order
-            .range([margin.left, margin.left + structuralLayoutWidth]) // Range covers the calculated width + left margin
-            .paddingInner(0); // No padding between leaf positions
+            .domain(structuralClusterOrGroupIds)
+            .range([margin.left, margin.left + structuralLayoutWidth])
+            .paddingInner(0);
 
-        // Calculate structuralX for all nodes bottom-up (leaves first, then parents)
         root.eachAfter(node => {
-            if (node.children && node.children.length > 0) { // Internal node
-                // Get structuralX from children (which were calculated in previous steps of eachAfter)
+            if (node.children && node.children.length > 0) {
                 const validChildrenX = node.children
                     .map(c => c.structuralX)
                     .filter(x => typeof x === 'number' && isFinite(x) && x >= 0);
                 if (validChildrenX.length > 0) {
-                    node.structuralX = d3.mean(validChildrenX); // Position is average of children's structuralX
-                } else { // Fallback if children somehow have no valid structuralX
-                    node.structuralX = (node.parent && typeof node.parent.structuralX === 'number' && isFinite(node.parent.structuralX)) ? node.parent.structuralX : (structuralLayoutWidth / 2 + margin.left);
-                }
-            } else { // Leaf node
-                const clusterId = (node.data && node.data.cluster_id !== undefined && node.data.cluster_id !== null) ? String(node.data.cluster_id) : null;
-                if (clusterId && structuralClusterIds.includes(clusterId)) {
-                     const bandStart = structuralXScale(clusterId); // Find position in the structural scale
+                    node.structuralX = d3.mean(validChildrenX);
+                } else { node.structuralX = (structuralLayoutWidth / 2 + margin.left); }
+            } else {
+                const id = node.data?.cluster_id;
+                if (id !== undefined && id !== null) {
+                     const bandStart = structuralXScale(String(id));
                      if (bandStart !== undefined && typeof bandStart === 'number') {
-                        node.structuralX = bandStart + structuralXScale.bandwidth() / 2; // Center in the band
-                     } else { node.structuralX = -1000; } // Should not happen if IDs are consistent
-                } else { node.structuralX = -1000; } // Leaf lacks a valid cluster ID
+                        node.structuralX = bandStart + structuralXScale.bandwidth() / 2;
+                     } else { node.structuralX = -1000; }
+                } else { node.structuralX = -1000; }
             }
-            // Ensure structuralX is a valid number, fallback to center if calculation failed
             if (typeof node.structuralX !== 'number' || !isFinite(node.structuralX)) {
-                 node.structuralX = (structuralLayoutWidth / 2 + margin.left); // Fallback
-                 console.warn("Fell back calculating structuralX for node", node.data?.id || node.data?.cluster_id);
+                 node.structuralX = (structuralLayoutWidth / 2 + margin.left);
             }
         });
         console.log("Calculated and stored structural X positions.");
 
-        // --- Determine Heatmap Order (Always sort leaves by selected metric for heatmap drawing) ---
-        let metricSortedLeaves = [...root.leaves()]; // Start with all leaves for sorting
-        const metricSelect = document.getElementById('dendrogramSortMetricSelect');
-        const selectedMetric = metricSelect ? metricSelect.value : 'Default'; // Get the VALUE (e.g., 'Count')
-        console.log(`Sorting heatmap leaves by metric: ${selectedMetric}`);
+        let metricSortedLeaves = [...currentLeaves];
+        const metricSelectElem = document.getElementById('dendrogramSortMetricSelect');
+        const selectedMetric = metricSelectElem ? metricSelectElem.value : 'Default';
+        console.log(`Sorting heatmap leaves/groups by metric: ${selectedMetric}`);
 
-        // Apply sorting based on the selected metric using global heatmapSortOrders data
-        if (selectedMetric !== 'Default' && window.heatmapSortOrders && window.heatmapSortOrders[selectedMetric]) {
-            const currentSortOrder = window.heatmapSortOrders[selectedMetric]; // Get the ordered array of cluster IDs
-            if (currentSortOrder && Array.isArray(currentSortOrder) && currentSortOrder.length > 0) {
-                const orderMap = new Map(currentSortOrder.map((id, index) => [String(id), index])); // Map clusterID -> sortIndex
-                metricSortedLeaves.sort((a, b) => { // Custom sort function
-                    const aClusterId = a.data && a.data.cluster_id !== undefined ? String(a.data.cluster_id).trim() : null;
-                    const bClusterId = b.data && b.data.cluster_id !== undefined ? String(b.data.cluster_id).trim() : null;
-                    // Consistent handling of nulls/missing IDs (place them last)
-                    if (aClusterId === null && bClusterId === null) return 0; // Keep relative order if both null
-                    if (aClusterId === null) return 1; // Nulls after non-nulls
-                    if (bClusterId === null) return -1; // Non-nulls before nulls
-                    // Lookup sort index from map
-                    const aIndex = orderMap.get(aClusterId);
-                    const bIndex = orderMap.get(bClusterId);
-                    // Handle cases where cluster might not be in the sort order (e.g., filtered out, new cluster)
-                    if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex; // Both found, sort by index
-                    if (aIndex !== undefined) return -1; // Place found cluster before not-found cluster
-                    if (bIndex !== undefined) return 1;  // Place not-found cluster after found cluster
-                    return 0; // Keep relative order if neither cluster is found in sort order
+        const aggregatedLeafData = new Map();
+        currentLeaves.forEach(leaf => {
+            const leafId = leaf.data?.cluster_id;
+            if (!leafId) return;
+
+            aggregatedLeafData.set(String(leafId), {});
+
+            if (leaf.data.isGroup) {
+                const originalLeafIds = Array.from(leaf.data.originalLeaves || []);
+                if (originalLeafIds.length === 0) {
+                     console.warn(`Group node ${leafId} has no original leaves.`);
+                     features.forEach(metricLabel => {
+                          aggregatedLeafData.get(String(leafId))[metricLabel] = null;
+                          aggregatedLeafData.get(String(leafId))[`${metricLabel}_anomaly`] = 'normal';
+                     });
+                     return;
+                }
+
+                const originalDataForGroup = new Map();
+                let totalPacketCountInGroup = 0;
+
+                originalLeafIds.forEach(origId => {
+                     features.forEach(metricLabel => {
+                          const metricStore = window.fullHeatmapData[metricLabel] || [];
+                          const originalEntry = metricStore.find(entry => String(entry.cluster) === origId);
+                          const value = originalEntry?.value !== undefined ? parseFloat(originalEntry.value) : null;
+                          const anomaly = originalEntry?.clusterAnomaly || 'normal';
+                          let packetCount = 1;
+                          if (window.fullHeatmapData['Count']) {
+                               const countEntry = window.fullHeatmapData['Count'].find(entry => String(entry.cluster) === origId);
+                               packetCount = countEntry ? (parseFloat(countEntry.value) || 1) : 1;
+                           }
+                          if (!originalDataForGroup.has(metricLabel)) {
+                              originalDataForGroup.set(metricLabel, []);
+                          }
+                          if (value !== null && !isNaN(value)) {
+                             originalDataForGroup.get(metricLabel).push({ value: value, anomaly: anomaly, count: packetCount });
+                          } else {
+                             originalDataForGroup.get(metricLabel).push({ value: null, anomaly: anomaly, count: packetCount });
+                          }
+                     });
+                      if (window.fullHeatmapData['Count']) {
+                           const countEntry = window.fullHeatmapData['Count'].find(entry => String(entry.cluster) === origId);
+                           totalPacketCountInGroup += countEntry ? (parseFloat(countEntry.value) || 0) : 0;
+                       } else {
+                           totalPacketCountInGroup += 1;
+                       }
                 });
-                 console.log("Applied metric sort order to heatmap leaves.");
-            } else {
-                // Fallback to structural sort if metric data is missing for some reason
-                metricSortedLeaves.sort((a, b) => a.x - b.x);
-                console.log("Metric sort order not found or empty, using structural order for heatmap.");
-            }
-        } else {
-            // Use default structural sort if "Default (Structure)" is selected
-            metricSortedLeaves.sort((a, b) => a.x - b.x);
-            console.log("Using default structural order for heatmap.");
-        }
-        // Get cluster IDs based on the final metric sort order - this defines the heatmap column order
-        const heatmapClusterIds = metricSortedLeaves
-             .map(leaf => (leaf.data && leaf.data.cluster_id !== undefined && leaf.data.cluster_id !== null) ? String(leaf.data.cluster_id) : null)
-             .filter(id => id !== null);
 
-        // --- Checkbox State & Determine Final X Positions for TREE drawing ---
-        const reorderTree = reorderCheckbox.checked; // Check the current state of the checkbox
+                 features.forEach(metricLabel => {
+                    const valuesAndCounts = originalDataForGroup.get(metricLabel)?.filter(d => d.value !== null) || [];
+                    const allEntries = originalDataForGroup.get(metricLabel) || [];
+                    let aggregatedValue = null;
+                    let aggregatedAnomaly = 'normal';
+
+                    if (allEntries.some(d => d.anomaly === 'anomaly')) {
+                         aggregatedAnomaly = 'anomaly';
+                    }
+
+                    if (valuesAndCounts.length > 0) {
+                        switch (metricLabel) {
+                            case 'Count':
+                            case 'Total Data Sent':
+                                if (metricLabel === 'Count') {
+                                     aggregatedValue = totalPacketCountInGroup;
+                                } else {
+                                     aggregatedValue = d3.sum(valuesAndCounts, d => d.value);
+                                }
+                                break;
+                            case '% SYN packets':
+                            case '% RST packets':
+                            case '% ACK packets':
+                            case '% PSH packets':
+                            case 'Average Inter-Arrival Time':
+                                const totalValueSum = d3.sum(valuesAndCounts, d => d.value * d.count);
+                                const totalWeightSum = d3.sum(valuesAndCounts, d => d.count);
+                                aggregatedValue = totalWeightSum > 0 ? totalValueSum / totalWeightSum : d3.mean(valuesAndCounts, d => d.value);
+                                break;
+                            case 'Unique IPs':
+                            case 'Unique Sources':
+                            case 'Unique Destinations':
+                                aggregatedValue = d3.sum(valuesAndCounts, d => d.value);
+                                break;
+                            case 'Payload Size Variance':
+                            case 'Packets per Second':
+                                aggregatedValue = d3.mean(valuesAndCounts, d => d.value);
+                                break;
+                            case 'Start Time':
+                                aggregatedValue = d3.min(valuesAndCounts, d => d.value);
+                                break;
+                            case 'Duration':
+                                aggregatedValue = d3.max(valuesAndCounts, d => d.value);
+                                break;
+                            case 'Length':
+                            case 'Len':
+                                 aggregatedValue = d3.mean(valuesAndCounts, d => d.value);
+                                 break;
+                            default:
+                                aggregatedValue = d3.mean(valuesAndCounts, d => d.value);
+                                break;
+                        }
+                    }
+                    aggregatedLeafData.get(String(leafId))[metricLabel] = aggregatedValue;
+                    aggregatedLeafData.get(String(leafId))[`${metricLabel}_anomaly`] = aggregatedAnomaly;
+                 });
+
+            } else {
+                 const clusterId = String(leafId);
+                 features.forEach(metricLabel => {
+                     const metricStore = window.fullHeatmapData[metricLabel] || [];
+                     const originalEntry = metricStore.find(entry => String(entry.cluster) === clusterId);
+                     const value = originalEntry?.value !== undefined ? parseFloat(originalEntry.value) : null;
+                     const anomaly = originalEntry?.clusterAnomaly || 'normal';
+
+                     aggregatedLeafData.get(clusterId)[metricLabel] = (value !== null && !isNaN(value)) ? value : null;
+                     aggregatedLeafData.get(clusterId)[`${metricLabel}_anomaly`] = anomaly;
+                 });
+            }
+        });
+
+        if (selectedMetric !== 'Default' && window.fullHeatmapData && window.fullHeatmapData[selectedMetric]) {
+            metricSortedLeaves.sort((a, b) => {
+                const aId = String(a.data?.cluster_id);
+                const bId = String(b.data?.cluster_id);
+                const aData = aggregatedLeafData.get(aId);
+                const bData = aggregatedLeafData.get(bId);
+                const aValue = aData ? (aData[selectedMetric] ?? null) : null;
+                const bValue = bData ? (bData[selectedMetric] ?? null) : null;
+                if (aValue === null && bValue === null) return 0;
+                if (aValue === null) return 1;
+                if (bValue === null) return -1;
+                const orderOption = document.getElementById("rowOrderSelect")?.value || "descending";
+                return orderOption === "descending" ? bValue - aValue : aValue - bValue;
+            });
+            console.log(`Applied metric sort order to ${metricSortedLeaves.length} heatmap leaves/groups using aggregated data.`);
+        } else {
+            metricSortedLeaves.sort((a, b) => a.x - b.x);
+            if (selectedMetric !== 'Default') {
+                 console.log("Metric data not found in fullHeatmapData, using structural order for heatmap.");
+            } else {
+                 console.log("Using default structural order for heatmap.");
+            }
+        }
+
+        const heatmapClusterOrGroupIds = metricSortedLeaves
+             .map(leaf => leaf.data?.cluster_id)
+             .filter(id => id !== undefined && id !== null)
+             .map(String);
+
+        const reorderTree = reorderCheckbox.checked;
         console.log(`Reorder Tree Structure checkbox checked: ${reorderTree}`);
 
-        let finalLayoutWidth; // This will be the width used for the final tree drawing and the heatmap
+        let finalLayoutWidth;
 
         if (reorderTree) {
-            // --- Mode 1: Reorder Tree based on Metric ---
             console.log("Reordering tree structure based on metric.");
-            const minLeafSpacingMetric = 20; // Minimum horizontal space per leaf when reordering
-            const requiredWidthMetric = heatmapClusterIds.length * minLeafSpacingMetric;
-            finalLayoutWidth = Math.max(requiredWidthMetric, widthAvailableInContainer); // Use metric-based width
+            const minLeafSpacingMetric = 20;
+            const requiredWidthMetric = heatmapClusterOrGroupIds.length * minLeafSpacingMetric;
+            finalLayoutWidth = Math.max(requiredWidthMetric, widthAvailableInContainer);
 
-            // Create an X scale based on the metric-sorted leaves for positioning the *tree nodes*
             const metricXScale = d3.scaleBand()
-                .domain(heatmapClusterIds) // Domain uses metric-sorted IDs
+                .domain(heatmapClusterOrGroupIds)
                 .range([margin.left, margin.left + finalLayoutWidth])
                 .paddingInner(0);
 
-            // Calculate finalX for all tree nodes bottom-up based on metric sort order
             root.eachAfter(node => {
-                 if (node.children && node.children.length > 0) { // Internal node
+                 if (node.children && node.children.length > 0) {
                      const validChildrenX = node.children
-                         .map(c => c.finalX) // Use finalX of children (already calculated in this eachAfter loop)
+                         .map(c => c.finalX)
                          .filter(x => typeof x === 'number' && isFinite(x) && x >= 0);
                      if (validChildrenX.length > 0) {
-                         node.finalX = d3.mean(validChildrenX); // Position is average of children's finalX
-                     } else { node.finalX = (finalLayoutWidth / 2 + margin.left); } // Fallback to center
-                 } else { // Leaf node
-                     const clusterId = (node.data && node.data.cluster_id !== undefined && node.data.cluster_id !== null) ? String(node.data.cluster_id) : null;
-                     if (clusterId && heatmapClusterIds.includes(clusterId)) {
-                         const bandStart = metricXScale(clusterId); // Use metric scale
+                         node.finalX = d3.mean(validChildrenX);
+                     } else { node.finalX = (finalLayoutWidth / 2 + margin.left); }
+                 } else {
+                      const id = node.data?.cluster_id;
+                      if (id !== undefined && id !== null) {
+                         const bandStart = metricXScale(String(id));
                          if (bandStart !== undefined && typeof bandStart === 'number') {
-                            node.finalX = bandStart + metricXScale.bandwidth() / 2; // Center in band
-                         } else { node.finalX = -1000; } // Error: ID not found in scale
-                     } else { node.finalX = -1000; } // No valid ID
+                            node.finalX = bandStart + metricXScale.bandwidth() / 2;
+                         } else { node.finalX = -1000; }
+                     } else { node.finalX = -1000; }
                  }
-                 // Ensure finalX is a valid number after calculation
                  if (typeof node.finalX !== 'number' || !isFinite(node.finalX)) {
-                      node.finalX = (finalLayoutWidth / 2 + margin.left); // Fallback to center
+                      node.finalX = (finalLayoutWidth / 2 + margin.left);
                  }
             });
         } else {
-            // --- Mode 2: Keep Original Tree Structure ---
             console.log("Keeping original tree structure, using structural X positions.");
-            finalLayoutWidth = structuralLayoutWidth; // Use the width calculated earlier based on structure
-            // Assign the pre-calculated structuralX to finalX for drawing
+            finalLayoutWidth = structuralLayoutWidth;
             root.each(node => {
                 node.finalX = node.structuralX;
-                 // Ensure finalX is valid after assignment (in case structuralX was invalid)
                  if (typeof node.finalX !== 'number' || !isFinite(node.finalX)) {
-                     node.finalX = (finalLayoutWidth / 2 + margin.left); // Fallback
+                     node.finalX = (finalLayoutWidth / 2 + margin.left);
                  }
             });
         }
-        // Store the width actually used for drawing (either structural or metric-based)
         window.currentLayoutWidth = finalLayoutWidth;
-
-        // --- Define Scales for Drawing ---
-        const heatmapContentWidth = finalLayoutWidth; // Heatmap uses the same width as the final tree layout
-
-        // Scale specifically for positioning HEATMAP CELLS horizontally based on the METRIC order
-        // This scale is independent of whether the tree itself was reordered
-        const heatmapXScale = d3.scaleBand()
-            .domain(heatmapClusterIds) // Domain based on metric-sorted leaves
-            .range([margin.left, margin.left + heatmapContentWidth]) // Range based on the final layout width
-            .paddingInner(0); // No padding between heatmap cells
-
-        // Store the processed root node globally for threshold calculations etc.
         window.lastTreeRoot = root;
+        window.lastTreeData = data;
+        console.log("Updated window.lastTreeData with currently rendered tree data.");
 
-        // --- Define SVG ViewBox ---
-        // Calculate the total height needed for the SVG content (tree + heatmap + margins)
-        const actualHeatmapHeight = (numHeatmapFeatures > 0 && heatmapClusterIds.length > 0 && features.length > 0) ? heatmapTotalHeight + heatmapSpacing : 0;
-        const totalNeededHeight = height + actualHeatmapHeight + margin.top + margin.bottom; // height is dendrogramHeight
+        const heatmapContentWidth = finalLayoutWidth;
+        const heatmapXScale = d3.scaleBand()
+            .domain(heatmapClusterOrGroupIds)
+            .range([margin.left, margin.left + heatmapContentWidth])
+            .paddingInner(0);
+
+        const actualHeatmapHeight = (numHeatmapFeatures > 0 && heatmapClusterOrGroupIds.length > 0 && features.length > 0) ? heatmapTotalHeight + heatmapSpacing : 0;
+        const totalNeededHeight = height + actualHeatmapHeight + margin.top + margin.bottom;
         const viewBoxHeight = totalNeededHeight;
-        // Calculate the total width needed for the SVG content (layout width + margins)
         const viewBoxWidth = finalLayoutWidth + margin.left + margin.right;
-        // Set the viewBox attribute to make the SVG scale responsively
         svg.attr("viewBox", `0 0 ${viewBoxWidth} ${viewBoxHeight}`)
-           .attr("preserveAspectRatio", "xMidYMid meet"); // Scale content to fit, center, preserving aspect ratio
+           .attr("preserveAspectRatio", "xMidYMid meet");
 
-        // --- Define Main Content Group ---
-        const svgContent = svg.append("g"); // Group for all visual elements (links, nodes, heatmap)
+        const svgContent = svg.append("g");
 
-        // --- Draw Links (Using finalX, finalY) ---
         svgContent.selectAll(".link")
-            .data(root.links()) // Get link data (source -> target pairs)
-            .join("path") // Create/update paths for links
+            .data(root.links())
+            .join("path")
             .attr("class", "link")
-            .attr("d", d => { // Calculate path data (d attribute) for elbow connectors
+            .attr("d", d => {
                 const sourceX = d.source.finalX;
-                const sourceY = d.source.finalY + margin.top; // Apply global top margin offset for absolute Y
+                const sourceY = d.source.finalY + margin.top;
                 const targetX = d.target.finalX;
-                const targetY = d.target.finalY + margin.top; // Apply global top margin offset
-                // Ensure coordinates are valid before drawing
+                const targetY = d.target.finalY + margin.top;
                 if ([sourceX, sourceY, targetX, targetY].every(coord => typeof coord === 'number' && isFinite(coord))) {
-                    const midY = sourceY + (targetY - sourceY) / 2; // Vertical midpoint
-                    // Path: Move to Source -> Vertical line to Midpoint -> Horizontal line to Target X -> Vertical line to Target Y
+                    const midY = sourceY + (targetY - sourceY) / 2;
                     return `M${sourceX},${sourceY} L${sourceX},${midY} L${targetX},${midY} L${targetX},${targetY}`;
-                } return ""; // Return empty path if coordinates invalid
+                } return "";
             })
-            .attr("fill", "none") // Links are not filled
-            .attr("stroke", "#ccc") // Light grey color
+            .attr("fill", "none")
+            .attr("stroke", "#ccc")
             .attr("stroke-width", 1.5);
 
-        // --- Draw Nodes (Using finalX, finalY) ---
         const node = svgContent.selectAll(".node")
-            // Bind data to descendants, filtering out any with invalid calculated positions
             .data(root.descendants().filter(d => typeof d.finalX === 'number' && isFinite(d.finalX) && typeof d.finalY === 'number' && isFinite(d.finalY)))
-            .join("g") // Create/update groups for nodes
-            .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf")) // Add classes for styling
-            .attr("transform", d => `translate(${d.finalX},${d.finalY + margin.top})`); // Position node group
+            .join("g")
+            .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf") + (d.data.isGroup ? " node--group" : ""))
+            .attr("transform", d => `translate(${d.finalX},${d.finalY + margin.top})`);
 
-        // Append circles to each node group
         node.append("circle")
-            .attr("r", 4) // Circle radius
-            .attr("fill", d => d.children ? "#555" : "#999"); // Darker for internal, lighter for leaves
+            .attr("r", 4)
+            .style("fill", d => d.data.isGroup ? "#a0a0a0" : (d.children ? "#555" : "#999"))
+            .style("stroke", d => d.data.isGroup ? "#555" : "none")
+            .style("stroke-width", d => d.data.isGroup ? 1 : 0);
 
-        // --- Tree-Attached Heatmap Drawing ---
-        if (features.length > 0 && heatmapClusterIds.length > 0 && window.fullHeatmapData && Object.keys(window.fullHeatmapData).length > 0) {
-            // --- Prepare data lookup map (clusterId -> {metric: value, metric_anomaly: 'normal'/'anomaly'}) ---
-            const clusterDataLookup = new Map();
-            features.forEach(metricLabel => {
-                 const metricData = window.fullHeatmapData[metricLabel] || [];
-                 const currentMetricData = Array.isArray(metricData) ? metricData : [];
-                 currentMetricData.forEach(item => {
-                     if (item && item.cluster !== undefined && item.value !== undefined) {
-                         const clusterId = String(item.cluster);
-                         if (!clusterDataLookup.has(clusterId)) { clusterDataLookup.set(clusterId, {}); }
-                         const numericValue = parseFloat(item.value);
-                         clusterDataLookup.get(clusterId)[metricLabel] = !isNaN(numericValue) ? numericValue : null;
-                         clusterDataLookup.get(clusterId)[`${metricLabel}_anomaly`] = item.clusterAnomaly || 'normal';
-                     }
-                 });
-             });
-             // Create a flat array of objects for D3 data binding (one object per cell)
-             const heatmapFeatureData = [];
-             heatmapClusterIds.forEach(clusterId => { // Iterate through clusters in the METRIC order
-                 const clusterMetrics = clusterDataLookup.get(clusterId) || {};
-                 features.forEach(metricLabel => { // For each feature (row)
-                     heatmapFeatureData.push({
-                         cluster_id: clusterId,
-                         feature: metricLabel,
-                         value: clusterMetrics[metricLabel] ?? null,
-                         anomaly: clusterMetrics[`${metricLabel}_anomaly`] || 'normal'
+        if (features.length > 0 && heatmapClusterOrGroupIds.length > 0 && aggregatedLeafData.size > 0) {
+            const heatmapFeatureData = [];
+            heatmapClusterOrGroupIds.forEach(leafId => {
+                 const leafAggData = aggregatedLeafData.get(String(leafId));
+                 if (leafAggData) {
+                      const leafNode = currentLeaves.find(l => String(l.data?.cluster_id) === String(leafId));
+                      const isGroup = leafNode?.data?.isGroup || false;
+                      const originalLeavesCount = isGroup ? (leafNode.data.originalLeaves?.size || 0) : 1;
+                     features.forEach(metricLabel => {
+                         heatmapFeatureData.push({
+                             cluster_id: leafId,
+                             feature: metricLabel,
+                             value: leafAggData[metricLabel] ?? null,
+                             anomaly: leafAggData[`${metricLabel}_anomaly`] || 'normal',
+                             isGroup: isGroup,
+                             originalLeavesCount: originalLeavesCount
+                         });
                      });
-                 });
+                 } else {
+                     console.warn(`Missing aggregated data for leaf/group ID: ${leafId}`);
+                 }
              });
 
-            // --- Color scales for heatmap cells ---
             const colorScales = {};
-            const minIntensity = 0.05; // Minimum color intensity
+            const minIntensity = 0.05;
             const customBluesInterpolator = t => d3.interpolateBlues(minIntensity + Math.max(0, Math.min(1, t)) * (1 - minIntensity));
-             features.forEach(metricLabel => { // Create a scale for each metric (row)
-                 const metricData = window.fullHeatmapData[metricLabel] || [];
-                 const currentMetricData = Array.isArray(metricData) ? metricData : [];
-                 const numericValues = currentMetricData.map(d => parseFloat(d.value)).filter(v => !isNaN(v) && v !== null);
+             features.forEach(metricLabel => {
+                 const numericValues = heatmapFeatureData
+                     .filter(d => d.feature === metricLabel && d.value !== null && typeof d.value === 'number' && isFinite(d.value))
+                     .map(d => d.value);
                  let scale;
                  if (numericValues.length > 0) {
                      const rowMin = d3.min(numericValues);
                      const rowMax = d3.max(numericValues);
-                     const domain = [Math.min(0, rowMin), Math.max(1e-9, rowMax)];
+                     const domain = [Math.min(0, rowMin), Math.max(rowMax, rowMin + 1e-9)];
                      scale = d3.scaleSequential(customBluesInterpolator).domain(domain).clamp(true);
                  } else {
-                     scale = d3.scaleSequential(d3.interpolateGreys).domain([0, 1]); // Fallback grey
+                     scale = d3.scaleSequential(d3.interpolateGreys).domain([0, 1]);
                  }
-                 colorScales[metricLabel] = scale; // Store the scale
+                 colorScales[metricLabel] = scale;
              });
 
-            // --- Feature (Y) scale for heatmap rows ---
             const featureScale = d3.scaleBand()
-                .domain(features) // Order of features array determines Y order
-                .range([heatmapStartY, heatmapEndY]) // Use calculated start/end Y
-                .paddingInner(0.1); // Small padding between rows
+                .domain(features)
+                .range([heatmapStartY, heatmapEndY])
+                .paddingInner(0.1);
 
-            // --- Draw Heatmap Cells ---
-            if (heatmapXScale.bandwidth() > 0 && featureScale.bandwidth() > 0) { // Check for valid scales
+            if (heatmapXScale.bandwidth() > 0 && featureScale.bandwidth() > 0) {
                 const cellSelection = svgContent.selectAll(".heatmap-cell")
-                    .data(heatmapFeatureData, d => `${d.cluster_id}-${d.feature}`) // Key function
-                    .join("rect") // Create/update rectangles
+                    .data(heatmapFeatureData, d => `${d.cluster_id}-${d.feature}`)
+                    .join("rect")
                     .attr("class", "heatmap-cell")
-                    .attr("x", d => { // X position based on METRIC scale
+                    .attr("x", d => {
                         const xVal = heatmapXScale(d.cluster_id);
                         return (typeof xVal === 'number' && isFinite(xVal)) ? xVal : -1000;
                     })
-                    .attr("width", heatmapXScale.bandwidth()) // Width based on METRIC scale
-                    .attr("y", d => { // Y position based on feature scale
+                    .attr("width", heatmapXScale.bandwidth())
+                    .attr("y", d => {
                         const yVal = featureScale(d.feature);
                         return (typeof yVal === 'number' && isFinite(yVal)) ? yVal : -1000;
                     })
-                    .attr("height", featureScale.bandwidth()); // Height based on feature scale
+                    .attr("height", featureScale.bandwidth());
 
-                 // --- Set original fill data AND initial visual state (fill/stroke) ---
-                 cellSelection.filter(function() { // Filter out cells with invalid positions
+                 cellSelection.filter(function() {
                         const x = +d3.select(this).attr("x");
                         const y = +d3.select(this).attr("y");
                         return x >= 0 && y >= 0;
                     })
-                    .each(function(d) { // Use .each to set attributes based on data and highlight state
+                    .each(function(d) {
                         const cell = d3.select(this);
                         const scale = colorScales[d.feature];
                         let originalFill;
-
-                        // 1. Determine and store the original fill color based on value/anomaly
                         if (d.anomaly === 'anomaly') {
                             originalFill = anomalyOverrideColor;
                         } else if (scale && d.value !== null && typeof d.value === 'number' && isFinite(d.value)) {
-                            originalFill = scale(d.value); // Use color scale
+                            originalFill = scale(d.value);
                         } else {
-                            originalFill = "#eee"; // Default grey for null/invalid
+                            originalFill = "#eee";
                         }
-                        cell.attr("data-original-fill", originalFill); // Store it on the element
-
-                        // 2. Set initial visual attributes based on current highlight status
+                        cell.attr("data-original-fill", originalFill);
                         const clusterIdStr = String(d.cluster_id);
-                        const highlightColor = clusterHighlightColors.get(clusterIdStr); // Is this cluster selected?
-
-                        // Apply styles: Fill is always original, Stroke depends on highlight
+                        const highlightColor = clusterHighlightColors.get(clusterIdStr);
                         cell.attr("fill", originalFill)
-                            .style("stroke", highlightColor ? highlightColor : defaultStrokeColor) // Use highlight color or default
-                            .style("stroke-width", highlightColor ? highlightStrokeWidth : defaultStrokeWidth); // Use highlight width or default
+                            .style("stroke", highlightColor ? highlightColor : defaultStrokeColor)
+                            .style("stroke-width", highlightColor ? highlightStrokeWidth : defaultStrokeWidth);
                     })
-                    .style("cursor", "pointer") // Indicate cells are clickable
-                    // --- Event Handlers for Heatmap Cells ---
-                    .on("click", function(event, d) {
-                        event.stopPropagation(); // Prevent triggering underlying SVG events
-                        const clickedClusterID = String(d.cluster_id);
+                    .style("cursor", "pointer")
+                    .on("click", async function(event, d) {
+                        event.stopPropagation();
+                        const clickedClusterOrGroupID = String(d.cluster_id);
+                        const isGroupClick = d.isGroup;
 
-                        // Select all cells belonging to this cluster
-                        const cellsForCluster = svgContent.selectAll('.heatmap-cell')
-                            .filter(cell_d => String(cell_d.cluster_id) === clickedClusterID);
+                        const cellsForClusterOrGroup = svgContent.selectAll('.heatmap-cell')
+                            .filter(cell_d => String(cell_d.cluster_id) === clickedClusterOrGroupID);
 
-                        // --- Bring selected/deselected cells to front ---
-                        if (!cellsForCluster.empty()) {
-                            cellsForCluster.raise();
-                        }
-                        // --- End Bring to front ---
+                        if (!cellsForClusterOrGroup.empty()) { cellsForClusterOrGroup.raise(); }
 
-                        // Toggle highlight state
-                        if (clusterHighlightColors.has(clickedClusterID)) {
-                            // === DESELECT LOGIC ===
-                            console.log(`Deselecting Cluster ${clickedClusterID} from heatmap.`);
-                            clusterHighlightColors.delete(clickedClusterID); // Remove from map
+                        if (clusterHighlightColors.has(clickedClusterOrGroupID)) {
+                            console.log(`Deselecting Cluster/Group ${clickedClusterOrGroupID} from heatmap.`);
+                            clusterHighlightColors.delete(clickedClusterOrGroupID);
+                            addedSidebarClusters.delete(clickedClusterOrGroupID); // Ensure it's removed from here too
 
-                            // Animate stroke back to default
-                            cellsForCluster.transition().duration(100)
+                            cellsForClusterOrGroup.transition().duration(100)
                                 .style('stroke', defaultStrokeColor)
                                 .style('stroke-width', defaultStrokeWidth);
-                            console.log(`Removed highlight outline for Cluster ${clickedClusterID}`);
 
-                            // --- NEW: Remove elements from sidebar graph ---
                             if (sidebarCy) {
-                                const selector = `[clusterID = "${clickedClusterID}"]`; // Selector for nodes and edges
-                                const elesToRemove = sidebarCy.elements(selector);
-                                if (elesToRemove.length > 0) {
-                                    sidebarCy.remove(elesToRemove);
-                                    console.log(`Removed ${elesToRemove.length} elements for cluster ${clickedClusterID} from sidebar.`);
+                                let selectorsToRemove = [];
+                                if (isGroupClick) {
+                                     const groupNode = currentLeaves.find(l => String(l.data?.cluster_id) === clickedClusterOrGroupID);
+                                     const originalLeaves = Array.from(groupNode?.data?.originalLeaves || []);
+                                     selectorsToRemove = originalLeaves.map(leafId => `[clusterID = "${leafId}"]`);
+                                     console.log(`Removed Group ${clickedClusterOrGroupID} elements from sidebar.`);
+                                } else {
+                                     selectorsToRemove.push(`[clusterID = "${clickedClusterOrGroupID}"]`);
+                                     console.log(`Removed Cluster ${clickedClusterOrGroupID} elements from sidebar.`);
+                                }
+                                if (selectorsToRemove.length > 0) {
+                                     const combinedSelector = selectorsToRemove.join(', ');
+                                     const elesToRemove = sidebarCy.elements(combinedSelector);
+                                     if (elesToRemove.length > 0) {
+                                         sidebarCy.remove(elesToRemove);
+                                     }
                                 }
                             }
-                            addedSidebarClusters.delete(clickedClusterID); // Remove from tracking set
-                            console.log(`Removed Cluster ${clickedClusterID} from addedSidebarClusters.`);
 
-                            // --- NEW: Update sidebar state after removal ---
                             if (sidebarCy && sidebarCy.elements().length > 0) {
-                                // If elements remain, update sizes, legend, and table
-                                console.log("Updating sidebar controls, legend, and table after removal.");
-                                applySidebarSizeControls(); // Recalculate sizes based on remaining
-                                updateLegend(sidebarCy.edges()); // Update legend based on remaining
-                                updateSidebarTableForSelectedEdges(); // Update table based on remaining selections/clusters
+                                applySidebarSizeControls();
+                                updateLegend(sidebarCy.edges());
+                                updateSidebarTableForSelectedEdges();
                             } else {
-                                // If no elements remain, clear everything (including table/info)
-                                console.log("Sidebar is now empty, clearing visualization.");
-                                clearSidebarVisualization(); // Use full clear if graph is empty
-                                updateLegend(); // Show global legend
-                                // Sidebar might still be open, let user close it or add new clusters
+                                clearSidebarVisualization();
+                                updateLegend();
                             }
-                             // If the currently selected node/edge was part of the removed cluster, deselect it
-                            if (selectedNodeId && !sidebarCy.getElementById(selectedNodeId)?.length) { // Safer check for node existence
-                                console.log(`Selected node ${selectedNodeId} was removed, resetting selection.`);
-                                deselectCurrentNode(); // deselectCurrentNode sets selectedNodeId to null
-                                updateSidebarTableForSelectedEdges(); // Refresh table again after node deselect
+                            if (selectedNodeId && (!sidebarCy || !sidebarCy.getElementById(selectedNodeId)?.length)) {
+                                deselectCurrentNode();
+                                updateSidebarTableForSelectedEdges();
                             }
-                            // --- End NEW sidebar updates ---
-
                         } else {
-                            // === SELECT LOGIC ===
-                            console.log(`Selecting Cluster ${clickedClusterID} from heatmap.`);
+                            console.log(`Selecting Cluster/Group ${clickedClusterOrGroupID} from heatmap.`);
                             const targetHighlightColor = generateUniqueHighlightColor();
-                            clusterHighlightColors.set(clickedClusterID, targetHighlightColor); // Add to map
-                            visualizeClusterInSidebar(clickedClusterID, targetHighlightColor); // Trigger sidebar add/update
+                            clusterHighlightColors.set(clickedClusterOrGroupID, targetHighlightColor);
+                            // Note: addedSidebarClusters.add() is now primarily handled within visualizeClusterInSidebar
 
-                            // Animate stroke to highlight state
-                            cellsForCluster.transition().duration(100)
+                            if (isGroupClick) {
+                                 console.log(`Visualizing group ${clickedClusterOrGroupID} in sidebar.`);
+                                 toggleSidebar(true);
+                                 const groupNode = currentLeaves.find(l => String(l.data?.cluster_id) === clickedClusterOrGroupID);
+                                 const originalLeaves = Array.from(groupNode?.data?.originalLeaves || []);
+
+                                 if (originalLeaves.length > 0) {
+                                     showSidebarLoading(true, false);
+                                     sidebarInfoDiv.innerHTML = `Loading network for Group ${clickedClusterOrGroupID} (${originalLeaves.length} clusters)...`;
+                                     sidebarInfoDiv.style.display = 'block';
+                                     let allNodesAdded = [];
+                                     let allEdgesAdded = [];
+                                     let errorOccurred = false;
+
+                                     for (const originalLeafId of originalLeaves) {
+                                        try {
+                                             const response = await fetch(`${API_BASE_URL}/cluster_network?cluster_id=${originalLeafId}`);
+                                             if (!response.ok) throw new Error(`Network error (${response.status}) for cluster ${originalLeafId}`);
+                                             const clusterData = await response.json();
+
+                                             if (clusterData && clusterData.nodes && clusterData.nodes.length > 0) {
+                                                  const nodesToAdd = clusterData.nodes.map(node => ({
+                                                      group: 'nodes',
+                                                      data: { ...node.data, clusterID: originalLeafId, Classification: node.data.Classification || 'Unknown' },
+                                                      style: { 'background-color': targetHighlightColor }, // Group's color
+                                                      scratch: { _originalColor: targetHighlightColor }
+                                                  }));
+                                                 allNodesAdded.push(...nodesToAdd);
+                                                  const edgesToAdd = clusterData.edges.map(edge => {
+                                                      const protocol = edge.data.Protocol || 'Unknown';
+                                                      if (!protocolColorMap[protocol]) {
+                                                          let randomColor;
+                                                          do { randomColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0'); }
+                                                          while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase());
+                                                          protocolColorMap[protocol] = randomColor;
+                                                      }
+                                                      const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                                                      return {
+                                                          group: 'edges',
+                                                          data: { ...edge.data, clusterID: originalLeafId },
+                                                          style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor },
+                                                          scratch: { _protocolColor: edgeColor }
+                                                      };
+                                                  });
+                                                 allEdgesAdded.push(...edgesToAdd);
+                                             }
+                                         } catch (fetchError) {
+                                             console.error(`Error fetching/processing cluster ${originalLeafId} for group ${clickedClusterOrGroupID}:`, fetchError);
+                                             errorOccurred = true;
+                                         }
+                                     }
+
+                                     showSidebarLoading(false, false);
+                                     if (!sidebarCy) {
+                                         sidebarCy = cytoscape({ container: document.getElementById('sidebar-cy'), style: CYTOSCAPE_STYLE });
+                                         bindSidebarGraphEvents();
+                                     }
+                                     if (allNodesAdded.length > 0 || allEdgesAdded.length > 0) {
+                                          sidebarCy.add(allNodesAdded.concat(allEdgesAdded));
+                                          addedSidebarClusters.add(clickedClusterOrGroupID); // Add the GROUP ID
+                                          applySidebarSizeControls();
+                                          applySidebarLayout();
+                                          sidebarCy.fit(null, 30);
+                                          sidebarInfoDiv.style.display = 'none';
+                                          updateLegend(sidebarCy.edges());
+                                          loadSidebarClusterTable(originalLeaves[0], 1); // Table for first leaf in group
+                                     } else if (!errorOccurred) {
+                                          sidebarInfoDiv.innerHTML = `Group ${clickedClusterOrGroupID}: No network data found.`;
+                                          addedSidebarClusters.add(clickedClusterOrGroupID); // Still mark as added for consistency
+                                          loadSidebarClusterTable(originalLeaves[0], 1);
+                                     } else {
+                                          sidebarInfoDiv.innerHTML = `Group ${clickedClusterOrGroupID}: Error loading some data.`;
+                                          addedSidebarClusters.add(clickedClusterOrGroupID);
+                                          loadSidebarClusterTable(originalLeaves[0], 1);
+                                     }
+                                     deselectCurrentNode();
+                                 } else {
+                                      console.warn(`Group ${clickedClusterOrGroupID} has no original leaves.`);
+                                      sidebarInfoDiv.innerHTML = `Group ${clickedClusterOrGroupID}: No clusters inside.`;
+                                      showSidebarLoading(false, false);
+                                 }
+                            } else {
+                                 visualizeClusterInSidebar(clickedClusterOrGroupID, targetHighlightColor);
+                            }
+                            cellsForClusterOrGroup.transition().duration(100)
                                 .style('stroke', targetHighlightColor)
                                 .style('stroke-width', highlightStrokeWidth);
-                            console.log(`Applied highlight outline ${targetHighlightColor} to Cluster ${clickedClusterID}`);
+                            console.log(`Applied highlight outline ${targetHighlightColor} to Cluster/Group ${clickedClusterOrGroupID}`);
                         }
-                        // Update the highlights on the tree leaf circles (fill color change)
                         highlightTreeClusters(new Set(clusterHighlightColors.keys()));
                     })
-                    .on("mouseover", function(event, d) { // Tooltip & temporary border highlight on hover
-                        // Store current stroke state before applying hover style
-                        const currentStroke = d3.select(this).style('stroke');
-                        const currentStrokeWidth = d3.select(this).style('stroke-width');
-                        d3.select(this).attr('data-hover-temp-stroke', currentStroke);
-                        d3.select(this).attr('data-hover-temp-stroke-width', currentStrokeWidth);
-
-                        // Apply hover style (thicker black border)
-                        d3.select(this).style("stroke", "black").style("stroke-width", 1.5);
-
-                        // Show tooltip
+                    .on("mouseover", function(event, d) {
+                        const cell = d3.select(this);
+                        cell.attr('data-hover-temp-stroke', cell.style('stroke'));
+                        cell.attr('data-hover-temp-stroke-width', cell.style('stroke-width'));
+                        cell.style("stroke", "black").style("stroke-width", 1.5);
                         const tooltip = d3.select("#tooltip");
                         const metricLabel = d.feature;
-                        const clusterId = d.cluster_id;
+                        const clusterOrGroupId = d.cluster_id;
                         const value = d.value;
                         const anomalyStatus = d.anomaly === 'anomaly' ? 'Anomaly Detected' : 'Normal';
-                        let displayValue = 'N/A'; // Format value for display
+                        const isGroup = d.isGroup;
+                        const originalCount = d.originalLeavesCount;
+                        let displayValue = 'N/A';
                         if (value !== null && typeof value === 'number' && isFinite(value)) {
                             if (metricLabel.includes('%')) { displayValue = `${value.toFixed(2)}%`; }
                             else if (Number.isInteger(value)) { displayValue = value.toLocaleString(); }
                             else { const valueStr = String(value); displayValue = (valueStr.includes('e') || valueStr.includes('E')) ? value.toExponential(2) : value.toFixed(3); }
                         }
+                        let title = isGroup ? `Group: ${clusterOrGroupId} (${originalCount} clusters)` : `Cluster: ${clusterOrGroupId}`;
                         tooltip.style("display", "block")
-                            .html(`Cluster: ${clusterId}<br>Metric: ${metricLabel}<br>Value: ${displayValue}<br>Status: ${anomalyStatus}`)
+                            .html(`${title}<br>Metric: ${metricLabel}<br>Value: ${displayValue}<br>Status: ${anomalyStatus}`)
                             .style("left", (event.pageX + 10) + "px")
                             .style("top", (event.pageY - 15) + "px");
                     })
-                    .on("mouseout", function(event, d) { // Hide tooltip and restore border intelligently
+                    .on("mouseout", function(event, d) {
                         d3.select("#tooltip").style("display", "none");
-
                         const cell = d3.select(this);
-                        const clusterIdStr = String(d.cluster_id); // Get cluster ID of the cell being moused out
-                        const defaultStrokeColor = '#fff'; // Make sure this matches your definition
-                        const defaultStrokeWidth = 0.2;   // Make sure this matches your definition
-                        const highlightStrokeWidth = 1.5; // Make sure this matches your definition
-
-                        // Determine the correct stroke width and color to restore to:
-                        let targetStrokeWidth;
-                        let targetStrokeColor;
-
-                        if (clusterHighlightColors.has(clusterIdStr)) {
-                            // If this cluster IS currently selected, restore/keep the highlight state
-                            targetStrokeWidth = highlightStrokeWidth;
-                            targetStrokeColor = clusterHighlightColors.get(clusterIdStr); // Use the specific highlight color
+                        const clusterIdStr = String(d.cluster_id);
+                        const highlightColor = clusterHighlightColors.get(clusterIdStr);
+                        if (highlightColor) {
+                            cell.style("stroke", highlightColor).style("stroke-width", highlightStrokeWidth);
                         } else {
-                            // If this cluster is NOT selected, restore to default state
-                            targetStrokeWidth = defaultStrokeWidth;
-                            targetStrokeColor = defaultStrokeColor;
+                            cell.style("stroke", defaultStrokeColor).style("stroke-width", defaultStrokeWidth);
                         }
-
-                        // Restore the determined stroke width and color
-                        cell.style("stroke", targetStrokeColor)
-                            .style("stroke-width", targetStrokeWidth);
                     });
 
-                // --- Draw Heatmap Feature Labels (Y-axis) & Highlight Selected Metric ---
                 svgContent.selectAll(".heatmap-feature-label")
-                   .data(features) // Bind feature names
-                   .join("text") // Create/update text elements
+                   .data(features)
+                   .join("text")
                    .attr("class", "heatmap-feature-label")
-                   .attr("x", margin.left - 5) // Position left of heatmap
-                   .attr("y", d => { // Y position from feature scale
+                   .attr("x", margin.left - 5)
+                   .attr("y", d => {
                        const yVal = featureScale(d);
-                       return (typeof yVal === 'number' && isFinite(yVal)) ? yVal + featureScale.bandwidth() / 2 : -1000; // Center in band
+                       return (typeof yVal === 'number' && isFinite(yVal)) ? yVal + featureScale.bandwidth() / 2 : -1000;
                    })
-                   .attr("text-anchor", "end") // Right-align text
-                   .attr("dominant-baseline", "middle") // Vertically center
+                   .attr("text-anchor", "end")
+                   .attr("dominant-baseline", "middle")
                    .attr("font-size", "9px")
-                   .text(d => d); // Set text content
+                   .text(d => d);
 
-                // Highlight the label matching the selected sort metric
                 const metricSelectElement = document.getElementById('dendrogramSortMetricSelect');
-                const selectedMetricValue = metricSelectElement ? metricSelectElement.value : 'Default'; // Get selected VALUE
-                const selectedMetricLabel = metricSelectElement ? metricSelectElement.options[metricSelectElement.selectedIndex].text : null; // Get selected TEXT
-
-                const featureLabels = svgContent.selectAll(".heatmap-feature-label"); // Select all labels
-
-                // Reset all labels to default style first
+                const selectedMetricValue = metricSelectElement ? metricSelectElement.value : 'Default';
+                const selectedMetricLabel = metricSelectElement ? metricSelectElement.options[metricSelectElement.selectedIndex].text : null;
+                const featureLabels = svgContent.selectAll(".heatmap-feature-label");
                 featureLabels.style("fill", "#333").style("font-weight", "normal");
-
-                // Apply highlight style if a metric (not 'Default') is selected
                 if (selectedMetricValue !== 'Default' && selectedMetricLabel) {
-                    featureLabels.filter(function(d) { return d === selectedMetricLabel; }) // Find matching label text
-                    .style("fill", "#4299e1") // Blue color
-                    .style("font-weight", "bold"); // Bold
-                    console.log(`Highlighting metric label: ${selectedMetricLabel}`);
-                } else {
-                    console.log("Metric selection is 'Default' or label not found, no highlight applied.");
+                    featureLabels.filter(function(d) { return d === selectedMetricLabel; })
+                    .style("fill", "#4299e1")
+                    .style("font-weight", "bold");
                 }
-                // --- End Highlight Code ---
-
-            } else { // Handle case where scales have invalid bandwidth
+            } else {
                 console.error("Heatmap scales have zero or negative bandwidth! Cannot draw heatmap cells.");
                  svgContent.append("text").attr("x", margin.left).attr("y", heatmapStartY + 20)
                     .text("Error: Cannot draw heatmap cells due to scale issue.")
                     .attr("fill", "red").attr("font-size", "10px");
             }
-        } else { // Handle case where no heatmap data is available
-             console.log("Skipping heatmap drawing and label highlighting: No features or cluster data available.");
+        } else {
+             console.log("Skipping heatmap drawing and label highlighting: No features or aggregated data available.");
         }
 
-
-        // --- Zoom and Pan Calculation & Application ---
-        let dx = 0, dy = 0, initialScale = 1; // Initialize transform variables
-        try { // Calculate initial transform to center and fit the content
-             const bounds = svgContent.node()?.getBBox(); // Get bounding box of the content group
-             if (bounds && bounds.width > 0 && bounds.height > 0) { // Check if bounds are valid
+        let dx = 0, dy = 0, initialScale = 1;
+        try {
+             const bounds = svgContent.node()?.getBBox();
+             if (bounds && bounds.width > 0 && bounds.height > 0) {
                  const scaleX = viewBoxWidth / bounds.width;
                  const scaleY = viewBoxHeight / bounds.height;
-                 initialScale = Math.min(scaleX, scaleY) * 0.95; // Fit with padding
-                 initialScale = Math.max(0.05, Math.min(initialScale, 5)); // Clamp scale
-                 dx = (viewBoxWidth / 2) - ((bounds.x + bounds.width / 2) * initialScale); // Center X
-                 dy = (viewBoxHeight / 2) - ((bounds.y + bounds.height / 2) * initialScale); // Center Y
-                 // Validate results
+                 initialScale = Math.min(scaleX, scaleY) * 0.95;
+                 initialScale = Math.max(0.05, Math.min(initialScale, 5));
+                 dx = (viewBoxWidth / 2) - ((bounds.x + bounds.width / 2) * initialScale);
+                 dy = (viewBoxHeight / 2) - ((bounds.y + bounds.height / 2) * initialScale);
                  if (!isFinite(dx)) dx = margin.left;
                  if (!isFinite(dy)) dy = margin.top;
                  if (!isFinite(initialScale) || initialScale <= 0) initialScale = 1;
-             } else { // Fallback if BBox invalid
+             } else {
                  console.warn("Could not get valid BBox for zoom calculation, using defaults.");
                  dx = margin.left; dy = margin.top; initialScale = 1;
              }
-        } catch(e) { // Catch any errors during BBox calculation
+        } catch(e) {
              console.error("Error calculating initial zoom transform:", e);
-             dx = margin.left; dy = margin.top; initialScale = 1; // Fallback
+             dx = margin.left; dy = margin.top; initialScale = 1;
         }
 
-        // Store the calculated initial transform globally
         initialTreeTransform = d3.zoomIdentity.translate(dx, dy).scale(initialScale);
         console.log(`Initial Transform: translate(${dx.toFixed(2)}, ${dy.toFixed(2)}) scale(${initialScale.toFixed(2)})`);
 
-        // --- Apply Zoom Behavior ---
         const zoomBehavior = d3.zoom()
-            .scaleExtent([0.05, 10]) // Set min/max zoom levels
-            .on("zoom.main", (event) => { // Define zoom event handler
-                svgContent.attr("transform", event.transform); // Apply transform to the content group
-                // Update threshold bar position dynamically on zoom/pan
+            .scaleExtent([0.05, 10])
+            .on("zoom.main", (event) => {
+                svgContent.attr("transform", event.transform);
                 const thresholdSliderElem = document.getElementById('thresholdSlider');
                 if (thresholdSliderElem && window.lastTreeRoot && svgContent.node()) {
-                    // Use rAF for smoother updates during interactive zoom/pan
                     requestAnimationFrame(() => {
-                         thresholdSliderElem.dispatchEvent(new Event('input')); // Trigger recalculation
+                         thresholdSliderElem.dispatchEvent(new Event('input'));
                     });
                 } else {
-                    d3.select("#threshold-bar").style("display", "none"); // Hide bar if needed data missing
+                    d3.select("#threshold-bar").style("display", "none");
                 }
             });
 
-        window.inlineZoom = zoomBehavior; // Store behavior globally for reset button
-
-        // Apply zoom behavior to the main SVG element
+        window.inlineZoom = zoomBehavior;
         svg.call(zoomBehavior)
-           .call(zoomBehavior.transform, initialTreeTransform) // Set the initial view
-           .on("dblclick.zoom", null); // Disable default double-click zoom reset
+           .call(zoomBehavior.transform, initialTreeTransform)
+           .on("dblclick.zoom", null);
 
-        // --- Final Steps ---
-        if (treeControls) { treeControls.style.display = "flex"; } // Show controls now tree is drawn
-        window.lastTreeData = data; // Store the raw data used for this drawing
-
-        // Store cluster count/hash for recluster comparison (optional)
+        if (treeControls) { treeControls.style.display = "flex"; }
         try { previousClusterCount = leafCount; previousClusterHash = JSON.stringify(data); } catch(e) { console.warn("Could not stringify data for hash comparison."); }
-
-        // Apply initial highlights to leaves (fill) and heatmap (stroke) based on current selections
         highlightTreeClusters(new Set(clusterHighlightColors.keys()));
-
-        // Trigger initial threshold calculation and bar drawing after rendering
         const initialSlider = document.getElementById('thresholdSlider');
         if (initialSlider && window.lastTreeRoot && svgContent.node()) {
-            requestAnimationFrame(() => { // Ensure rendering is complete before triggering
+            requestAnimationFrame(() => {
                 initialSlider.dispatchEvent(new Event('input'));
             });
         } else {
-             d3.select("#threshold-bar").style("display", "none"); // Hide bar if cannot calculate
+             d3.select("#threshold-bar").style("display", "none");
+        }
+        console.log(`--- Debug showInlineDendrogram (End) ---`);
+    }
+
+    function resetGroupingAndRedraw() {
+        console.log("Resetting grouping...");
+        const messageDiv = document.getElementById('reclusterMessage');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValueSpan = document.getElementById('thresholdValue');
+
+        if (!window.originalTreeData) { // Check 1: Original data must exist
+            console.error("Cannot reset grouping: Original tree data is missing.");
+            alert("Error: Cannot reset grouping, original data not found.");
+            if (messageDiv) messageDiv.textContent = "Error: Original data missing.";
+            return;
         }
 
-        console.log(`--- Debug showInlineDendrogram (End) ---`);
+        // Restore original data and state
+        window.lastTreeData = window.originalTreeData; // CRITICAL: Revert to original
+        window.currentGroupingApplied = false;
+        window.lastAppliedThreshold = 100;
+        
+        try {
+            // CRITICAL: Recreate the d3 hierarchy object for lastTreeRoot from the original data
+            window.lastTreeRoot = d3.hierarchy(window.originalTreeData); 
+            console.log("Restored original tree data and reset grouping state. lastTreeRoot updated.");
+        } catch (e) {
+            console.error("Error creating hierarchy from originalTreeData on reset:", e, window.originalTreeData);
+            alert("Error restoring original tree structure.");
+            // Attempt to clear or show an error state in the dendrogram if restoration fails
+            showInlineDendrogram(null); 
+            return;
+        }
 
-    } // --- End of showInlineDendrogram ---
+
+        if (messageDiv) messageDiv.textContent = '';
+
+        // Redraw the dendrogram with the original data
+        // This will also set currentD3LayoutHeight correctly based on the original tree.
+        showInlineDendrogram(window.originalTreeData, currentDendrogramHeight); 
+
+        if (thresholdSlider) {
+            thresholdSlider.value = 100;
+            if (thresholdValueSpan) thresholdValueSpan.textContent = '100%';
+            requestAnimationFrame(() => {
+                // Ensure lastTreeRoot is the one derived from originalTreeData
+                if (window.lastTreeRoot && window.lastTreeRoot.data === window.originalTreeData) {
+                    thresholdSlider.dispatchEvent(new Event('input'));
+                } else {
+                    console.warn("Skipping threshold bar update on reset; lastTreeRoot might not be original.")
+                }
+            });
+            console.log("Reset threshold slider visually.");
+        }
+
+        clearSidebarVisualization(); // This clears highlights and sidebar graph/table
+        // toggleSidebar(false); // Optionally close sidebar - your logs don't show it closing, so maybe not desired
+        updateLegend(); // Reset legend to global state (if applicable)
+
+        updateControlsState(); // Update button states (Reset should become disabled)
+
+        console.log("Grouping reset to the original state.");
+    }
+    
+    function updateControlsState() {
+        const groupingApplied = window.currentGroupingApplied || false; // Default to false if undefined
+
+        // Get references to the controls
+        const resetGroupingBtn = document.getElementById('resetGroupingBtn');
+        const resolutionInput = document.getElementById('resolutionInput');
+        const applyResolutionBtn = document.querySelector('#treeControls button[onclick="reclusterAndRedraw()"]'); // Find button by its onclick handler
+        const applyThresholdBtn = document.getElementById('applyThresholdBtn'); // Get Apply Threshold button
+
+        // --- Reset Grouping Button ---
+        if (resetGroupingBtn) {
+            resetGroupingBtn.disabled = !groupingApplied; // ENABLED only if grouping IS applied
+            console.log(`Reset Grouping Button disabled: ${!groupingApplied}`);
+        } else { console.error("Reset Grouping Button not found in updateControlsState"); }
+
+        // --- Resolution Controls ---
+        if (resolutionInput) {
+            resolutionInput.disabled = groupingApplied; // Disable Resolution input if grouping IS applied
+            console.log(`Resolution Input disabled: ${groupingApplied}`);
+        } else { console.error("Resolution Input not found in updateControlsState"); }
+
+        if (applyResolutionBtn) {
+            applyResolutionBtn.disabled = groupingApplied; // Disable Apply Resolution button if grouping IS applied
+            console.log(`Apply Resolution Button disabled: ${groupingApplied}`);
+        } else { console.error("Apply Resolution Button not found in updateControlsState"); }
+
+        // --- Apply Threshold Button ---
+        if (applyThresholdBtn) {
+             // applyThresholdBtn.disabled = groupingApplied; // << REMOVE OR COMMENT OUT THIS LINE
+             applyThresholdBtn.disabled = false; // Explicitly ensure it's always enabled
+             console.log(`Apply Threshold Button disabled: false`); // Log that it's enabled
+        } else { console.error("Apply Threshold Button not found in updateControlsState"); }
+    }
+
+    function applyThresholdGrouping() {
+        console.log("Applying threshold grouping...");
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const messageDiv = document.getElementById('reclusterMessage');
+
+        const currentRawData = window.lastTreeData;
+        const layoutHeight = window.currentD3LayoutHeight;
+
+        if (!currentRawData) {
+            console.error("Cannot apply grouping: Currently displayed tree data (window.lastTreeData) is missing.");
+            alert("Error: Cannot apply threshold, current tree data is missing.");
+            return;
+        }
+
+        if (!layoutHeight || layoutHeight <= 0) {
+            console.error("Cannot apply grouping: currentD3LayoutHeight is invalid or not set.", layoutHeight);
+            alert("Error: Layout height information is missing or invalid for thresholding. Please ensure the dendrogram is displayed correctly.");
+            return;
+        }
+
+        if (!thresholdSlider) {
+            console.error("Cannot apply grouping: Missing thresholdSlider element.");
+            alert("Error: Could not apply threshold grouping. UI element missing.");
+            return;
+        }
+
+        const percentage = parseInt(thresholdSlider.value, 10);
+        if (percentage >= 100) {
+            alert("Threshold must be below 100% to apply grouping. To see the full tree, use Reset Grouping.");
+            return;
+        }
+
+        const thresholdLayoutY = layoutHeight * (percentage / 100);
+        console.log(`Threshold Percentage: ${percentage}%, Layout Y relative to original height: ${thresholdLayoutY.toFixed(2)} (Original Layout Height: ${layoutHeight.toFixed(2)})`);
+
+        let workingRootHierarchy;
+        try {
+            workingRootHierarchy = d3.hierarchy(structuredClone(currentRawData));
+        } catch (e) {
+            console.error("Error deep cloning current tree data for grouping:", e);
+            alert("Error preparing data for grouping.");
+            return;
+        }
+        
+        const tempTreeLayout = d3.cluster().size([1, layoutHeight]);
+        tempTreeLayout(workingRootHierarchy); 
+        
+        workingRootHierarchy.each(node => {
+            node.structuralY = node.y; 
+            if (typeof node.structuralY !== 'number' || !isFinite(node.structuralY)) {
+                node.structuralY = (node.parent && typeof node.parent.structuralY === 'number' && isFinite(node.parent.structuralY)) 
+                                    ? node.parent.structuralY 
+                                    : 0;
+                console.warn(`Fell back to parent's Y or 0 for node:`, node.data.id || node.data.cluster_id);
+            }
+        });
+
+        const nodesToPrune = new Set(); 
+        const groupRepresentations = new Map(); 
+        let groupingOccurred = false;
+
+        workingRootHierarchy.eachAfter(node => { 
+            const isBelowThreshold = node.structuralY > thresholdLayoutY + 1e-6; 
+
+            if (isBelowThreshold && !nodesToPrune.has(node)) { 
+                groupingOccurred = true; 
+                let representativeAncestor = node.parent;
+                while (representativeAncestor && (representativeAncestor.structuralY > thresholdLayoutY + 1e-6)) {
+                    representativeAncestor = representativeAncestor.parent;
+                }
+                representativeAncestor = representativeAncestor || node; 
+
+                const repAncestorOriginalId = representativeAncestor.data.id || `dist${representativeAncestor.data.dist.toFixed(4)}`;
+                const repAncestorDataId = `rep_${repAncestorOriginalId}`;
+
+                if (!groupRepresentations.has(repAncestorDataId)) {
+                    const groupId = `GROUP_of_${repAncestorOriginalId}_at_${percentage}%`;
+                    const groupNodeData = {
+                        id: groupId, 
+                        dist: representativeAncestor.data.dist, 
+                        isGroup: true,
+                        cluster_id: groupId, 
+                        originalLeaves: new Set(), 
+                    };
+                    groupRepresentations.set(repAncestorDataId, {
+                        representativeNodeData: groupNodeData,
+                        originalLeavesSet: groupNodeData.originalLeaves
+                    });
+                }
+
+                const groupInfo = groupRepresentations.get(repAncestorDataId);
+
+                node.leaves().forEach(leafOfCurrentSubtree => {
+                    if (leafOfCurrentSubtree.data.isGroup && leafOfCurrentSubtree.data.originalLeaves) {
+                        (Array.isArray(leafOfCurrentSubtree.data.originalLeaves) ? leafOfCurrentSubtree.data.originalLeaves : Array.from(leafOfCurrentSubtree.data.originalLeaves)).forEach(originalLeafId => {
+                            groupInfo.originalLeavesSet.add(String(originalLeafId));
+                        });
+                    } else if (leafOfCurrentSubtree.data.cluster_id !== undefined && leafOfCurrentSubtree.data.cluster_id !== null) {
+                        groupInfo.originalLeavesSet.add(String(leafOfCurrentSubtree.data.cluster_id));
+                    }
+                });
+                node.descendants().forEach(descendant => nodesToPrune.add(descendant));
+            }
+        });
+
+        if (!groupingOccurred) { 
+            alert("No clusters fall below the selected threshold. No grouping applied.");
+            if (messageDiv) messageDiv.textContent = "No change: threshold did not cause grouping.";
+            if (thresholdSlider) {
+                requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
+            }
+            return;
+        }
+        
+        function buildCompressedTreeData(currentHierarchyNode) {
+            if (nodesToPrune.has(currentHierarchyNode)) {
+                let representativeAncestor = currentHierarchyNode.parent;
+                while (representativeAncestor && (representativeAncestor.structuralY > thresholdLayoutY + 1e-6)) {
+                    representativeAncestor = representativeAncestor.parent;
+                }
+                representativeAncestor = representativeAncestor || currentHierarchyNode;
+                
+                const repAncestorOriginalId = representativeAncestor.data.id || `dist${representativeAncestor.data.dist.toFixed(4)}`;
+                const repAncestorDataId = `rep_${repAncestorOriginalId}`;
+
+                if (groupRepresentations.has(repAncestorDataId)) {
+                    return groupRepresentations.get(repAncestorDataId).representativeNodeData;
+                } else {
+                    console.error("Critical Error: Pruned node has no group representation during tree build:", currentHierarchyNode.data);
+                    return null; 
+                }
+            }
+
+            const newNodeData = { ...currentHierarchyNode.data }; 
+            delete newNodeData.children; 
+
+            if (currentHierarchyNode.children && currentHierarchyNode.children.length > 0) {
+                const newChildrenList = [];
+                currentHierarchyNode.children.forEach(childHierarchyNode => {
+                    const newChildData = buildCompressedTreeData(childHierarchyNode);
+                    if (newChildData) {
+                        if (!newChildrenList.some(existingChild => existingChild.id === newChildData.id)) {
+                            newChildrenList.push(newChildData);
+                        }
+                    }
+                });
+                if (newChildrenList.length > 0) {
+                    newNodeData.children = newChildrenList;
+                }
+            }
+            return newNodeData;
+        }
+
+        let compressedTreeData = buildCompressedTreeData(workingRootHierarchy);
+
+        if (!compressedTreeData) {
+            console.error("Failed to build compressed tree data. The root itself might have been erroneously pruned or unrepresented.");
+            alert("Error: Failed to apply threshold grouping due to an issue in tree reconstruction.");
+            return;
+        }
+        
+        function convertOriginalLeavesSetToArray(node) {
+            if (node.isGroup && node.originalLeaves instanceof Set) {
+                node.originalLeaves = Array.from(node.originalLeaves);
+            }
+            if (node.children) {
+                node.children.forEach(convertOriginalLeavesSetToArray);
+            }
+        }
+        convertOriginalLeavesSetToArray(compressedTreeData);
+
+        console.log("Compressed tree structure generated:", compressedTreeData);
+        window.lastTreeData = compressedTreeData;
+        window.currentGroupingApplied = true;
+        window.lastAppliedThreshold = percentage;
+        try {
+        window.lastTreeRoot = d3.hierarchy(compressedTreeData); 
+        } catch (e) {
+        console.error("Error creating hierarchy from compressed data:", e, compressedTreeData);
+        alert("Error finalizing grouped tree structure.");
+        return;
+        }
+
+        showInlineDendrogram(compressedTreeData, currentDendrogramHeight);
+
+        console.log(`Threshold applied. Clusters below ${percentage}% merged. Tree and heatmap redrawn.`);
+        if (messageDiv) messageDiv.textContent = '';
+
+        clearSidebarVisualization();
+        if(isSidebarOpen) toggleSidebar(false); 
+        updateLegend();
+
+        if (thresholdSlider) {
+            thresholdSlider.value = 100; 
+            const thresholdValueSpan = document.getElementById('thresholdValue');
+            if (thresholdValueSpan) thresholdValueSpan.textContent = '100%';
+            requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); }); 
+            console.log("Threshold slider visually reset to 100% after apply.");
+        }
+
+        updateControlsState();
+    }
 
     function highlightTreeClusters(selectedClusterIds = new Set()) {
         const svgContent = d3.select("#inlineDendrogramSvg g");
@@ -3449,15 +3924,61 @@ visibility: hidden !important;
                 console.log("Dendrogram data received:", data);
                 if (Object.keys(data).length === 0 || (data.error)) {
                     console.error("Empty or error data received for dendrogram:", data.error || "Empty object");
+                    window.originalTreeData = null; // Clear original data on error
+                    window.lastTreeData = null;     // Also clear last used data
+                    window.originalLeafCount = 0;   // Reset original count on error
                     showInlineDendrogram(null); // Show error state
                 } else {
-                    showInlineDendrogram(data); // Render the tree
+                    // --- STORE ORIGINAL DATA ---
+                    try {
+                         window.originalTreeData = structuredClone(data); // Store deep copy
+                         console.log("Stored original tree data.");
+
+                         // --- CALCULATE AND STORE ORIGINAL LEAF COUNT ---
+                         const originalRoot = d3.hierarchy(window.originalTreeData);
+                         window.originalLeafCount = originalRoot.leaves().length;
+                         console.log(`Stored original leaf count: ${window.originalLeafCount}`);
+                         // --- END ORIGINAL LEAF COUNT ---
+
+                    } catch (cloneError) {
+                         console.error("Error cloning original tree data:", cloneError);
+                         window.originalTreeData = data; // Fallback to shallow copy
+                         // Attempt count even with shallow copy
+                         try {
+                             const originalRoot = d3.hierarchy(window.originalTreeData);
+                             window.originalLeafCount = originalRoot.leaves().length;
+                             console.warn(`Stored original leaf count from shallow copy: ${window.originalLeafCount}`);
+                         } catch (countError) {
+                             console.error("Could not count leaves even from shallow copy.", countError);
+                             window.originalLeafCount = 0;
+                         }
+                    }
+                    // --- END STORE ---
+
+                    // --- RESET grouping state when new original data is loaded ---
+                    window.currentGroupingApplied = false;
+                    window.lastAppliedThreshold = 100;
+                    const thresholdSlider = document.getElementById('thresholdSlider');
+                    const thresholdValue = document.getElementById('thresholdValue');
+                    if(thresholdSlider) thresholdSlider.value = 100;
+                    if(thresholdValue) thresholdValue.textContent = '100%';
+                    const reclusterMsg = document.getElementById('reclusterMessage');
+                    if (reclusterMsg) reclusterMsg.textContent = '';
+                    console.log("Reset grouping state after loading new original dendrogram data.");
+                    // --- END RESET ---
+
+                    // Render the tree using the newly loaded original data
+                    // showInlineDendrogram will set window.lastTreeData internally now
+                    showInlineDendrogram(data);
                 }
                 // Resolve indicating the load attempt is complete, visual errors handled in showInlineDendrogram
                 return Promise.resolve();
             })
             .catch(err => {
                 console.error("Failed to load or render inline dendrogram:", err);
+                window.originalTreeData = null; // Clear original data on error
+                window.lastTreeData = null;     // Also clear last used data
+                window.originalLeafCount = 0;   // Reset original count on error
                 showInlineDendrogram(null); // Show error state in the SVG
                 // Propagate the error for the DOMContentLoaded handler
                 return Promise.reject(err);
@@ -3561,34 +4082,56 @@ visibility: hidden !important;
         showLoading(); // Show main loading overlay
 
         // Fetch new hierarchy data with the specified resolution
-        // --- CORRECTED FETCH CALL ---
         fetch(`${API_BASE_URL}/hierarchical_clusters?resolution=${resolution}`)
             .then(response => {
                     if (!response.ok) {
                         // Try to parse error message from backend JSON response
-                        return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                        return response.json().catch(() => response.text()) // Fallback to text if JSON fails
+                           .then(errBody => { throw new Error(errBody.error || errBody || `HTTP error ${response.status}`) });
                     }
                     return response.json();
             })
             .then(treeData => {
                     console.log("Reclustered tree data received:", treeData);
 
+                    // --- STORE NEW ORIGINAL DATA ---
+                    try {
+                         window.originalTreeData = structuredClone(treeData); // Store deep copy of new data
+                         console.log("Stored new original tree data after recluster.");
+                         // --- STORE NEW ORIGINAL LEAF COUNT ---
+                         const newOriginalRoot = d3.hierarchy(window.originalTreeData);
+                         window.originalLeafCount = newOriginalRoot.leaves().length;
+                         console.log(`Stored NEW original leaf count after recluster: ${window.originalLeafCount}`);
+                         // --- END NEW ORIGINAL LEAF COUNT ---
+                    } catch (cloneError) {
+                         console.error("Error cloning new original tree data:", cloneError);
+                         window.originalTreeData = treeData; // Fallback
+                         // Attempt count even with shallow copy
+                         try {
+                             const newOriginalRoot = d3.hierarchy(window.originalTreeData);
+                             window.originalLeafCount = newOriginalRoot.leaves().length;
+                             console.warn(`Stored NEW original leaf count from shallow copy: ${window.originalLeafCount}`);
+                         } catch (countError) {
+                              console.error("Could not count leaves after recluster, even from shallow copy.", countError);
+                              window.originalLeafCount = 0;
+                         }
+                    }
+                    // --- END STORE ---
+
                     // Check for structural changes to provide feedback
                     let currentLeafCount = 0;
-                    (function countLeaves(node) { // Simple recursive leaf counter
+                    (function countLeaves(node) {
                         if (!node || typeof node !== 'object') return;
                         if (!node.children || node.children.length === 0) {
-                        if(node.cluster_id !== undefined) currentLeafCount++; // Count only actual leaves with cluster_id
+                            if(node.cluster_id !== undefined && node.cluster_id !== null) {
+                                currentLeafCount++;
+                            }
                         } else {
-                        node.children.forEach(countLeaves);
+                            node.children.forEach(countLeaves);
                         }
                     })(treeData);
 
-                    // --- Update Tree Info Span ---
-                    if (treeInfoSpan) {
-                        treeInfoSpan.textContent = `${currentLeafCount} Clusters`;
-                    }
-                    // --- End Update ---
+                    // Tree info span is updated inside showInlineDendrogram now
 
                     // Basic structural comparison (can be improved)
                     const currentHash = JSON.stringify(treeData);
@@ -3601,10 +4144,19 @@ visibility: hidden !important;
                     previousClusterCount = currentLeafCount; // Update state
                     previousClusterHash = currentHash;      // Update state
 
+                    // --- ALWAYS RESET grouping state after a recluster ---
+                    window.currentGroupingApplied = false;
+                    window.lastAppliedThreshold = 100; // Reset threshold value
+                    document.getElementById('thresholdSlider').value = 100; // Reset slider visually
+                    document.getElementById('thresholdValue').textContent = '100%';
+                    messageDiv.textContent = ''; // Clear any previous grouping message
+                    console.log("Reset grouping state after recluster.");
+                    updateControlsState(); // Update button states after resetting grouping flag
+                    // --- END RESET ---
+
                     if (structureChanged) {
                         messageDiv.textContent = `Reclustering complete. ${currentLeafCount} leaf clusters found.`;
-                        showInlineDendrogram(treeData, currentDendrogramHeight); // Redraw with current height
-                        // Do NOT reset zoom automatically, let user do it if needed
+                        showInlineDendrogram(treeData, currentDendrogramHeight); // Redraw with new ORIGINAL data
                         resetInlineZoom();
 
                         // --- IMPORTANT: Update the main heatmap and legend ---
@@ -3616,9 +4168,14 @@ visibility: hidden !important;
                         // --- End Updates ---
 
                     } else {
-                        messageDiv.textContent = "No structural change in clusters. Try a different resolution.";
+                        messageDiv.textContent = "No structural change detected. Redrawing with current data.";
                         // Even if no structural change, redraw to apply potential sorting changes if metric selected
                         showInlineDendrogram(treeData, currentDendrogramHeight);
+                    }
+                    // Trigger visual update of threshold bar based on reset slider value
+                    const thresholdSliderElem = document.getElementById('thresholdSlider');
+                    if (thresholdSliderElem && window.lastTreeRoot) {
+                         requestAnimationFrame(() => { thresholdSliderElem.dispatchEvent(new Event('input')); });
                     }
                     hideLoading(); // Hide loading overlay
             })
@@ -3626,9 +4183,13 @@ visibility: hidden !important;
                 console.error("Error during recluster/redraw:", err);
                 messageDiv.textContent = `Error: ${err.message || "Failed to recluster."}`;
                 if (treeInfoSpan) treeInfoSpan.textContent = ''; // Clear info on error
+                window.originalTreeData = null; // Clear original data on error
+                window.lastTreeData = null; // Clear last data on error
+                window.originalLeafCount = 0; // Reset count on error
+                showInlineDendrogram(null); // Show error in dendrogram view
                 hideLoading(); // Hide loading overlay on error too
             });
-        }
+    }
 
     // --- END Dendrogram JS Functions ---
   </script>

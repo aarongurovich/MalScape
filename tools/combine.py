@@ -29,6 +29,6 @@ def combine_csv_files(input_folder, output_file):
         print(f"Error saving the final CSV: {e}")
 
 if __name__ == "__main__":
-    input_folder = r"C:\Users\Aaron\Malscape\Combine"
+    input_folder = r"C:\Users\18329\Desktop\MalScape-1\tools\Combine"
     output_file = "combined_day1.csv"
     combine_csv_files(input_folder, output_file)
