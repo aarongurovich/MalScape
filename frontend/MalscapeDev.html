@@ -264,8 +264,8 @@
         /* Sidebar Fullscreen Styles */
         #sidebarFullscreenBtn {
             position: absolute;
-            top: 5px; /* Adjusted for better placement */
-            right: 10px; /* Adjusted for better placement */
+            top: 5px;
+            right: 10px;
             width: auto;
             padding: 4px 8px;
             font-size: 18px;
@@ -318,7 +318,6 @@
         }
         #sidebar.fullscreen #sidebar-table-search-container { display: block !important; visibility: visible !important; padding-bottom: 10px; }
         #sidebar.fullscreen #sidebar-table-pagination { display: block !important; padding-top: 5px; }
-        /* Hide elements not needed in fullscreen */
         #sidebar.fullscreen h3,
         #sidebar.fullscreen #resetSidebarBtn,
         #sidebar.fullscreen #sidebar-info,
@@ -347,12 +346,12 @@
         }
 
         #dendrogramCard .dendro-header h3 { /* Target h3 within .dendro-header */
-            margin-bottom: 0; /* Adjust if needed */
+            margin-bottom: 0;
         }
 
         #dendrogramCard .dendro-header button { /* Styles for Reset Zoom button in this header */
             padding: 6px 12px;
-            margin-left: auto; /* Pushes it to the right */
+            margin-left: auto;
             background-color: #6c757d;
             color: white;
             border: none;
@@ -392,7 +391,7 @@
             display: flex;
             flex-direction: row;
             flex-wrap: wrap;
-            gap: 0px; /* Sections will have padding, direct gap not needed */
+            gap: 0px;
             padding-top: 10px;
             margin-top: 15px;
             border-top: 1px solid #e2e8f0;
@@ -1337,7 +1336,7 @@
         }
     }
 
-    function visualizeClusterInSidebar(clusterID, nodeColor) {
+    function visualizeClusterInSidebar(clusterID, nodeColor, isAnomalous) {
         // Check if the cluster's nodes are ALREADY in the sidebar graph
         // And also if it's in addedSidebarClusters (for cases where elements might have been removed but ID persisted)
         if (sidebarCy && sidebarCy.nodes(`[clusterID = "${clusterID}"]`).length > 0 && addedSidebarClusters.has(clusterID)) {
@@ -1364,7 +1363,6 @@
              return;
         }
 
-        // If not already visualized (or elements not found), proceed to fetch and render
         toggleSidebar(true);
         showSidebarLoading(true, false); // Show graph loading, not table loading
         sidebarInfoDiv.innerHTML = `Loading network for Cluster ${clusterID}...`;
@@ -1394,7 +1392,10 @@
                 const nodesToAdd = data.nodes.map(node => ({
                     group: 'nodes',
                     data: { ...node.data, clusterID: clusterID, Classification: node.data.Classification || 'Unknown' },
-                    style: { 'background-color': nodeColor },
+                    style: {
+                        'background-color': nodeColor,
+                        ...(isAnomalous && { 'border-color': 'red', 'border-width': 2, 'border-style': 'solid' })
+                    },
                     scratch: { _originalColor: nodeColor }
                 }));
 
@@ -2618,15 +2619,21 @@
         // Threshold Slider Listener (Visual Updates Only)
         if (thresholdSlider && thresholdValueSpan) {
             thresholdSlider.addEventListener('input', () => {
-                const percentage = parseInt(thresholdSlider.value, 10);
-                thresholdValueSpan.textContent = percentage + '%';
+                const physicalValue = parseInt(thresholdSlider.value, 10); // Slider's actual value (0-100)
+                const currentDisplayMax = window.lastAppliedThreshold;    // The effective 'max' for display (e.g., 100, or 70 after an apply)
 
+                // Calculate the scaled value for display
+                const scaledDisplayValue = Math.round((physicalValue / 100) * currentDisplayMax);
+                thresholdValueSpan.textContent = scaledDisplayValue + '%';
+
+                // Dendrogram visual bar and graying out nodes - this remains tied to the physical slider position
+                // to keep the "slider functionality" (visual effect on dendrogram) the same.
                 const svg = d3.select("#inlineDendrogramSvg");
                 const svgNode = svg.node();
                 if (!svgNode) return;
                 const svgContent = svg.select("g");
-                const root = window.lastTreeRoot; // Use globally stored root for *layout* info
-                const layoutHeight = window.currentD3LayoutHeight;
+                const root = window.lastTreeRoot;
+                const layoutHeight = window.currentD3LayoutHeight; // This is the height for the 0-100% scale of the tree
                 const treeLayoutWidth = window.currentLayoutWidth;
 
                 if (!layoutHeight || layoutHeight <= 0 || !root || svgContent.empty() || treeLayoutWidth === undefined) {
@@ -2634,41 +2641,43 @@
                     return;
                 }
 
-                const thresholdLayoutY = layoutHeight * (percentage / 100);
+                // The bar's position is determined by the physical slider value (0-100)
+                // This means the bar visually represents cutting the tree from its 0% to 100% height potential.
+                const physicalPercentageForBar = physicalValue / 100;
+                const thresholdLayoutYForBar = layoutHeight * physicalPercentageForBar;
 
-                // Gray out nodes based on structural Y
                 svgContent.selectAll('.node').each(function(d) {
                     if (d && typeof d.structuralY === 'number' && isFinite(d.structuralY)) {
-                         d3.select(this).classed('grayed-out', d.structuralY > thresholdLayoutY + 1e-6);
+                        d3.select(this).classed('grayed-out', d.structuralY > thresholdLayoutYForBar + 1e-6);
                     } else {
-                         d3.select(this).classed('grayed-out', false);
+                        d3.select(this).classed('grayed-out', false);
                     }
                 });
 
-                // Update visual threshold bar position based on current zoom/pan
+                // Update visual threshold bar position
                 try {
                     const transform = d3.zoomTransform(svgNode);
-                    const thresholdVisualY = ((thresholdLayoutY + margin.top) * transform.k) + transform.y;
-                    // Calculate visible bar extent based on current layout width and transform
+                    // The bar's Y is relative to the top of the SVG content after zoom/pan
+                    const thresholdVisualY = ((thresholdLayoutYForBar + margin.top) * transform.k) + transform.y;
                     const barX1 = margin.left * transform.k + transform.x;
                     const barX2 = (margin.left + treeLayoutWidth) * transform.k + transform.x;
 
                     svg.select("#threshold-bar")
-                       .style("display", null)
-                       .attr("y1", thresholdVisualY).attr("y2", thresholdVisualY)
-                       .attr("x1", barX1).attr("x2", barX2);
+                    .style("display", null)
+                    .attr("y1", thresholdVisualY).attr("y2", thresholdVisualY)
+                    .attr("x1", barX1).attr("x2", barX2);
                 } catch (e) {
+                    console.error("Error updating threshold bar position:", e);
                     svg.select("#threshold-bar").style("display", "none");
                 }
             });
 
             // Trigger initial visual state based on default/current slider value
-             requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
                 if (window.lastTreeRoot) { thresholdSlider.dispatchEvent(new Event('input')); }
-             });
-
+            });
         } else {
-            console.error("Threshold slider or value span not found!");
+            console.error("Threshold slider or value span not found for input event listener!");
         }
 
         // Apply Threshold Button Listener
@@ -3254,43 +3263,59 @@
                                      let allEdgesAdded = [];
                                      let errorOccurred = false;
 
-                                     for (const originalLeafId of originalLeaves) {
+                                    for (const originalLeafId of originalLeaves) {
                                         try {
-                                             const response = await fetch(`${API_BASE_URL}/cluster_network?cluster_id=${originalLeafId}`);
-                                             if (!response.ok) throw new Error(`Network error (${response.status}) for cluster ${originalLeafId}`);
-                                             const clusterData = await response.json();
+                                            const response = await fetch(`${API_BASE_URL}/cluster_network?cluster_id=${originalLeafId}`);
+                                            if (!response.ok) throw new Error(`Network error (${response.status}) for cluster ${originalLeafId}`);
+                                            const clusterData = await response.json();
 
-                                             if (clusterData && clusterData.nodes && clusterData.nodes.length > 0) {
-                                                  const nodesToAdd = clusterData.nodes.map(node => ({
-                                                      group: 'nodes',
-                                                      data: { ...node.data, clusterID: originalLeafId, Classification: node.data.Classification || 'Unknown' },
-                                                      style: { 'background-color': targetHighlightColor }, // Group's color
-                                                      scratch: { _originalColor: targetHighlightColor }
-                                                  }));
-                                                 allNodesAdded.push(...nodesToAdd);
-                                                  const edgesToAdd = clusterData.edges.map(edge => {
-                                                      const protocol = edge.data.Protocol || 'Unknown';
-                                                      if (!protocolColorMap[protocol]) {
-                                                          let randomColor;
-                                                          do { randomColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0'); }
-                                                          while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase());
-                                                          protocolColorMap[protocol] = randomColor;
-                                                      }
-                                                      const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
-                                                      return {
-                                                          group: 'edges',
-                                                          data: { ...edge.data, clusterID: originalLeafId },
-                                                          style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor },
-                                                          scratch: { _protocolColor: edgeColor }
-                                                      };
-                                                  });
-                                                 allEdgesAdded.push(...edgesToAdd);
-                                             }
-                                         } catch (fetchError) {
-                                             console.error(`Error fetching/processing cluster ${originalLeafId} for group ${clickedClusterOrGroupID}:`, fetchError);
-                                             errorOccurred = true;
-                                         }
-                                     }
+                                            let isThisOriginalLeafAnomalous = false;
+                                            if (window.fullHeatmapData && window.fullHeatmapData['Count']) {
+                                                const metricDataForOriginalLeaf = window.fullHeatmapData['Count'].find(
+                                                    entry => String(entry.cluster) === String(originalLeafId)
+                                                );
+                                                if (metricDataForOriginalLeaf && metricDataForOriginalLeaf.clusterAnomaly === 'anomaly') {
+                                                    isThisOriginalLeafAnomalous = true;
+                                                }
+                                            }
+
+                                            if (clusterData && clusterData.nodes && clusterData.nodes.length > 0) {
+                                                const nodesToAdd = clusterData.nodes.map(node_item => ({
+                                                    group: 'nodes',
+                                                    data: { ...node_item.data, clusterID: originalLeafId, Classification: node_item.data.Classification || 'Unknown' },
+                                                    style: {
+                                                        'background-color': targetHighlightColor,
+                                                        ...(isThisOriginalLeafAnomalous && { 'border-color': 'red', 'border-width': 2, 'border-style': 'solid' })
+                                                    },
+                                                    scratch: { _originalColor: targetHighlightColor }
+                                                }));
+                                                allNodesAdded.push(...nodesToAdd);
+                                            }
+                                            if (clusterData && clusterData.edges) {
+                                                const edgesToAdd = clusterData.edges.map(edge => {
+                                                    const protocol = edge.data.Protocol || 'Unknown';
+                                                    if (!protocolColorMap[protocol]) {
+                                                        let randomColor;
+                                                        do { randomColor = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0'); }
+                                                        while (randomColor.toLowerCase() === SELECTED_EDGE_COLOR.toLowerCase());
+                                                        protocolColorMap[protocol] = randomColor;
+                                                    }
+                                                    const edgeColor = protocolColorMap[protocol] || DEFAULT_UNKNOWN_COLOR;
+                                                    return {
+                                                        group: 'edges',
+                                                        data: { ...edge.data, clusterID: originalLeafId },
+                                                        style: { 'line-color': edgeColor, 'target-arrow-color': edgeColor },
+                                                        scratch: { _protocolColor: edgeColor }
+                                                    };
+                                                });
+                                                allEdgesAdded.push(...edgesToAdd);
+                                            }
+
+                                        } catch (fetchError) {
+                                            console.error(`Error fetching/processing cluster ${originalLeafId} for group ${clickedClusterOrGroupID}:`, fetchError);
+                                            errorOccurred = true; // Ensure errorOccurred is defined if you use it
+                                        }
+                                    }
 
                                      showSidebarLoading(false, false);
                                      if (!sidebarCy) {
@@ -3322,7 +3347,8 @@
                                       showSidebarLoading(false, false);
                                  }
                             } else {
-                                 visualizeClusterInSidebar(clickedClusterOrGroupID, targetHighlightColor);
+                                const isClusterAnomalous = d.anomaly === 'anomaly'; // Get anomaly status from heatmap cell data
+                                visualizeClusterInSidebar(clickedClusterOrGroupID, targetHighlightColor, isClusterAnomalous);
                             }
                             cellsForClusterOrGroup.transition().duration(100)
                                 .style('stroke', targetHighlightColor)
@@ -3579,14 +3605,23 @@
             return;
         }
 
-        const percentage = parseInt(thresholdSlider.value, 10);
-        if (percentage >= 100) {
+        const physicalValue = parseInt(thresholdSlider.value, 10);
+        const currentDisplayMaxBeforeApply = window.lastAppliedThreshold;
+        const scaledPercentageToApply = Math.round((physicalValue / 100) * currentDisplayMaxBeforeApply);
+
+        console.log(`Physical slider: ${physicalValue}%, Current Display Max: ${currentDisplayMaxBeforeApply}%, Scaled Pct to Apply: ${scaledPercentageToApply}%`);
+
+        if (scaledPercentageToApply >= currentDisplayMaxBeforeApply && currentDisplayMaxBeforeApply < 100) {
+            alert(`To create a new grouping, the threshold (${scaledPercentageToApply}%) must be less than the current displayed maximum of ${currentDisplayMaxBeforeApply}%.`);
+            return;
+        }
+        if (scaledPercentageToApply >= 100) {
             alert("Threshold must be below 100% to apply grouping. To see the full tree, use Reset Grouping.");
             return;
         }
 
-        const thresholdLayoutY = layoutHeight * (percentage / 100);
-        console.log(`Threshold Percentage: ${percentage}%, Layout Y relative to original height: ${thresholdLayoutY.toFixed(2)} (Original Layout Height: ${layoutHeight.toFixed(2)})`);
+        const thresholdLayoutY = layoutHeight * (scaledPercentageToApply / 100);
+        console.log(`Thresholding tree at displayed ${scaledPercentageToApply}%. Effective Layout Y for grouping: ${thresholdLayoutY.toFixed(2)} (based on full Layout Height: ${layoutHeight.toFixed(2)})`);
 
         let workingRootHierarchy;
         try {
@@ -3596,46 +3631,46 @@
             alert("Error preparing data for grouping.");
             return;
         }
-        
+
         const tempTreeLayout = d3.cluster().size([1, layoutHeight]);
-        tempTreeLayout(workingRootHierarchy); 
-        
+        tempTreeLayout(workingRootHierarchy);
+
         workingRootHierarchy.each(node => {
-            node.structuralY = node.y; 
+            node.structuralY = node.y;
             if (typeof node.structuralY !== 'number' || !isFinite(node.structuralY)) {
-                node.structuralY = (node.parent && typeof node.parent.structuralY === 'number' && isFinite(node.parent.structuralY)) 
-                                    ? node.parent.structuralY 
+                node.structuralY = (node.parent && typeof node.parent.structuralY === 'number' && isFinite(node.parent.structuralY))
+                                    ? node.parent.structuralY
                                     : 0;
                 console.warn(`Fell back to parent's Y or 0 for node:`, node.data.id || node.data.cluster_id);
             }
         });
 
-        const nodesToPrune = new Set(); 
-        const groupRepresentations = new Map(); 
+        const nodesToPrune = new Set();
+        const groupRepresentations = new Map();
         let groupingOccurred = false;
 
-        workingRootHierarchy.eachAfter(node => { 
-            const isBelowThreshold = node.structuralY > thresholdLayoutY + 1e-6; 
+        workingRootHierarchy.eachAfter(node => {
+            const isBelowThreshold = node.structuralY > thresholdLayoutY + 1e-6;
 
-            if (isBelowThreshold && !nodesToPrune.has(node)) { 
-                groupingOccurred = true; 
+            if (isBelowThreshold && !nodesToPrune.has(node)) {
+                groupingOccurred = true;
                 let representativeAncestor = node.parent;
                 while (representativeAncestor && (representativeAncestor.structuralY > thresholdLayoutY + 1e-6)) {
                     representativeAncestor = representativeAncestor.parent;
                 }
-                representativeAncestor = representativeAncestor || node; 
+                representativeAncestor = representativeAncestor || node;
 
                 const repAncestorOriginalId = representativeAncestor.data.id || `dist${representativeAncestor.data.dist.toFixed(4)}`;
                 const repAncestorDataId = `rep_${repAncestorOriginalId}`;
 
                 if (!groupRepresentations.has(repAncestorDataId)) {
-                    const groupId = `GROUP_of_${repAncestorOriginalId}_at_${percentage}%`;
+                    const groupId = `GROUP_of_${repAncestorOriginalId}_at_${scaledPercentageToApply}%`; // Use scaledPercentageToApply in ID
                     const groupNodeData = {
-                        id: groupId, 
-                        dist: representativeAncestor.data.dist, 
+                        id: groupId,
+                        dist: representativeAncestor.data.dist,
                         isGroup: true,
-                        cluster_id: groupId, 
-                        originalLeaves: new Set(), 
+                        cluster_id: groupId,
+                        originalLeaves: new Set(),
                     };
                     groupRepresentations.set(repAncestorDataId, {
                         representativeNodeData: groupNodeData,
@@ -3658,7 +3693,7 @@
             }
         });
 
-        if (!groupingOccurred) { 
+        if (!groupingOccurred) {
             alert("No clusters fall below the selected threshold. No grouping applied.");
             if (messageDiv) messageDiv.textContent = "No change: threshold did not cause grouping.";
             if (thresholdSlider) {
@@ -3666,7 +3701,7 @@
             }
             return;
         }
-        
+
         function buildCompressedTreeData(currentHierarchyNode) {
             if (nodesToPrune.has(currentHierarchyNode)) {
                 let representativeAncestor = currentHierarchyNode.parent;
@@ -3674,7 +3709,7 @@
                     representativeAncestor = representativeAncestor.parent;
                 }
                 representativeAncestor = representativeAncestor || currentHierarchyNode;
-                
+
                 const repAncestorOriginalId = representativeAncestor.data.id || `dist${representativeAncestor.data.dist.toFixed(4)}`;
                 const repAncestorDataId = `rep_${repAncestorOriginalId}`;
 
@@ -3682,12 +3717,12 @@
                     return groupRepresentations.get(repAncestorDataId).representativeNodeData;
                 } else {
                     console.error("Critical Error: Pruned node has no group representation during tree build:", currentHierarchyNode.data);
-                    return null; 
+                    return null;
                 }
             }
 
-            const newNodeData = { ...currentHierarchyNode.data }; 
-            delete newNodeData.children; 
+            const newNodeData = { ...currentHierarchyNode.data };
+            delete newNodeData.children;
 
             if (currentHierarchyNode.children && currentHierarchyNode.children.length > 0) {
                 const newChildrenList = [];
@@ -3713,7 +3748,7 @@
             alert("Error: Failed to apply threshold grouping due to an issue in tree reconstruction.");
             return;
         }
-        
+
         function convertOriginalLeavesSetToArray(node) {
             if (node.isGroup && node.originalLeaves instanceof Set) {
                 node.originalLeaves = Array.from(node.originalLeaves);
@@ -3727,30 +3762,30 @@
         console.log("Compressed tree structure generated:", compressedTreeData);
         window.lastTreeData = compressedTreeData;
         window.currentGroupingApplied = true;
-        window.lastAppliedThreshold = percentage;
+        window.lastAppliedThreshold = scaledPercentageToApply;
+        console.log(`Updated window.lastAppliedThreshold to: ${window.lastAppliedThreshold}%`);
+
         try {
-        window.lastTreeRoot = d3.hierarchy(compressedTreeData); 
+            window.lastTreeRoot = d3.hierarchy(compressedTreeData);
         } catch (e) {
-        console.error("Error creating hierarchy from compressed data:", e, compressedTreeData);
-        alert("Error finalizing grouped tree structure.");
-        return;
+            console.error("Error creating hierarchy from compressed data:", e, compressedTreeData);
+            alert("Error finalizing grouped tree structure.");
+            return;
         }
 
         showInlineDendrogram(compressedTreeData, currentDendrogramHeight);
 
-        console.log(`Threshold applied. Clusters below ${percentage}% merged. Tree and heatmap redrawn.`);
+        console.log(`Threshold applied. Clusters below displayed ${scaledPercentageToApply}% merged. Tree and heatmap redrawn.`);
         if (messageDiv) messageDiv.textContent = '';
 
         clearSidebarVisualization();
-        if(isSidebarOpen) toggleSidebar(false); 
+        if(isSidebarOpen) toggleSidebar(false);
         updateLegend();
 
         if (thresholdSlider) {
-            thresholdSlider.value = 100; 
-            const thresholdValueSpan = document.getElementById('thresholdValue');
-            if (thresholdValueSpan) thresholdValueSpan.textContent = '100%';
-            requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); }); 
-            console.log("Threshold slider visually reset to 100% after apply.");
+            thresholdSlider.value = 100; // Set physical slider to max
+            requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
+            console.log("Physical threshold slider reset to 100% position after apply. Displayed text will update.");
         }
 
         updateControlsState();
