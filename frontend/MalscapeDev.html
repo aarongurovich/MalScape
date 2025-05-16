@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" href="favicon.png" type="image/png" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>MalScape</title>
@@ -297,7 +298,7 @@
             overflow: hidden !important; /* Prevent main scrollbar in fullscreen */
         }
         #sidebar.fullscreen #sidebar-content {
-            flex-direction: row; /* Graph and table side-by-side */
+            flex-direction: column;
             gap: 10px;
         }
         #sidebar.fullscreen #sidebar-cy {
@@ -679,10 +680,6 @@
         <input type="number" id="entropyMinFilter" placeholder="0.0" step="0.1" style="width:60px;" title="Minimum payload entropy.">
         <label for="entropyMaxFilter">Max Ent:</label>
         <input type="number" id="entropyMaxFilter" placeholder="Inf" step="0.1" style="width:60px;" title="Maximum payload entropy.">
-        <label for="isLargePacketFilter">Large Pkts:</label>
-        <input type="checkbox" id="isLargePacketFilter" title="Filter for large packets.">
-        <label for="isSuspiciousAckFilter">Susp ACK:</label>
-        <input type="checkbox" id="isSuspiciousAckFilter" title="Filter for suspicious ACKs.">
         <button id="applyFiltersBtn" style="margin-left: 10px;" title="Apply selected filters to heatmap.">Apply Filters</button>
       </div>
     </div>
@@ -828,6 +825,7 @@
     let clusterHighlightColors = new Map();
     let addedSidebarClusters = new Set();
     let selectedSidebarEdges = new Set();
+    let selectedSidebarNodes = new Set();
     let selectedNodeId = null;
     let sidebarTableMode = 'cluster';
     let isSidebarOpen = false;
@@ -1451,6 +1449,68 @@
             });
     }
 
+    function updateSidebarTableForSelectedNodesAndEdges() {
+        showSidebarLoading(false, true);
+        sidebarTableContainer.style.display = 'none';
+        sidebarTablePagination.style.display = 'none';
+        sidebarSearchContainer.style.display = 'none';
+
+        const nodesToFilterBy = Array.from(selectedSidebarNodes);
+        const edgesToFilterBy = Array.from(selectedSidebarEdges).map(key => {
+            const parts = key.split('|');
+            return { source: parts[0], destination: parts[1], protocol: parts[2] };
+        });
+
+        if (nodesToFilterBy.length > 0) {
+            console.log(`Nodes selected: ${nodesToFilterBy.join(', ')}. Loading table for their connected edges.`);
+            let allConnectedEdgesData = new Set();
+            let representativeEdgesForTable = [];
+
+            nodesToFilterBy.forEach(nodeId => {
+                const node = sidebarCy.getElementById(nodeId);
+                if (node.length > 0) {
+                    node.connectedEdges().forEach(edge => {
+                        const edgeKey = `${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`;
+                        if (!allConnectedEdgesData.has(edgeKey)) {
+                            allConnectedEdgesData.add(edgeKey);
+                            representativeEdgesForTable.push({
+                                source: edge.data('source'),
+                                destination: edge.data('target'),
+                                protocol: edge.data('Protocol')
+                            });
+                        }
+                    });
+                }
+            });
+            if (representativeEdgesForTable.length > 0) {
+                loadSidebarMultiEdgeTable(representativeEdgesForTable, 1);
+            } else {
+                sidebarTableContainer.innerHTML = '<p style="padding:10px; text-align:center; color:#6c757d;">Selected node(s) have no connections.</p>';
+                sidebarTableContainer.style.display = 'block';
+                showSidebarLoading(false, false);
+            }
+            sidebarInfoDiv.style.display = 'none';
+
+        } else if (edgesToFilterBy.length > 0) {
+            console.log(`Edges selected, loading multi-edge table for ${edgesToFilterBy.length} edges.`);
+            loadSidebarMultiEdgeTable(edgesToFilterBy, 1);
+            sidebarInfoDiv.style.display = 'none';
+        } else {
+            console.log("No specific nodes or edges selected. Showing table for current cluster context.");
+            if (currentSidebarTableClusterId) {
+                loadSidebarClusterTable(currentSidebarTableClusterId, 1);
+            } else if (addedSidebarClusters.size > 0) {
+                const firstClusterId = addedSidebarClusters.values().next().value;
+                if (firstClusterId) loadSidebarClusterTable(firstClusterId, 1);
+            } else {
+                sidebarTableContainer.innerHTML = '<p id="sidebar-table-no-results" style="display: none; text-align: center; padding: 10px; color: #6c757d;">No rows match your search criteria.</p>';
+                sidebarTableContainer.style.display = 'block';
+                showSidebarLoading(false, false);
+                sidebarInfoDiv.style.display = (!sidebarCy || sidebarCy.elements().length === 0) ? 'block' : 'none';
+            }
+        }
+    }
+
     function bindSidebarGraphEvents() {
         if (!sidebarCy) return;
 
@@ -1459,17 +1519,15 @@
         sidebarCy.removeListener('click');
         sidebarCy.removeListener('tap');
 
-        // Replace the existing 'mouseover' 'node' listener within bindSidebarGraphEvents
         sidebarCy.on('mouseover', 'node', (event) => {
             const node = event.target;
-            const nodeData = node.data(); // Get node data
-
-            // Calculate packets in/out from connected edges
+            const nodeData = node.data();
             let packetsIn = 0;
             let packetsOut = 0;
+
             node.connectedEdges().forEach(edge => {
                 const edgeData = edge.data();
-                const count = edgeData.processCount || 0; // Default to 0 if undefined
+                const count = edgeData.processCount || 0;
                 if (edgeData.target === nodeData.id) {
                     packetsIn += count;
                 }
@@ -1478,39 +1536,170 @@
                 }
             });
 
-            // Update tooltip content to include the counts
+            let tooltipHTML = `Node: ${nodeData.label || nodeData.id}<br>` +
+                        `Class: ${nodeData.Classification || 'N/A'}<br>` +
+                        `Cluster: ${nodeData.clusterID}<br>` +
+                        `Packets In: ${packetsIn}<br>` +
+                        `Packets Out: ${packetsOut}`;
+
+            if (nodeData.InvolvedAttackTypes && nodeData.InvolvedAttackTypes.length > 0) {
+                tooltipHTML += `<br><strong style="color:crimson;">Node Attacks: ${nodeData.InvolvedAttackTypes.join(', ')}</strong>`;
+            }
+
+            if (nodeData.clusterAnomaly === 'anomaly' && nodeData.clusterAttackType) {
+                tooltipHTML += `<br><strong style="color:red;">Cluster Attack Type: ${nodeData.clusterAttackType}</strong>`;
+            }
+
             tooltip.style("display", "block")
-                   .html(
-                       `Node: ${nodeData.label || nodeData.id}<br>` +
-                       `Class: ${nodeData.Classification || 'N/A'}<br>` +
-                       `Cluster: ${nodeData.clusterID}<br>` +
-                       `Packets In: ${packetsIn}<br>` + // Added line
-                       `Packets Out: ${packetsOut}`     // Added line
-                    )
-                   .style("left", (event.originalEvent.pageX + 10) + "px")
-                   .style("top", (event.originalEvent.pageY + 10) + "px");
+                .html(tooltipHTML)
+                .style("left", (event.originalEvent.pageX + 10) + "px")
+                .style("top", (event.originalEvent.pageY + 10) + "px");
         });
+
         sidebarCy.on('mouseover', 'edge', (event) => {
             const edge = event.target;
+            const edgeData = edge.data();
+
+            let edgeTooltipHTML = `Src: ${edgeData.source}<br>` +
+                                `Dst: ${edgeData.target}<br>` +
+                                `Proto: ${edgeData.Protocol}<br>` +
+                                `Count: ${edgeData.processCount || 0}<br>` +
+                                `Cluster: ${edgeData.clusterID}`;
+
+            if (edgeData.AttackType && edgeData.AttackType !== "N/A") {
+                edgeTooltipHTML += `<br><strong style="color:crimson;">Edge Attack: ${edgeData.AttackType}</strong>`;
+            }
+
             tooltip.style("display", "block")
-                   .html(`Src: ${edge.data('source')}<br>Dst: ${edge.data('target')}<br>Proto: ${edge.data('Protocol')}<br>Count: ${edge.data('processCount') || 0}<br>Cluster: ${edge.data('clusterID')}`)
-                   .style("left", (event.originalEvent.pageX + 10) + "px")
-                   .style("top", (event.originalEvent.pageY + 10) + "px");
+                .html(edgeTooltipHTML)
+                .style("left", (event.originalEvent.pageX + 10) + "px")
+                .style("top", (event.originalEvent.pageY + 10) + "px");
         });
+
         sidebarCy.on('mouseout', 'node, edge', () => {
             tooltip.style("display", "none");
         });
 
+        sidebarCy.on('click', 'node', (event) => {
+            const clickedNode = event.target;
+            const clickedNodeId = clickedNode.id();
+
+            if (selectedSidebarEdges.size > 0) {
+                selectedSidebarEdges.forEach(edgeKey => {
+                    const parts = edgeKey.split('|');
+                    const edgeSelector = `edge[source = "${parts[0]}"][target = "${parts[1]}"][Protocol = "${parts[2]}"]`;
+                    const edge = sidebarCy.elements(edgeSelector);
+                    if (edge.length > 0) {
+                        const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                        const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                        edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                        edge.unselect();
+                    }
+                });
+                selectedSidebarEdges.clear();
+            }
+
+            if (selectedSidebarNodes.has(clickedNodeId)) {
+                selectedSidebarNodes.delete(clickedNodeId);
+                const originalNodeColor = clickedNode.scratch('_originalColor') || clusterHighlightColors.get(clickedNode.data('clusterID')) || '#888';
+                clickedNode.style('background-color', originalNodeColor);
+                clickedNode.unselect();
+                console.log(`Node ${clickedNodeId} deselected.`);
+
+                clickedNode.connectedEdges().forEach(edge => {
+                    const sourceId = edge.source().id();
+                    const targetId = edge.target().id();
+                    let otherNodeIsSelected = false;
+
+                    if (sourceId === clickedNodeId && selectedSidebarNodes.has(targetId)) {
+                        otherNodeIsSelected = true;
+                    } else if (targetId === clickedNodeId && selectedSidebarNodes.has(sourceId)) {
+                        otherNodeIsSelected = true;
+                    }
+
+                    if (otherNodeIsSelected) {
+                        const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                        edge.style({
+                            'line-color': SELECTED_EDGE_COLOR,
+                            'target-arrow-color': SELECTED_EDGE_COLOR,
+                            'width': originalWidth,
+                            'z-index': SELECTED_EDGE_ZINDEX
+                        });
+                    } else {
+                        const edgeKey = `${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`;
+                        if (!selectedSidebarEdges.has(edgeKey)) {
+                            const originalEdgeColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                            const originalEdgeWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                            edge.style({
+                                'line-color': originalEdgeColor,
+                                'target-arrow-color': originalEdgeColor,
+                                'width': originalEdgeWidth,
+                                'z-index': 1
+                            });
+                        }
+                    }
+                });
+
+            } else {
+                selectedSidebarNodes.add(clickedNodeId);
+                if (!clickedNode.scratch('_originalColor')) {
+                    clickedNode.scratch('_originalColor', clickedNode.style('background-color'));
+                }
+                clickedNode.style('background-color', SELECTED_NODE_COLOR);
+                clickedNode.select();
+                console.log(`Node ${clickedNodeId} selected.`);
+
+                clickedNode.connectedEdges().forEach(edge => {
+                    if (!edge.scratch('_originalWidth')) {
+                        edge.scratch('_originalWidth', edge.style('width'));
+                    }
+                    if (!edge.scratch('_protocolColor')) {
+                        edge.scratch('_protocolColor', edge.style('line-color'));
+                    }
+                    const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                    edge.style({
+                        'line-color': SELECTED_EDGE_COLOR,
+                        'target-arrow-color': SELECTED_EDGE_COLOR,
+                        'width': originalWidth,
+                        'z-index': SELECTED_EDGE_ZINDEX
+                    });
+                });
+            }
+            updateSidebarTableForSelectedNodesAndEdges();
+            sidebarInfoDiv.style.display = 'none';
+        });
+
         sidebarCy.on('click', 'edge', (event) => {
-             if (selectedNodeId) {
-                console.log("Node selection active, ignoring individual edge click.");
-                return;
-             }
             const edge = event.target;
             const source = edge.data('source');
             const target = edge.data('target');
             const protocol = edge.data('Protocol');
             const edgeKey = `${source}|${target}|${protocol}`;
+
+            if (selectedSidebarNodes.size > 0) {
+                selectedSidebarNodes.forEach(nodeId => {
+                    const node = sidebarCy.getElementById(nodeId);
+                    if (node.length > 0) {
+                        const originalNodeColor = node.scratch('_originalColor') || clusterHighlightColors.get(node.data('clusterID')) || '#888';
+                        node.style('background-color', originalNodeColor);
+                        node.unselect();
+                        node.connectedEdges().forEach(connEdge => {
+                            const connEdgeKey = `${connEdge.data('source')}|${connEdge.data('target')}|${connEdge.data('Protocol')}`;
+                            if (!selectedSidebarEdges.has(connEdgeKey) && connEdgeKey !== edgeKey) {
+                                const originalEdgeColor = connEdge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                                const originalEdgeWidth = connEdge.scratch('_originalWidth') || calculateEdgeWidth(connEdge.data('processCount'));
+                                connEdge.style({
+                                    'line-color': originalEdgeColor,
+                                    'target-arrow-color': originalEdgeColor,
+                                    'width': originalEdgeWidth,
+                                    'z-index': 1
+                                });
+                            }
+                        });
+                    }
+                });
+                selectedSidebarNodes.clear();
+            }
 
             if (selectedSidebarEdges.has(edgeKey)) {
                 selectedSidebarEdges.delete(edgeKey);
@@ -1520,92 +1709,72 @@
                 edge.unselect();
             } else {
                 selectedSidebarEdges.add(edgeKey);
-                const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount')); // Get original width
+                const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
                 edge.style({
                     'line-color': SELECTED_EDGE_COLOR,
                     'target-arrow-color': SELECTED_EDGE_COLOR,
-                    'width': originalWidth, // Use original width
+                    'width': originalWidth,
                     'z-index': SELECTED_EDGE_ZINDEX
                 });
                 edge.select();
             }
-            updateSidebarTableForSelectedEdges();
+            updateSidebarTableForSelectedNodesAndEdges();
         });
 
-        sidebarCy.on('click', 'node', (event) => {
-            const clickedNode = event.target;
-            const clickedNodeId = clickedNode.id();
+        sidebarCy.on('tap', function(event){
+            if (event.target === sidebarCy) {
+                let deselectedSomething = false;
 
-            if (selectedSidebarEdges.size > 0) {
-                sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
-                .forEach(edge => {
-                    const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
-                    const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
-                    edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
-                    edge.unselect();
-                });
-                selectedSidebarEdges.clear();
-            }
-
-            if (selectedNodeId === clickedNodeId) {
-                deselectCurrentNode();
-                 if (currentSidebarTableClusterId) { loadSidebarClusterTable(currentSidebarTableClusterId, 1); }
-                 else { updateSidebarTableForSelectedEdges(); }
-
-            } else {
-                deselectCurrentNode();
-
-                if (!clickedNode.scratch('_originalColor')) {
-                    clickedNode.scratch('_originalColor', clickedNode.style('background-color'));
-                }
-                clickedNode.style('background-color', SELECTED_NODE_COLOR);
-                clickedNode.connectedEdges().forEach(edge => {
-                    if(!edge.scratch('_originalWidth')){
-                        edge.scratch('_originalWidth', edge.style('width'));
-                    }
-                    if(!edge.scratch('_protocolColor')){
-                        edge.scratch('_protocolColor', edge.style('line-color'));
-                    }
-                    const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount')); // Get original width
-                    edge.style({
-                        'line-color': SELECTED_EDGE_COLOR,
-                        'target-arrow-color': SELECTED_EDGE_COLOR,
-                        'width': originalWidth, // Use original width
-                        'z-index': SELECTED_EDGE_ZINDEX
+                if (selectedSidebarNodes.size > 0) {
+                    selectedSidebarNodes.forEach(nodeId => {
+                        const node = sidebarCy.getElementById(nodeId);
+                        if (node.length > 0) {
+                            const originalColor = node.scratch('_originalColor') || clusterHighlightColors.get(node.data('clusterID')) || '#888';
+                            node.style('background-color', originalColor);
+                            node.unselect();
+                            node.connectedEdges().forEach(edge => {
+                                const edgeKey = `${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`;
+                                if (!selectedSidebarEdges.has(edgeKey)) {
+                                    const originalEdgeColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                                    const originalEdgeWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                                    edge.style({
+                                        'line-color': originalEdgeColor,
+                                        'target-arrow-color': originalEdgeColor,
+                                        'width': originalEdgeWidth,
+                                        'z-index': 1
+                                    });
+                                }
+                            });
+                        }
                     });
-                });
-                 clickedNode.select();
-                selectedNodeId = clickedNodeId;
-                console.log(`Node ${selectedNodeId} and its edges selected.`);
-                updateSidebarTableForSelectedEdges();
-            }
-             sidebarInfoDiv.style.display = 'none';
-        });
+                    selectedSidebarNodes.clear();
+                    deselectedSomething = true;
+                    console.log("Node selections cleared by tapping sidebar background.");
+                }
 
-         sidebarCy.on('tap', function(event){
-             if (event.target === sidebarCy) {
-                 let deselectedSomething = false;
-                 if(selectedNodeId){
-                      deselectCurrentNode();
-                      deselectedSomething = true;
-                 }
-                 if (selectedSidebarEdges.size > 0) {
-                      sidebarCy.edges().filter(edge => selectedSidebarEdges.has(`${edge.data('source')}|${edge.data('target')}|${edge.data('Protocol')}`))
-                      .forEach(edge => {
-                          const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
-                          const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
-                          edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
-                          edge.unselect();
-                      });
-                      selectedSidebarEdges.clear();
-                      deselectedSomething = true;
-                 }
-                 if (deselectedSomething) {
-                    if (currentSidebarTableClusterId) { loadSidebarClusterTable(currentSidebarTableClusterId, 1); }
-                    else { updateSidebarTableForSelectedEdges(); }
-                 }
-             }
-         });
+                if (selectedSidebarEdges.size > 0) {
+                    selectedSidebarEdges.forEach(edgeKey => {
+                        const parts = edgeKey.split('|');
+                        const edgeSelector = `edge[source = "${parts[0]}"][target = "${parts[1]}"][Protocol = "${parts[2]}"]`;
+                        const edge = sidebarCy.elements(edgeSelector);
+                        if (edge.length > 0) {
+                            const originalColor = edge.scratch('_protocolColor') || DEFAULT_UNKNOWN_COLOR;
+                            const originalWidth = edge.scratch('_originalWidth') || calculateEdgeWidth(edge.data('processCount'));
+                            edge.style({ 'line-color': originalColor, 'target-arrow-color': originalColor, 'width': originalWidth, 'z-index': 1 });
+                            edge.unselect();
+                        }
+                    });
+                    selectedSidebarEdges.clear();
+                    deselectedSomething = true;
+                    console.log("Edge selections cleared by tapping sidebar background.");
+                }
+
+                if (deselectedSomething) {
+                    updateSidebarTableForSelectedNodesAndEdges();
+                }
+                sidebarInfoDiv.style.display = (!sidebarCy || sidebarCy.elements().length === 0) ? 'block' : 'none';
+            }
+        });
     }
 
     function applySidebarSizeControls() {
@@ -1614,30 +1783,19 @@
             return;
         }
 
-        // --- Define Fixed Target Ranges ---
-        const targetMinNS = 10; // Fixed minimum node size
-        const targetMaxNS = 30; // Fixed maximum node size
-        const targetMinEW = 1;  // Fixed minimum edge width
-        const targetMaxEW = 8;  // Fixed maximum edge width
-        // --- End Fixed Target Ranges ---
-
-        // --- Ignore Input Fields (Optional: Remove corresponding HTML later) ---
-        /*
-        // These values are no longer read as the ranges are fixed above.
+        // --- Read values from Input Fields ---
         const minNS_input = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMin').value) || 10, 1);
-        const maxNS_input = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMax').value) || 40, minNS_input + 1);
+        const maxNS_input = Math.max(parseFloat(document.getElementById('sidebarNodeSizeMax').value) || 30, minNS_input + 1); // Ensured default max is greater than default min
         const minEW_input = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMin').value) || 1, 0.1);
-        const maxEW_input = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMax').value) || 6, minEW_input + 0.1);
-        */
-        // --- End Ignore Input Fields ---
+        const maxEW_input = Math.max(parseFloat(document.getElementById('sidebarEdgeWidthMax').value) || 8, minEW_input + 0.1); // Ensured default max is greater than default min
+        // --- End Read values from Input Fields ---
 
-        console.log(`Applying sidebar sizes: Node(${targetMinNS}-${targetMaxNS}), Edge(${targetMinEW}-${targetMaxEW}) using normalization.`);
+        console.log(`Applying sidebar sizes: Node(${minNS_input}-${maxNS_input}), Edge(${minEW_input}-${maxEW_input}) using normalization.`);
 
         sidebarCy.batch(() => {
             // --- Node Size Normalization ---
             const nodes = sidebarCy.nodes();
             if (nodes.length > 0) {
-                // Use NodeWeight if available, otherwise fallback to degree
                 const nodeWeights = nodes.map(n => n.data('NodeWeight') ?? n.degree());
                 const actualMinNodeWeight = Math.min(...nodeWeights);
                 const actualMaxNodeWeight = Math.max(...nodeWeights);
@@ -1645,24 +1803,20 @@
 
                 nodes.forEach(n => {
                     const weight = n.data('NodeWeight') ?? n.degree();
-                    let normalizedWeight = 0; // Default for single node or all same weight
+                    let normalizedWeight = 0;
                     if (nodeWeightRange > 0) {
                         normalizedWeight = (weight - actualMinNodeWeight) / nodeWeightRange;
                     } else if (nodes.length > 0) {
-                        // If range is 0 but nodes exist, all have same weight. Assign mid-range size? Or min? Let's use min.
-                         normalizedWeight = 0; // Map to min size if all weights are identical
+                         normalizedWeight = 0;
                     }
 
-                    // Scale normalized weight (0-1) to target range
-                    let size = targetMinNS + normalizedWeight * (targetMaxNS - targetMinNS);
-                    size = Math.max(targetMinNS, Math.min(size, targetMaxNS)); // Clamp just in case
+                    // Use input values for scaling
+                    let size = minNS_input + normalizedWeight * (maxNS_input - minNS_input);
+                    size = Math.max(minNS_input, Math.min(size, maxNS_input)); 
 
-                    // Apply style only if node is not currently selected
                     if(n.id() !== selectedNodeId) {
                         n.style({ 'width': size, 'height': size });
                     }
-                    // Store the calculated size in scratchpad if needed elsewhere (optional)
-                    // n.scratch('_calculatedSize', size);
                 });
             }
             // --- End Node Size Normalization ---
@@ -1670,48 +1824,40 @@
             // --- Edge Width Normalization ---
             const edges = sidebarCy.edges();
             if (edges.length > 0) {
-                const edgeCounts = edges.map(e => e.data('processCount') || 1); // Use 1 as min count if undefined
-                const actualMinCount = Math.max(1, Math.min(...edgeCounts)); // Ensure min count is at least 1
-                const actualMaxCount = Math.max(actualMinCount, Math.max(...edgeCounts)); // Ensure max is >= min
+                const edgeCounts = edges.map(e => e.data('processCount') || 1);
+                const actualMinCount = Math.max(1, Math.min(...edgeCounts));
+                const actualMaxCount = Math.max(actualMinCount, Math.max(...edgeCounts));
                 const countRange = (actualMaxCount - actualMinCount);
 
                 edges.forEach(e => {
                     const count = e.data('processCount') || 1;
-                    let normalizedCount = 0; // Default for single edge or all same count
+                    let normalizedCount = 0;
                      if (countRange > 0) {
-                        // Ensure count is within the actual observed range before normalizing
                         const clampedCount = Math.max(actualMinCount, Math.min(count, actualMaxCount));
                         normalizedCount = (clampedCount - actualMinCount) / countRange;
                     } else if (edges.length > 0) {
-                        // If range is 0, all edges have the same count. Assign min width.
-                        normalizedCount = 0; // Map to min width
+                        normalizedCount = 0;
                     }
 
-                    // Scale normalized count (0-1) to target range
-                    let width = targetMinEW + normalizedCount * (targetMaxEW - targetMinEW);
-                    width = Math.max(targetMinEW, Math.min(width, targetMaxEW)); // Clamp
+                    // Use input values for scaling
+                    let width = minEW_input + normalizedCount * (maxEW_input - minEW_input);
+                    width = Math.max(minEW_input, Math.min(width, maxEW_input)); 
 
-                    // Store the calculated width for non-selected state
                     e.scratch('_originalWidth', width);
 
-                    // Apply style, considering selection state
                     const edgeKey = `${e.data('source')}|${e.data('target')}|${e.data('Protocol')}`;
                     const nodeIsSelected = selectedNodeId && (e.source().id() === selectedNodeId || e.target().id() === selectedNodeId);
                     const edgeIsSelected = selectedSidebarEdges.has(edgeKey);
 
                     if (!nodeIsSelected && !edgeIsSelected) {
-                        e.style('width', width); // Apply calculated width
+                        e.style('width', width);
                     } else {
-                         // Keep selected style if edge or connected node is selected
                          e.style('width', SELECTED_EDGE_WIDTH);
                     }
                 });
             }
             // --- End Edge Width Normalization ---
         }); // End batch update
-
-        // Re-apply layout to adjust spacing if needed after size changes (optional)
-        // applySidebarLayout();
     }
 
     function updateSidebarTableForSelectedEdges() {
@@ -1969,18 +2115,14 @@
                 protocolFilter: document.getElementById('protocolFilter').value.trim().toLowerCase(),
                 entropyMin: document.getElementById('entropyMinFilter').value,
                 entropyMax: document.getElementById('entropyMaxFilter').value,
-                isLargePacketOnly: document.getElementById('isLargePacketFilter').checked,
-                isSuspiciousAckOnly: document.getElementById('isSuspiciousAckFilter').checked,
                 minSourceAmt: document.getElementById('minSourceAmtFilter').value,
                 maxSourceAmt: document.getElementById('maxSourceAmtFilter').value,
                 minDestinationAmt: document.getElementById('minDestinationAmtFilter').value,
                 maxDestinationAmt: document.getElementById('maxDestinationAmtFilter').value
             };
-             // console.log("updateHeatmap - Base Filters:", filterParamsBase); // Optional: Keep for debugging filters
 
             Promise.all(metrics.map(m => {
                 const filterParams = { ...filterParamsBase, metric: m.value };
-                // console.log(`updateHeatmap - Fetching metric: ${m.label}`); // Optional: Keep for debugging fetch calls
                 return fetch(`${API_BASE_URL}/filter_and_aggregate`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -1988,7 +2130,6 @@
                     })
                     .then(response => response.ok ? response.json() : Promise.reject(`Failed ${m.label} (${response.status})`))
                     .then(data => {
-                         // console.log(`updateHeatmap - Received data for metric: ${m.label}`, data ? data.length : 'null/undefined'); // Optional: Log data length
                          return { metric: m.label, pivotData: data }
                     })
                     .catch(error => {
@@ -2032,6 +2173,29 @@
                 reject(error); // Reject the promise on error
             });
         }); // End Promise wrapper
+    }
+
+    function updateRowOrderSelectState() {
+        const dendrogramSortSelect = document.getElementById('dendrogramSortMetricSelect');
+        const rowOrderSelect = document.getElementById('rowOrderSelect');
+        const rowOrderLabel = document.querySelector('label[for="rowOrderSelect"]');
+
+        if (!dendrogramSortSelect || !rowOrderSelect || !rowOrderLabel) {
+            console.warn("Could not find all elements for updating rowOrderSelect state.");
+            return;
+        }
+
+        if (dendrogramSortSelect.value === 'Default') {
+            rowOrderSelect.disabled = true;
+            rowOrderSelect.style.opacity = '0.5';
+            rowOrderSelect.style.pointerEvents = 'none';
+            rowOrderLabel.style.opacity = '0.5';
+        } else {
+            rowOrderSelect.disabled = false;
+            rowOrderSelect.style.opacity = '';
+            rowOrderSelect.style.pointerEvents = '';
+            rowOrderLabel.style.opacity = '';
+        }
     }
 
     function loadSidebarClusterTable(clusterID, page) {
@@ -2321,10 +2485,9 @@
         // Recenter is handled by the fullscreenchange listener after this
      }
 
-     document.addEventListener('DOMContentLoaded', async () => { // Add async keyword
+     document.addEventListener('DOMContentLoaded', async () => {
         tooltip = d3.select("#tooltip");
 
-        // --- Element References ---
         const fileInput = document.getElementById('fileInput');
         const downloadButton = document.getElementById('downloadButton');
         const applyFiltersBtn = document.getElementById('applyFiltersBtn');
@@ -2350,22 +2513,22 @@
         const sidebarLayoutSelect = document.getElementById('sidebarLayoutSelect');
         const applyThresholdBtn = document.getElementById('applyThresholdBtn');
         const reorderTreeCheckbox = document.getElementById('reorderTreeCheckbox');
-        const resetGroupingBtn = document.getElementById('resetGroupingBtn'); // Get reset button
+        const resetGroupingBtn = document.getElementById('resetGroupingBtn');
 
-        // --- Initial Setup Calls ---
         try {
-            showLoading(); // Show overall loading indicator
-            updateLegend(); // Run non-dependent updates first
+            showLoading();
+            updateLegend();
             console.log("Initial load: Fetching heatmap data...");
-            await updateHeatmap(); // Wait for heatmap data
+            await updateHeatmap();
             console.log("Initial load: Heatmap data fetched.");
             console.log("Initial load: Loading inline dendrogram...");
-            await loadInlineDendrogram(); // This sets originalTreeData & resets grouping
+            await loadInlineDendrogram();
             console.log("Initial load: Dendrogram loaded.");
             console.log("Initial load: Updating time info...");
-            await updateTimeInfoDisplay(); // Wait for time info
+            await updateTimeInfoDisplay();
             console.log("Initial load: Time info updated.");
-            updateControlsState(); // Set initial button disabled states
+            updateControlsState();
+            updateRowOrderSelectState(); // Set initial state for rowOrderSelect
         } catch (error) {
             console.error("Error during initial page load sequence:", error);
             const dendroCard = document.getElementById('dendrogramCard');
@@ -2376,12 +2539,9 @@
                 alert(`Error loading initial data: ${error.message || 'Unknown error'}. Please try uploading a CSV file.`);
             }
         } finally {
-            hideLoading(); // Always hide loading indicator
+            hideLoading();
         }
 
-        // --- Event Listeners ---
-
-        // File Input & Processing
         if(fileInput) {
             fileInput.addEventListener('change', function(event) {
                 const file = event.target.files[0];
@@ -2406,47 +2566,45 @@
                         })
                         .then(async (confirmationData) => {
                             console.log('CSV processed successfully:', confirmationData.message);
-                            protocolColorMap = {}; // Reset colors for new data
+                            protocolColorMap = {};
                             try {
-                                updateLegend(); // Update legend first
-                                await updateHeatmap(); // Fetch new heatmap data
-                                // Load dendrogram - this sets originalTreeData and resets grouping state
+                                updateLegend();
+                                await updateHeatmap();
                                 await loadInlineDendrogram();
-                                await updateTimeInfoDisplay(); // Update time info for new file
-                                clearSidebarVisualization(); // Clear previous selections/graph
-                                toggleSidebar(false); // Ensure sidebar is closed
-                                // Grouping state reset is handled inside loadInlineDendrogram
+                                await updateTimeInfoDisplay();
+                                clearSidebarVisualization();
+                                toggleSidebar(false);
                                 console.log("Grouping state reset handled within loadInlineDendrogram after file upload.");
-                                // Trigger visual update of threshold bar based on reset slider value
                                 if (thresholdSlider && window.lastTreeRoot) {
                                      requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
                                 }
-                                updateControlsState(); // Update buttons after load
+                                updateControlsState();
+                                updateRowOrderSelectState(); // Ensure state is correct after load
                             } catch (loadError) {
                                 console.error("Error loading visualizations after file processing:", loadError);
                                 alert(`Error updating display after file processing: ${loadError.message}`);
                                 const dendroCardElem = document.getElementById('dendrogramCard');
                                 if(dendroCardElem) dendroCardElem.innerHTML = '<p style="color:red; padding: 20px;">Error updating display.</p>';
                             } finally {
-                                hideLoading(); // Hide loading indicator
+                                hideLoading();
                             }
                         })
                         .catch(error => {
-                            hideLoading(); // Hide loading on error
+                            hideLoading();
                             console.error('Error processing file or updating display:', error);
                             alert(`Error: ${error.message}`);
-                            // Clear potentially stale visualizations
                             const dendroCardElem = document.getElementById('dendrogramCard');
                             if(dendroCardElem) dendroCardElem.innerHTML = '<p style="color: red; text-align: center;">Could not process CSV data or update display.</p>';
                             const timeInfoSpanElem = document.getElementById('timeInfoSpan');
                             if(timeInfoSpanElem) timeInfoSpanElem.textContent = '';
-                            window.originalTreeData = null; // Clear stored data
+                            window.originalTreeData = null;
                             window.lastTreeData = null;
                             window.lastTreeRoot = null;
                             window.fullHeatmapData = {};
-                            updateLegend(); // Reset legend
-                            clearSidebarVisualization(); // Clear sidebar
-                            updateControlsState(); // Ensure buttons are disabled if data fails
+                            updateLegend();
+                            clearSidebarVisualization();
+                            updateControlsState();
+                            updateRowOrderSelectState(); // Ensure state is correct after error
                          });
                     };
                     reader.onerror = function(e) {
@@ -2456,15 +2614,12 @@
                      };
                     reader.readAsText(file);
                 }
-                // Reset file input to allow re-uploading the same file
                 event.target.value = null;
             });
         } else { console.error("File input not found."); }
 
-        // Download Button
         if(downloadButton) {
             downloadButton.addEventListener('click', function() {
-                // Check if original data exists (as proxy for loaded data)
                 if (window.originalTreeData) {
                      window.location.href = `${API_BASE_URL}/download_csv`;
                 } else {
@@ -2473,7 +2628,6 @@
             });
         } else { console.error("Download button not found."); }
 
-        // Heatmap Filters Button
         if(applyFiltersBtn) {
             applyFiltersBtn.addEventListener('click', async () => {
                 showLoading();
@@ -2481,14 +2635,14 @@
                     console.log("Apply Filters: Updating heatmap data...");
                     await updateHeatmap();
                     console.log("Apply Filters: Redrawing dendrogram heatmap with updated data...");
-                    if (window.lastTreeData) { // Use lastTreeData to redraw
+                    if (window.lastTreeData) {
                         showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
                     } else {
                         console.warn("Cannot redraw dendrogram heatmap after filter: Tree data not loaded.");
-                        await loadInlineDendrogram(); // Attempt to load if missing
+                        await loadInlineDendrogram();
                     }
                     highlightTreeClusters(new Set(clusterHighlightColors.keys()));
-                    if (thresholdSlider && window.lastTreeRoot) { // Update threshold bar
+                    if (thresholdSlider && window.lastTreeRoot) {
                          requestAnimationFrame(() => { thresholdSlider.dispatchEvent(new Event('input')); });
                     }
                 } catch (error) {
@@ -2498,12 +2652,10 @@
             });
         } else { console.error("Apply Filters button not found."); }
 
-        // Sidebar Toggle
         if(sidebarToggleBtn) {
             sidebarToggleBtn.addEventListener('click', () => toggleSidebar());
         } else { console.error("Sidebar toggle button not found."); }
 
-        // Sidebar Reset Button
         if(resetSidebarBtn) {
             resetSidebarBtn.addEventListener('click', () => {
                 console.log("Reset Sidebar Button clicked.");
@@ -2516,12 +2668,10 @@
             console.error("Reset Sidebar Button not found!");
         }
 
-        // Sidebar Fullscreen Button
         if (sidebarFullscreenBtn) {
             sidebarFullscreenBtn.addEventListener('click', toggleSidebarFullscreen);
         } else { console.error("Sidebar fullscreen button not found!"); }
 
-        // Fullscreen Change Listener
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isSidebarFullscreen) {
                 console.log("Fullscreen exited via event listener.");
@@ -2539,17 +2689,14 @@
             }
         });
 
-        // Sidebar Table Row Click
         if (sidebarTableContainer) {
             sidebarTableContainer.addEventListener('click', handleSidebarTableRowClick);
         } else { console.error("Sidebar table container not found!"); }
 
-        // Sidebar Table Search Input
         if (sidebarSearchInput) {
             sidebarSearchInput.addEventListener('input', filterSidebarTable);
         } else { console.error("Sidebar table search input not found!"); }
 
-        // Sidebar Pagination Button
         if(sidebarGoPageBtn) {
              sidebarGoPageBtn.addEventListener('click', function () {
                 let pageInput = document.getElementById('sidebarCurrentPageInput');
@@ -2574,40 +2721,35 @@
             });
         } else { console.error("Sidebar Go Page button not found."); }
 
-        // Sidebar Layout Selector
         if(sidebarLayoutSelect) {
             sidebarLayoutSelect.addEventListener('change', applySidebarLayout);
         } else { console.error("Sidebar layout select not found."); }
 
-        // Sidebar Size Controls
         if(sidebarNodeSizeMin) sidebarNodeSizeMin.addEventListener('input', applySidebarSizeControls);
         if(sidebarNodeSizeMax) sidebarNodeSizeMax.addEventListener('input', applySidebarSizeControls);
         if(sidebarEdgeWidthMin) sidebarEdgeWidthMin.addEventListener('input', applySidebarSizeControls);
         if(sidebarEdgeWidthMax) sidebarEdgeWidthMax.addEventListener('input', applySidebarSizeControls);
 
-        // --- Dendrogram Listeners ---
-
-        // Metric Select for Heatmap/Tree Ordering
         if (metricSelect) {
             metricSelect.addEventListener('change', () => {
-                if (window.lastTreeData) { // Use lastTreeData as it reflects current view
+                updateRowOrderSelectState();
+                if (window.lastTreeData) {
                     showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
                      highlightTreeClusters(new Set(clusterHighlightColors.keys()));
-                     requestAnimationFrame(() => { // Update threshold bar
+                     requestAnimationFrame(() => {
                          if (thresholdSlider) thresholdSlider.dispatchEvent(new Event('input'));
                      });
                 } else { console.warn("Cannot redraw dendrogram on metric change: No tree data available."); }
             });
         } else { console.error("Dendrogram sort select not found."); }
 
-        // Reorder Tree Checkbox
         if (reorderTreeCheckbox) {
             reorderTreeCheckbox.addEventListener('change', () => {
-                if (window.lastTreeData) { // Use lastTreeData for redraw
+                if (window.lastTreeData) {
                     console.log(`Reorder checkbox changed to: ${reorderTreeCheckbox.checked}, redrawing dendrogram.`);
                     showInlineDendrogram(window.lastTreeData, currentDendrogramHeight);
                      highlightTreeClusters(new Set(clusterHighlightColors.keys()));
-                     requestAnimationFrame(() => { // Update threshold bar
+                     requestAnimationFrame(() => {
                          if (thresholdSlider) thresholdSlider.dispatchEvent(new Event('input'));
                      });
                 } else {
@@ -2616,24 +2758,19 @@
             });
         } else { console.error("Reorder tree checkbox not found."); }
 
-        // Threshold Slider Listener (Visual Updates Only)
         if (thresholdSlider && thresholdValueSpan) {
             thresholdSlider.addEventListener('input', () => {
-                const physicalValue = parseInt(thresholdSlider.value, 10); // Slider's actual value (0-100)
-                const currentDisplayMax = window.lastAppliedThreshold;    // The effective 'max' for display (e.g., 100, or 70 after an apply)
-
-                // Calculate the scaled value for display
+                const physicalValue = parseInt(thresholdSlider.value, 10);
+                const currentDisplayMax = window.lastAppliedThreshold;
                 const scaledDisplayValue = Math.round((physicalValue / 100) * currentDisplayMax);
                 thresholdValueSpan.textContent = scaledDisplayValue + '%';
 
-                // Dendrogram visual bar and graying out nodes - this remains tied to the physical slider position
-                // to keep the "slider functionality" (visual effect on dendrogram) the same.
                 const svg = d3.select("#inlineDendrogramSvg");
                 const svgNode = svg.node();
                 if (!svgNode) return;
                 const svgContent = svg.select("g");
                 const root = window.lastTreeRoot;
-                const layoutHeight = window.currentD3LayoutHeight; // This is the height for the 0-100% scale of the tree
+                const layoutHeight = window.currentD3LayoutHeight;
                 const treeLayoutWidth = window.currentLayoutWidth;
 
                 if (!layoutHeight || layoutHeight <= 0 || !root || svgContent.empty() || treeLayoutWidth === undefined) {
@@ -2641,8 +2778,6 @@
                     return;
                 }
 
-                // The bar's position is determined by the physical slider value (0-100)
-                // This means the bar visually represents cutting the tree from its 0% to 100% height potential.
                 const physicalPercentageForBar = physicalValue / 100;
                 const thresholdLayoutYForBar = layoutHeight * physicalPercentageForBar;
 
@@ -2654,10 +2789,8 @@
                     }
                 });
 
-                // Update visual threshold bar position
                 try {
                     const transform = d3.zoomTransform(svgNode);
-                    // The bar's Y is relative to the top of the SVG content after zoom/pan
                     const thresholdVisualY = ((thresholdLayoutYForBar + margin.top) * transform.k) + transform.y;
                     const barX1 = margin.left * transform.k + transform.x;
                     const barX2 = (margin.left + treeLayoutWidth) * transform.k + transform.x;
@@ -2672,7 +2805,6 @@
                 }
             });
 
-            // Trigger initial visual state based on default/current slider value
             requestAnimationFrame(() => {
                 if (window.lastTreeRoot) { thresholdSlider.dispatchEvent(new Event('input')); }
             });
@@ -2680,28 +2812,20 @@
             console.error("Threshold slider or value span not found for input event listener!");
         }
 
-        // Apply Threshold Button Listener
         if (applyThresholdBtn) {
              applyThresholdBtn.addEventListener('click', applyThresholdGrouping);
         } else {
              console.error("Apply Threshold button not found!");
         }
 
-        // Reset Grouping Button Listener
         if (resetGroupingBtn) {
             resetGroupingBtn.addEventListener('click', resetGroupingAndRedraw);
         } else {
             console.error("Reset Grouping button not found!");
         }
+    });
 
-        // Listeners for resolution, reset zoom buttons are handled by onclick attributes in HTML
-
-    }); // End DOMContentLoaded
-
-    // --- BEGIN Dendrogram JS Functions ---
     function showInlineDendrogram(data, svgH = 400) {
-        console.log(`--- Debug showInlineDendrogram (Start) ---`);
-
         const containerDiv = document.getElementById("inline-dendrogram-container");
         const dendrogramCard = document.getElementById('dendrogramCard');
         const treeControls = document.getElementById('treeControls');
@@ -2710,7 +2834,6 @@
         const treeInfoSpan = document.getElementById('treeInfoSpan');
 
         if (!containerDiv || !dendrogramCard || !treeControls || !reorderCheckbox || !svg.node()) {
-            console.error("One or more required elements (card, container, controls, checkbox, svg) not found!");
             if(dendrogramCard) dendrogramCard.style.display = 'block';
             if(containerDiv) containerDiv.style.height = `${svgH}px`;
             svg.selectAll("*").remove();
@@ -2724,7 +2847,6 @@
         }
 
         dendrogramCard.style.display = 'block';
-        console.log("Set #dendrogramCard display to 'block'");
 
         let calculatedHeight = svgH;
         try {
@@ -2743,14 +2865,11 @@
             const spaceBelowCardTop = viewportHeight - cardTopOffset - cardMarginBottom - safetyMargin;
             const availableHeight = spaceBelowCardTop - cardPaddingTop - estimatedTopSectionHeight - containerMarginBottom - controlsHeight - cardPaddingBottom;
             calculatedHeight = Math.max(200, availableHeight);
-            console.log(`Dynamic Height Calculation: Available=${availableHeight.toFixed(2)}, Applied=${calculatedHeight.toFixed(2)}`);
         } catch (e) {
-            console.error("Error during viewport height calculation:", e);
             calculatedHeight = svgH;
         }
         currentDendrogramHeight = calculatedHeight;
         svgH = calculatedHeight;
-        console.log(`Setting containerDiv height to calculated: ${svgH}px`);
         containerDiv.style.height = `${svgH}px`;
 
         svg.selectAll("*").remove();
@@ -2768,7 +2887,6 @@
         const anomalyOverrideColor = "orange";
 
         if (!data || data.id === undefined || data.dist === undefined) {
-            console.error("Invalid or empty tree data received:", data);
             svg.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("dominant-baseline", "central").text("No hierarchical data available or error loading.");
             if (treeControls) treeControls.style.display = "none";
             if (treeInfoSpan) treeInfoSpan.textContent = '';
@@ -2783,7 +2901,6 @@
         const dendrogramHeight = Math.max(150, svgH - internalTopMargin - internalBottomMargin);
         const height = dendrogramHeight;
         window.currentD3LayoutHeight = height;
-        console.log(`D3 Layout Height (tree vertical space): ${height.toFixed(2)}`);
 
         const features = (typeof metrics !== 'undefined' && Array.isArray(metrics)) ? metrics.map(m => m.label) : [];
         const numHeatmapFeatures = features.length;
@@ -2852,12 +2969,10 @@
                  node.structuralX = (structuralLayoutWidth / 2 + margin.left);
             }
         });
-        console.log("Calculated and stored structural X positions.");
 
         let metricSortedLeaves = [...currentLeaves];
         const metricSelectElem = document.getElementById('dendrogramSortMetricSelect');
         const selectedMetric = metricSelectElem ? metricSelectElem.value : 'Default';
-        console.log(`Sorting heatmap leaves/groups by metric: ${selectedMetric}`);
 
         const aggregatedLeafData = new Map();
         currentLeaves.forEach(leaf => {
@@ -2869,7 +2984,6 @@
             if (leaf.data.isGroup) {
                 const originalLeafIds = Array.from(leaf.data.originalLeaves || []);
                 if (originalLeafIds.length === 0) {
-                     console.warn(`Group node ${leafId} has no original leaves.`);
                      features.forEach(metricLabel => {
                           aggregatedLeafData.get(String(leafId))[metricLabel] = null;
                           aggregatedLeafData.get(String(leafId))[`${metricLabel}_anomaly`] = 'normal';
@@ -2993,14 +3107,8 @@
                 const orderOption = document.getElementById("rowOrderSelect")?.value || "descending";
                 return orderOption === "descending" ? bValue - aValue : aValue - bValue;
             });
-            console.log(`Applied metric sort order to ${metricSortedLeaves.length} heatmap leaves/groups using aggregated data.`);
         } else {
             metricSortedLeaves.sort((a, b) => a.x - b.x);
-            if (selectedMetric !== 'Default') {
-                 console.log("Metric data not found in fullHeatmapData, using structural order for heatmap.");
-            } else {
-                 console.log("Using default structural order for heatmap.");
-            }
         }
 
         const heatmapClusterOrGroupIds = metricSortedLeaves
@@ -3009,12 +3117,9 @@
              .map(String);
 
         const reorderTree = reorderCheckbox.checked;
-        console.log(`Reorder Tree Structure checkbox checked: ${reorderTree}`);
-
         let finalLayoutWidth;
 
         if (reorderTree) {
-            console.log("Reordering tree structure based on metric.");
             const minLeafSpacingMetric = 20;
             const requiredWidthMetric = heatmapClusterOrGroupIds.length * minLeafSpacingMetric;
             finalLayoutWidth = Math.max(requiredWidthMetric, widthAvailableInContainer);
@@ -3046,7 +3151,6 @@
                  }
             });
         } else {
-            console.log("Keeping original tree structure, using structural X positions.");
             finalLayoutWidth = structuralLayoutWidth;
             root.each(node => {
                 node.finalX = node.structuralX;
@@ -3058,7 +3162,6 @@
         window.currentLayoutWidth = finalLayoutWidth;
         window.lastTreeRoot = root;
         window.lastTreeData = data;
-        console.log("Updated window.lastTreeData with currently rendered tree data.");
 
         const heatmapContentWidth = finalLayoutWidth;
         const heatmapXScale = d3.scaleBand()
@@ -3123,8 +3226,6 @@
                              originalLeavesCount: originalLeavesCount
                          });
                      });
-                 } else {
-                     console.warn(`Missing aggregated data for leaf/group ID: ${leafId}`);
                  }
              });
 
@@ -3203,9 +3304,8 @@
                         if (!cellsForClusterOrGroup.empty()) { cellsForClusterOrGroup.raise(); }
 
                         if (clusterHighlightColors.has(clickedClusterOrGroupID)) {
-                            console.log(`Deselecting Cluster/Group ${clickedClusterOrGroupID} from heatmap.`);
                             clusterHighlightColors.delete(clickedClusterOrGroupID);
-                            addedSidebarClusters.delete(clickedClusterOrGroupID); // Ensure it's removed from here too
+                            addedSidebarClusters.delete(clickedClusterOrGroupID);
 
                             cellsForClusterOrGroup.transition().duration(100)
                                 .style('stroke', defaultStrokeColor)
@@ -3217,10 +3317,8 @@
                                      const groupNode = currentLeaves.find(l => String(l.data?.cluster_id) === clickedClusterOrGroupID);
                                      const originalLeaves = Array.from(groupNode?.data?.originalLeaves || []);
                                      selectorsToRemove = originalLeaves.map(leafId => `[clusterID = "${leafId}"]`);
-                                     console.log(`Removed Group ${clickedClusterOrGroupID} elements from sidebar.`);
                                 } else {
                                      selectorsToRemove.push(`[clusterID = "${clickedClusterOrGroupID}"]`);
-                                     console.log(`Removed Cluster ${clickedClusterOrGroupID} elements from sidebar.`);
                                 }
                                 if (selectorsToRemove.length > 0) {
                                      const combinedSelector = selectorsToRemove.join(', ');
@@ -3244,13 +3342,10 @@
                                 updateSidebarTableForSelectedEdges();
                             }
                         } else {
-                            console.log(`Selecting Cluster/Group ${clickedClusterOrGroupID} from heatmap.`);
                             const targetHighlightColor = generateUniqueHighlightColor();
                             clusterHighlightColors.set(clickedClusterOrGroupID, targetHighlightColor);
-                            // Note: addedSidebarClusters.add() is now primarily handled within visualizeClusterInSidebar
 
                             if (isGroupClick) {
-                                 console.log(`Visualizing group ${clickedClusterOrGroupID} in sidebar.`);
                                  toggleSidebar(true);
                                  const groupNode = currentLeaves.find(l => String(l.data?.cluster_id) === clickedClusterOrGroupID);
                                  const originalLeaves = Array.from(groupNode?.data?.originalLeaves || []);
@@ -3312,8 +3407,7 @@
                                             }
 
                                         } catch (fetchError) {
-                                            console.error(`Error fetching/processing cluster ${originalLeafId} for group ${clickedClusterOrGroupID}:`, fetchError);
-                                            errorOccurred = true; // Ensure errorOccurred is defined if you use it
+                                            errorOccurred = true;
                                         }
                                     }
 
@@ -3324,16 +3418,16 @@
                                      }
                                      if (allNodesAdded.length > 0 || allEdgesAdded.length > 0) {
                                           sidebarCy.add(allNodesAdded.concat(allEdgesAdded));
-                                          addedSidebarClusters.add(clickedClusterOrGroupID); // Add the GROUP ID
+                                          addedSidebarClusters.add(clickedClusterOrGroupID);
                                           applySidebarSizeControls();
                                           applySidebarLayout();
                                           sidebarCy.fit(null, 30);
                                           sidebarInfoDiv.style.display = 'none';
                                           updateLegend(sidebarCy.edges());
-                                          loadSidebarClusterTable(originalLeaves[0], 1); // Table for first leaf in group
+                                          loadSidebarClusterTable(originalLeaves[0], 1);
                                      } else if (!errorOccurred) {
                                           sidebarInfoDiv.innerHTML = `Group ${clickedClusterOrGroupID}: No network data found.`;
-                                          addedSidebarClusters.add(clickedClusterOrGroupID); // Still mark as added for consistency
+                                          addedSidebarClusters.add(clickedClusterOrGroupID);
                                           loadSidebarClusterTable(originalLeaves[0], 1);
                                      } else {
                                           sidebarInfoDiv.innerHTML = `Group ${clickedClusterOrGroupID}: Error loading some data.`;
@@ -3342,18 +3436,16 @@
                                      }
                                      deselectCurrentNode();
                                  } else {
-                                      console.warn(`Group ${clickedClusterOrGroupID} has no original leaves.`);
                                       sidebarInfoDiv.innerHTML = `Group ${clickedClusterOrGroupID}: No clusters inside.`;
                                       showSidebarLoading(false, false);
                                  }
                             } else {
-                                const isClusterAnomalous = d.anomaly === 'anomaly'; // Get anomaly status from heatmap cell data
+                                const isClusterAnomalous = d.anomaly === 'anomaly';
                                 visualizeClusterInSidebar(clickedClusterOrGroupID, targetHighlightColor, isClusterAnomalous);
                             }
                             cellsForClusterOrGroup.transition().duration(100)
                                 .style('stroke', targetHighlightColor)
                                 .style('stroke-width', highlightStrokeWidth);
-                            console.log(`Applied highlight outline ${targetHighlightColor} to Cluster/Group ${clickedClusterOrGroupID}`);
                         }
                         highlightTreeClusters(new Set(clusterHighlightColors.keys()));
                     })
@@ -3362,22 +3454,40 @@
                         cell.attr('data-hover-temp-stroke', cell.style('stroke'));
                         cell.attr('data-hover-temp-stroke-width', cell.style('stroke-width'));
                         cell.style("stroke", "black").style("stroke-width", 1.5);
+                        
                         const tooltip = d3.select("#tooltip");
                         const metricLabel = d.feature;
                         const clusterOrGroupId = d.cluster_id;
                         const value = d.value;
-                        const anomalyStatus = d.anomaly === 'anomaly' ? 'Anomaly Detected' : 'Normal';
+                        const anomalyStatusCell = d.anomaly === 'anomaly' ? 'Anomaly Detected' : 'Normal';
                         const isGroup = d.isGroup;
                         const originalCount = d.originalLeavesCount;
+
                         let displayValue = 'N/A';
                         if (value !== null && typeof value === 'number' && isFinite(value)) {
                             if (metricLabel.includes('%')) { displayValue = `${value.toFixed(2)}%`; }
                             else if (Number.isInteger(value)) { displayValue = value.toLocaleString(); }
                             else { const valueStr = String(value); displayValue = (valueStr.includes('e') || valueStr.includes('E')) ? value.toExponential(2) : value.toFixed(3); }
                         }
+                        
                         let title = isGroup ? `Group: ${clusterOrGroupId} (${originalCount} clusters)` : `Cluster: ${clusterOrGroupId}`;
+                        
+                        let tooltipHtml = `${title}<br>Metric: ${metricLabel}<br>Value: ${displayValue}<br>Status: ${anomalyStatusCell}`;
+
+                        let clusterAttackTypes = [];
+                        if (window.fullHeatmapData && window.fullHeatmapData['Count']) {
+                            const clusterEntry = window.fullHeatmapData['Count'].find(entry => String(entry.cluster) === String(clusterOrGroupId));
+                            if (clusterEntry && clusterEntry.ClusterAttackTypes && clusterEntry.ClusterAttackTypes.length > 0) {
+                                clusterAttackTypes = clusterEntry.ClusterAttackTypes;
+                            }
+                        }
+
+                        if (clusterAttackTypes.length > 0) {
+                            tooltipHtml += `<br><strong style="color:purple;">Cluster Attacks: ${clusterAttackTypes.join(', ')}</strong>`;
+                        }
+
                         tooltip.style("display", "block")
-                            .html(`${title}<br>Metric: ${metricLabel}<br>Value: ${displayValue}<br>Status: ${anomalyStatus}`)
+                            .html(tooltipHtml)
                             .style("left", (event.pageX + 10) + "px")
                             .style("top", (event.pageY - 15) + "px");
                     })
@@ -3386,7 +3496,15 @@
                         const cell = d3.select(this);
                         const clusterIdStr = String(d.cluster_id);
                         const highlightColor = clusterHighlightColors.get(clusterIdStr);
-                        if (highlightColor) {
+                        
+                        const originalStroke = cell.attr('data-hover-temp-stroke');
+                        const originalStrokeWidth = cell.attr('data-hover-temp-stroke-width');
+
+                        if (originalStroke && originalStrokeWidth) {
+                             cell.style("stroke", originalStroke).style("stroke-width", originalStrokeWidth);
+                             cell.attr('data-hover-temp-stroke', null); 
+                             cell.attr('data-hover-temp-stroke-width', null);
+                        } else if (highlightColor) { 
                             cell.style("stroke", highlightColor).style("stroke-width", highlightStrokeWidth);
                         } else {
                             cell.style("stroke", defaultStrokeColor).style("stroke-width", defaultStrokeWidth);
@@ -3417,14 +3535,7 @@
                     .style("fill", "#4299e1")
                     .style("font-weight", "bold");
                 }
-            } else {
-                console.error("Heatmap scales have zero or negative bandwidth! Cannot draw heatmap cells.");
-                 svgContent.append("text").attr("x", margin.left).attr("y", heatmapStartY + 20)
-                    .text("Error: Cannot draw heatmap cells due to scale issue.")
-                    .attr("fill", "red").attr("font-size", "10px");
             }
-        } else {
-             console.log("Skipping heatmap drawing and label highlighting: No features or aggregated data available.");
         }
 
         let dx = 0, dy = 0, initialScale = 1;
@@ -3441,16 +3552,13 @@
                  if (!isFinite(dy)) dy = margin.top;
                  if (!isFinite(initialScale) || initialScale <= 0) initialScale = 1;
              } else {
-                 console.warn("Could not get valid BBox for zoom calculation, using defaults.");
                  dx = margin.left; dy = margin.top; initialScale = 1;
              }
         } catch(e) {
-             console.error("Error calculating initial zoom transform:", e);
              dx = margin.left; dy = margin.top; initialScale = 1;
         }
 
         initialTreeTransform = d3.zoomIdentity.translate(dx, dy).scale(initialScale);
-        console.log(`Initial Transform: translate(${dx.toFixed(2)}, ${dy.toFixed(2)}) scale(${initialScale.toFixed(2)})`);
 
         const zoomBehavior = d3.zoom()
             .scaleExtent([0.05, 10])
@@ -3472,7 +3580,7 @@
            .on("dblclick.zoom", null);
 
         if (treeControls) { treeControls.style.display = "flex"; }
-        try { previousClusterCount = leafCount; previousClusterHash = JSON.stringify(data); } catch(e) { console.warn("Could not stringify data for hash comparison."); }
+        try { previousClusterCount = leafCount; previousClusterHash = JSON.stringify(data); } catch(e) { /* silently fail on stringify error */ }
         highlightTreeClusters(new Set(clusterHighlightColors.keys()));
         const initialSlider = document.getElementById('thresholdSlider');
         if (initialSlider && window.lastTreeRoot && svgContent.node()) {
@@ -3482,7 +3590,6 @@
         } else {
              d3.select("#threshold-bar").style("display", "none");
         }
-        console.log(`--- Debug showInlineDendrogram (End) ---`);
     }
 
     function resetGroupingAndRedraw() {
@@ -3573,7 +3680,6 @@
 
         // --- Apply Threshold Button ---
         if (applyThresholdBtn) {
-             // applyThresholdBtn.disabled = groupingApplied; // << REMOVE OR COMMENT OUT THIS LINE
              applyThresholdBtn.disabled = false; // Explicitly ensure it's always enabled
              console.log(`Apply Threshold Button disabled: false`); // Log that it's enabled
         } else { console.error("Apply Threshold Button not found in updateControlsState"); }
