@@ -530,7 +530,6 @@ def hierarchical_clusters():
         logging.error(f"Error during re-clustering or entropy/anomaly calculation in hierarchical_clusters: {e}", exc_info=True)
         return jsonify({"error": f"Failed to recluster: {str(e)}"}), 500
     
-    # ... (rest of the function for creating the tree structure)
     # Ensure stats are generated from the updated global_df
     stats = (
         global_df
@@ -539,7 +538,6 @@ def hierarchical_clusters():
              avg_entropy=('ClusterEntropy', 'mean')) # avg_entropy should be fine
         .reset_index()
     )
-    # ... (the rest of hierarchical clustering logic using 'stats') ...
     try:
         stats['ClusterID_num'] = pd.to_numeric(stats['ClusterID'], errors='coerce') # coerce errors for N/A etc.
         stats = stats.sort_values('ClusterID_num').reset_index(drop=True)
@@ -829,10 +827,14 @@ def download_csv():
                     mimetype='text/csv', 
                     headers={'Content-Disposition': 'attachment;filename=processed.csv'})
 
-# Serve the index.html page from the static folder
 @app.route('/')
-def index():
-    return send_from_directory('static', 'index.html')
+def serve_index():
+    return send_from_directory('../frontend', 'MalscapeDev.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('../frontend', path)
+
 
 @app.route('/protocol_percentages', methods=['GET'])
 def protocol_percentages():
